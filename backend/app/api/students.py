@@ -1,0 +1,265 @@
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, BackgroundTasks
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+from typing import List, Optional
+from app.database import get_db
+from app.models.user import User, Student
+from app.models.institution import Department, Institution
+from app.schemas.student import StudentCreate, StudentResponse, InstitutionResponse
+from app.utils.security import get_password_hash, RoleChecker
+from app.services.email_service import email_service
+
+router = APIRouter(prefix="/students", tags=["students"])
+teacher_or_admin_required = RoleChecker(["inst_admin", "teacher", "super_admin"])
+
+@router.get("/institutions", response_model=List[InstitutionResponse])
+def get_institutions(db: Session = Depends(get_db)):
+    """Fetch active institutions list."""
+    return db.query(Institution).filter(Institution.is_deleted == False).all()
+
+@router.post("/institutions", response_model=InstitutionResponse)
+def create_institution(name: str, db: Session = Depends(get_db)):
+    """Creates a new institution workspace."""
+    inst = Institution(name=name)
+    db.add(inst)
+    db.commit()
+    db.refresh(inst)
+    return inst
+
+@router.get("/", response_model=List[StudentResponse])
+def list_students(
+    current_user: User = Depends(teacher_or_admin_required),
+    db: Session = Depends(get_db),
+    department_id: Optional[str] = None,
+    division: Optional[str] = None
+):
+    """Lists all students matching current user's institution."""
+    query = db.query(Student).join(User).filter(
+        User.is_deleted == False,
+        User.institution_id == current_user.institution_id
+    )
+    if department_id:
+        query = query.filter(Student.department_id == department_id)
+    if division:
+        query = query.filter(Student.division == division)
+        
+    students = query.all()
+    
+    resp = []
+    for s in students:
+        dept = db.query(Department).filter(Department.id == s.department_id).first() if s.department_id else None
+        resp.append(StudentResponse(
+            id=s.id,
+            email=s.user.email,
+            full_name=s.user.full_name,
+            roll_number=s.roll_number,
+            department_name=dept.name if dept else None,
+            division=s.division,
+            batch=s.batch,
+            status=s.status
+        ))
+    return resp
+
+@router.post("/", response_model=StudentResponse)
+def create_student(
+    student_in: StudentCreate,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(teacher_or_admin_required),
+    db: Session = Depends(get_db)
+):
+    """Manually creates a new student in the institution directory and sends welcome email."""
+    # Check email duplicate
+    exists = db.query(User).filter(User.email == student_in.email, User.is_deleted == False).first()
+    if exists:
+        raise HTTPException(status_code=400, detail="Student email already exists")
+        
+    # Generate default password (e.g. email username + 123)
+    default_pwd = student_in.email.split("@")[0] + "123"
+    hashed_pwd = get_password_hash(default_pwd)
+    
+    user = User(
+        email=student_in.email,
+        hashed_password=hashed_pwd,
+        full_name=student_in.full_name,
+        role="student",
+        institution_id=current_user.institution_id
+    )
+    db.add(user)
+    db.flush() # get user id
+    
+    student = Student(
+        user_id=user.id,
+        roll_number=student_in.roll_number,
+        department_id=student_in.department_id,
+        division=student_in.division,
+        batch=student_in.batch
+    )
+    db.add(student)
+    db.commit()
+    db.refresh(student)
+    
+    # Trigger automated welcome email via background task
+    background_tasks.add_task(
+        email_service.send_student_welcome_email,
+        student_name=user.full_name,
+        email=user.email,
+        password=default_pwd,
+        roll_number=student.roll_number
+    )
+    
+    dept = db.query(Department).filter(Department.id == student.department_id).first() if student.department_id else None
+    return StudentResponse(
+        id=student.id,
+        email=user.email,
+        full_name=user.full_name,
+        roll_number=student.roll_number,
+        department_name=dept.name if dept else None,
+        division=student.division,
+        batch=student.batch,
+        status=student.status
+    )
+
+@router.post("/import")
+def import_students_csv(
+    file: UploadFile = File(...),
+    current_user: User = Depends(teacher_or_admin_required),
+    db: Session = Depends(get_db)
+):
+    """
+    Imports students from a CSV file.
+    Expected CSV columns: full_name, email, roll_number, division, batch
+    """
+    contents = file.file.read().decode("utf-8")
+    io_string = io.StringIO(contents)
+    reader = csv.DictReader(io_string)
+    
+    imported_count = 0
+    errors = []
+    
+    for idx, row in enumerate(reader):
+        email = row.get("email", "").strip()
+        full_name = row.get("full_name", "").strip()
+        roll_number = row.get("roll_number", "").strip()
+        division = row.get("division", "").strip()
+        batch = row.get("batch", "").strip()
+        
+        if not email or not full_name or not roll_number:
+            errors.append(f"Row {idx+1}: Missing required columns")
+            continue
+            
+        exists = db.query(User).filter(User.email == email, User.is_deleted == False).first()
+        if exists:
+            # Skip or update
+            continue
+            
+        default_pwd = email.split("@")[0] + "123"
+        hashed_pwd = get_password_hash(default_pwd)
+        
+        try:
+            user = User(
+                email=email,
+                hashed_password=hashed_pwd,
+                full_name=full_name,
+                role="student",
+                institution_id=current_user.institution_id
+            )
+            db.add(user)
+            db.flush()
+            
+            student = Student(
+                user_id=user.id,
+                roll_number=roll_number,
+                division=division,
+                batch=batch
+            )
+            db.add(student)
+            imported_count += 1
+        except Exception as e:
+            errors.append(f"Row {idx+1}: Error saving to DB ({str(e)})")
+            
+    db.commit()
+    return {"message": f"Successfully imported {imported_count} students.", "errors": errors}
+
+@router.get("/export")
+def export_students_csv(
+    current_user: User = Depends(teacher_or_admin_required),
+    db: Session = Depends(get_db)
+):
+    """Exports the student directory as a CSV download."""
+    students = db.query(Student).join(User).filter(
+        User.is_deleted == False,
+        User.institution_id == current_user.institution_id
+    ).all()
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["full_name", "email", "roll_number", "division", "batch", "status"])
+    
+    for s in students:
+        writer.writerow([
+            s.user.full_name,
+            s.user.email,
+            s.roll_number,
+            s.division or "",
+            s.batch or "",
+            s.status
+        ])
+        
+    output.seek(0)
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=students_directory.csv"}
+    )
+
+@router.put("/{student_id}", response_model=StudentResponse)
+def update_student(
+    student_id: str,
+    student_in: StudentCreate,
+    current_user: User = Depends(teacher_or_admin_required),
+    db: Session = Depends(get_db)
+):
+    """Updates specific student fields dynamically."""
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+        
+    student.roll_number = student_in.roll_number
+    student.division = student_in.division
+    student.batch = student_in.batch
+    student.department_id = student_in.department_id
+    
+    # Update user details
+    student.user.full_name = student_in.full_name
+    
+    db.add(student)
+    db.commit()
+    db.refresh(student)
+    
+    dept = db.query(Department).filter(Department.id == student.department_id).first() if student.department_id else None
+    return StudentResponse(
+        id=student.id,
+        email=student.user.email,
+        full_name=student.user.full_name,
+        roll_number=student.roll_number,
+        department_name=dept.name if dept else None,
+        division=student.division,
+        batch=student.batch,
+        status=student.status
+    )
+
+@router.delete("/{student_id}")
+def delete_student(
+    student_id: str,
+    current_user: User = Depends(teacher_or_admin_required),
+    db: Session = Depends(get_db)
+):
+    """Soft deletes student accounts."""
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+        
+    student.delete()
+    student.user.delete()
+    db.commit()
+    return {"message": "Student successfully deleted."}

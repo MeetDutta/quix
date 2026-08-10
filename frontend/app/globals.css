@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: #FAF7F2;
+    --foreground: #1C1917;
+    --card: #FFFFFF;
+    --card-border: #E7E0D3;
+    --primary: #9A3412;
+    --primary-hover: #7C2D12;
+    --primary-light: #FFEDD5;
+    --sidebar-bg: #F5F0E8;
+    --sidebar-border: #E7E0D3;
+  }
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #FAF7F2;
+  color: #1C1917;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(154, 52, 18, 0.03);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(154, 52, 18, 0.2);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(154, 52, 18, 0.35);
+}
+
+/* Card & Glass Utilities */
+.warm-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E7E0D3;
+  border-radius: 1rem;
+  box-shadow: 0 4px 20px -2px rgba(154, 52, 18, 0.04), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+}
+
+.warm-panel {
+  background-color: #F8F4ED;
+  border: 1px solid #EAE2D5;
+  border-radius: 0.75rem;
+}
+
+.btn-terracotta {
+  background: linear-gradient(135deg, #9A3412 0%, #C2410C 100%);
+  color: #FFFFFF;
+  font-weight: 600;
+  border-radius: 0.625rem;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 4px 14px 0 rgba(154, 52, 18, 0.25);
+}
+
+.btn-terracotta:hover {
+  background: linear-gradient(135deg, #7C2D12 0%, #9A3412 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px 0 rgba(154, 52, 18, 0.35);
+}
+
+.btn-terracotta:active {
+  transform: translateY(0);
+}
+
+/* Toast slide-in animation */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-slideIn {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Fade-in animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.25s ease-out;
+}
+

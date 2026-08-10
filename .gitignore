@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+venv/
+.venv/
+env/
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+
+# Python cache & database files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+backend/app/quiz.db
+backend/quiz.db
+
+# User uploads & temporary storage
+backend/uploads/
+backend/app/uploads/
+
+# Environment variables
+.env
+backend/.env
+frontend/.env
+*.env.local
+
+# IDE & OS files
+.DS_Store
+.vscode/
+.idea/

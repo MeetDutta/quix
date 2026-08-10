@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduQuizX - Live Secured Exam Session</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: #050505;
+    }
+    .glass-card {
+      background: rgba(20, 20, 20, 0.6);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+</head>
+<body class="text-neutral-200 antialiased min-h-screen">
+
+  <div class="fixed top-1/4 left-1/4 w-[300px] h-[300px] rounded-full bg-red-500/5 blur-[100px] pointer-events-none z-0"></div>
+
+  <!-- Waiting Room Container (Scheduled Exam Countdown) -->
+  <div id="waiting-container" class="hidden relative z-10 flex min-h-screen items-center justify-center px-4">
+    <div class="w-full max-w-[500px] glass-card p-8 rounded-3xl border border-neutral-800 text-center space-y-6 shadow-2xl relative overflow-hidden">
+      <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-red-500 to-amber-500"></div>
+      
+      <div class="space-y-2">
+        <div class="mx-auto w-16 h-16 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center text-amber-400">
+          <svg class="w-8 h-8 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        </div>
+        <span class="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full uppercase tracking-widest inline-block">Scheduled Exam Window</span>
+        <h2 class="text-2xl font-extrabold text-white tracking-tight" id="waiting-exam-name">Exam Not Started Yet</h2>
+        <p class="text-xs text-neutral-400" id="waiting-exam-sub">This examination is scheduled to begin soon.</p>
+      </div>
+
+      <!-- Live 4-Unit Countdown Grid -->
+      <div class="grid grid-cols-4 gap-3 py-2">
+        <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-3 space-y-1">
+          <div class="text-3xl font-black text-amber-400 font-mono tracking-tight" id="wait-days">00</div>
+          <div class="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Days</div>
+        </div>
+        <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-3 space-y-1">
+          <div class="text-3xl font-black text-amber-400 font-mono tracking-tight" id="wait-hours">00</div>
+          <div class="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Hours</div>
+        </div>
+        <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-3 space-y-1">
+          <div class="text-3xl font-black text-amber-400 font-mono tracking-tight" id="wait-mins">00</div>
+          <div class="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Minutes</div>
+        </div>
+        <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-3 space-y-1">
+          <div class="text-3xl font-black text-amber-400 font-mono tracking-tight" id="wait-secs">00</div>
+          <div class="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Seconds</div>
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="w-full bg-neutral-900 rounded-full h-2 overflow-hidden border border-neutral-800">
+        <div id="waiting-progress" class="h-full bg-gradient-to-r from-amber-500 to-red-500 transition-all duration-1000" style="width: 5%"></div>
+      </div>
+
+      <div class="text-xs text-neutral-400 space-y-1">
+        <p>The login portal will open automatically once the timer reaches zero.</p>
+        <p class="text-[11px] text-neutral-500 font-mono">Exam Code: <b class="text-amber-400" id="waiting-code-display">--</b></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ended Exam Container -->
+  <div id="ended-container" class="hidden relative z-10 flex min-h-screen items-center justify-center px-4">
+    <div class="w-full max-w-[420px] glass-card p-8 rounded-3xl border border-neutral-800 text-center space-y-5 shadow-2xl relative">
+      <div class="mx-auto w-14 h-14 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center justify-center text-red-500">
+        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+      </div>
+      <h2 class="text-xl font-bold text-white tracking-tight">Exam Window Has Closed</h2>
+      <p class="text-xs text-neutral-400">The examination session for this code has ended.</p>
+    </div>
+  </div>
+
+  <!-- Completed Exam Screen (Scorecard + Response Sheet Download) -->
+  <div id="completed-container" class="hidden relative z-10 flex min-h-screen items-center justify-center px-4 py-8">
+    <div class="w-full max-w-[600px] glass-card p-8 rounded-3xl border border-neutral-800 text-center space-y-6 shadow-2xl relative overflow-hidden">
+      <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500"></div>
+
+      <div class="space-y-2">
+        <div class="mx-auto w-16 h-16 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center text-emerald-400">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        </div>
+        <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full uppercase tracking-widest inline-block">Evaluation Completed</span>
+        <h2 class="text-2xl font-extrabold text-white tracking-tight" id="completed-exam-name">Exam Submitted</h2>
+        <p class="text-xs text-neutral-400">Your answers have been evaluated and recorded securely.</p>
+      </div>
+
+      <!-- Scorecard grid -->
+      <div class="grid grid-cols-2 gap-4 py-2 bg-neutral-900/60 border border-neutral-800 rounded-2xl p-4">
+        <div>
+          <div class="text-3xl font-black text-emerald-400 font-mono" id="completed-score">0.0</div>
+          <div class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mt-1">Score Obtained</div>
+        </div>
+        <div>
+          <div class="text-3xl font-black text-emerald-400 font-mono" id="completed-pct">0.0%</div>
+          <div class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mt-1">Percentage</div>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="space-y-3 pt-2">
+        <a id="btn-download-sheet" href="#" target="_blank" rel="noreferrer" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl py-3.5 text-xs shadow-lg transition-all flex items-center justify-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          <span>📄 View / Download Official Response Booklet (Printable PDF)</span>
+        </a>
+
+        <a href="http://localhost:3000/dashboard/student" class="block w-full bg-neutral-900 border border-neutral-800 text-neutral-300 hover:bg-neutral-850 font-semibold rounded-xl py-3 text-xs transition-all">
+          🎓 Return to Student Dashboard
+        </a>
+      </div>
+
+      <!-- Response details accordion -->
+      <div class="text-left space-y-3 pt-4 border-t border-neutral-800">
+        <h3 class="text-xs font-bold text-neutral-300 uppercase tracking-wider">Question Breakdown & Evaluation</h3>
+        <div id="completed-answers-list" class="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+          <!-- evaluated answers will be rendered here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gateway Login Form -->
+  <div id="login-container" class="relative z-10 flex min-h-screen items-center justify-center px-4">
+    <div class="w-full max-w-[400px] space-y-6">
+      <div class="text-center space-y-2">
+        <div class="mx-auto w-12 h-12 bg-neutral-900 border border-neutral-850 rounded-xl flex items-center justify-center text-red-500">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+        </div>
+        <h2 class="text-xl font-bold text-white tracking-tight">EduQuizX Proctor Exam Portal</h2>
+        <p class="text-xs text-neutral-500 uppercase tracking-widest font-semibold" id="exam-code-header">Exam Code: Loading...</p>
+      </div>
+
+      <div class="glass-card p-6 rounded-2xl border border-neutral-900 shadow-2xl relative">
+        <div class="absolute top-0 left-0 right-0 h-1 bg-red-500/50"></div>
+
+        <!-- Inline Error Banner (No alert popups!) -->
+        <div id="login-error" class="hidden mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+          <svg class="w-4 h-4 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <span id="login-error-text">Authentication failure</span>
+        </div>
+        
+        <form onsubmit="handleExamLogin(event)" class="space-y-4">
+          <div class="space-y-1.5">
+            <label class="text-[10px] font-bold text-neutral-400 tracking-wider">EXAM SESSION USERNAME</label>
+            <input type="text" id="username" required placeholder="std_username_123" class="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-red-500">
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-[10px] font-bold text-neutral-400 tracking-wider">EXAM PIN / PASSWORD</label>
+            <input type="password" id="password" required placeholder="••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-red-500">
+          </div>
+
+          <button type="submit" class="w-full bg-red-600 hover:bg-red-500 text-white font-medium rounded-lg py-2.5 text-sm transition-all">
+            Unlock Secured Session
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Active Exam Interface -->
+  <div id="exam-container" class="hidden relative z-10 flex h-screen overflow-hidden">
+    
+    <!-- Sidebar - questions index -->
+    <aside class="w-72 border-r border-neutral-900 bg-neutral-950/40 backdrop-blur-md flex flex-col shrink-0">
+      <div class="p-6 border-b border-neutral-900 space-y-1">
+        <div class="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Active Test Runtime</div>
+        <h2 class="text-sm font-bold text-white truncate" id="exam-title-display">Exam</h2>
+      </div>
+
+      <div class="flex-1 p-6 overflow-y-auto">
+        <div class="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-4">Questions Map</div>
+        <div class="grid grid-cols-4 gap-2.5" id="questions-grid">
+          <!-- index buttons will render here -->
+        </div>
+      </div>
+
+      <!-- Proctor logging status -->
+      <div class="p-6 border-t border-neutral-900 space-y-3 bg-neutral-950/60">
+        <div class="flex items-center gap-2 text-xs text-neutral-400">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+          <span>Workspace Protection: <b>Active</b></span>
+        </div>
+        <div id="proctor-warning-box" class="hidden flex gap-2 items-start p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] leading-relaxed">
+          <svg class="w-4 h-4 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+          <div>
+            <b>Attention:</b> Tab switches or Copy/Paste detected. This event has been logged for teacher moderation.
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Question display area -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      
+      <!-- Header timer -->
+      <header class="h-16 border-b border-neutral-900 px-8 flex justify-between items-center bg-neutral-950/10">
+        <span class="text-xs font-bold text-neutral-400 uppercase tracking-wider" id="q-index-header">Question 1 of 10</span>
+        <div class="flex items-center gap-2 text-red-400 font-mono font-extrabold bg-red-500/5 px-4 py-1.5 rounded-lg border border-red-500/10">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <span id="countdown-timer">00:00</span>
+        </div>
+      </header>
+
+      <!-- Active Question body -->
+      <main class="flex-1 overflow-y-auto p-8 max-w-3xl w-full mx-auto space-y-8 flex flex-col justify-center">
+        <div class="space-y-4">
+          <span class="text-[10px] uppercase font-bold tracking-widest text-indigo-400 bg-indigo-500/5 px-2 py-0.5 rounded border border-indigo-500/10" id="q-meta">MCQ</span>
+          <h2 class="text-xl text-white font-medium leading-relaxed" id="q-text">Loading question text...</h2>
+        </div>
+
+        <!-- Options template container -->
+        <div class="space-y-3" id="options-box">
+          <!-- buttons or textarea -->
+        </div>
+
+        <!-- Nav actions -->
+        <div class="flex justify-between items-center border-t border-neutral-900 pt-6">
+          <button onclick="toggleFlag()" class="bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white text-xs font-bold px-4 py-2 rounded-lg transition-all flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"></path></svg>
+            <span>Flag Question</span>
+          </button>
+          
+          <div class="flex gap-2">
+            <button onclick="prevQuestion()" class="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white transition-all">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+            <button onclick="nextQuestion()" id="next-btn" class="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white transition-all">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+            <button onclick="submitExam()" id="submit-btn" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-5 py-2.5 rounded-lg transition-all">
+              Submit Exam
+            </button>
+          </div>
+        </div>
+      </main>
+
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const examCode = urlParams.get('code') || "ex-db-1234";
+    
+    document.getElementById('exam-code-header').innerText = "Exam Code: " + examCode;
+    
+    let sessionToken = "";
+    let examData = null;
+    let studentAnswers = {};
+    let currentIndex = 0;
+    let flaggedQuestions = {};
+    let countdownInterval = null;
+    let secondsLeft = 0;
+
+    let waitingInterval = null;
+    let secondsUntilStart = 0;
+    let totalScheduledWaitSeconds = 1;
+
+    // Check pre-exam status on load
+    async function checkStatusOnLoad() {
+      try {
+        const res = await fetch(`/api/v1/attempts/exam-status?exam_code=${examCode}`);
+        const data = await res.json();
+        
+        if (!res.ok || data.status === "ended") {
+          showEndedContainer();
+          return;
+        }
+
+        if (data.status === "not_started") {
+          showWaitingRoom(data);
+          return;
+        }
+
+        // Active state -> show login form
+        showLoginContainer();
+      } catch (err) {
+        showLoginContainer();
+      }
+    }
+
+    function showWaitingRoom(statusData) {
+      document.getElementById('login-container').classList.add('hidden');
+      document.getElementById('ended-container').classList.add('hidden');
+      document.getElementById('exam-container').classList.add('hidden');
+      document.getElementById('waiting-container').classList.remove('hidden');
+
+      document.getElementById('waiting-exam-name').innerText = statusData.exam_name || "Scheduled Exam";
+      document.getElementById('waiting-code-display').innerText = examCode;
+      
+      secondsUntilStart = statusData.seconds_until_start || 0;
+      totalScheduledWaitSeconds = Math.max(1, secondsUntilStart);
+
+      updateWaitingTimerUI();
+      if (waitingInterval) clearInterval(waitingInterval);
+      waitingInterval = setInterval(updateWaitingTimerUI, 1000);
+    }
+
+    function updateWaitingTimerUI() {
+      if (secondsUntilStart <= 0) {
+        if (waitingInterval) clearInterval(waitingInterval);
+        showLoginContainer();
+        return;
+      }
+
+      const d = Math.floor(secondsUntilStart / 86400);
+      const h = Math.floor((secondsUntilStart % 86400) / 3600);
+      const m = Math.floor((secondsUntilStart % 3600) / 60);
+      const s = secondsUntilStart % 60;
+
+      document.getElementById('wait-days').innerText = d.toString().padStart(2, '0');
+      document.getElementById('wait-hours').innerText = h.toString().padStart(2, '0');
+      document.getElementById('wait-mins').innerText = m.toString().padStart(2, '0');
+      document.getElementById('wait-secs').innerText = s.toString().padStart(2, '0');
+
+      const pct = Math.max(5, Math.min(100, Math.floor(((totalScheduledWaitSeconds - secondsUntilStart) / totalScheduledWaitSeconds) * 100)));
+      document.getElementById('waiting-progress').style.width = pct + '%';
+
+      secondsUntilStart--;
+    }
+
+    function showLoginContainer() {
+      document.getElementById('waiting-container').classList.add('hidden');
+      document.getElementById('ended-container').classList.add('hidden');
+      document.getElementById('exam-container').classList.add('hidden');
+      document.getElementById('login-container').classList.remove('hidden');
+    }
+
+    function showEndedContainer() {
+      document.getElementById('waiting-container').classList.add('hidden');
+      document.getElementById('login-container').classList.add('hidden');
+      document.getElementById('exam-container').classList.add('hidden');
+      document.getElementById('ended-container').classList.remove('hidden');
+    }
+
+    function renderCompletedScreen(data) {
+      document.getElementById('login-container').classList.add('hidden');
+      document.getElementById('waiting-container').classList.add('hidden');
+      document.getElementById('ended-container').classList.add('hidden');
+      document.getElementById('exam-container').classList.add('hidden');
+      document.getElementById('completed-container').classList.remove('hidden');
+
+      document.getElementById('completed-exam-name').innerText = data.exam_name || "Exam Evaluation";
+      document.getElementById('completed-score').innerText = (data.score !== undefined ? data.score : 0).toFixed(1);
+      document.getElementById('completed-pct').innerText = (data.percentage !== undefined ? data.percentage : 0).toFixed(1) + "%";
+
+      const subId = data.submission_id;
+      document.getElementById('btn-download-sheet').href = `/api/v1/reports/submission-detail/${subId}/printable`;
+
+      // Render evaluation list if answers exist
+      const listEl = document.getElementById('completed-answers-list');
+      listEl.innerHTML = "";
+      
+      const evalMap = data.evaluated_answers || {};
+      const entries = Object.entries(evalMap);
+
+      if (entries.length === 0) {
+        listEl.innerHTML = `<div class="text-xs text-neutral-500 py-3 text-center">Click the button above to view your full printable booklet with correct answers and explanations.</div>`;
+        return;
+      }
+
+      entries.forEach(([qId, item], idx) => {
+        const isCorr = item.is_correct;
+        const icon = isCorr ? '✓' : '✕';
+        const badgeColor = isCorr ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20';
+
+        listEl.innerHTML += `
+          <div class="p-3 bg-neutral-900/80 border border-neutral-800 rounded-xl space-y-1.5 text-xs">
+            <div class="flex justify-between items-start gap-2">
+              <span class="font-semibold text-white">Q${idx + 1}. ${item.question_text || 'Question'}</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold border shrink-0 ${badgeColor}">${icon} ${item.score_awarded} pts</span>
+            </div>
+            <div class="text-neutral-400">Your Choice: <b class="text-white">${item.selected_answer}</b></div>
+            <div class="text-neutral-400">Correct Answer: <b class="text-emerald-400">${item.correct_answer}</b></div>
+            ${item.explanation ? `<div class="text-neutral-500 text-[11px] pt-1 border-t border-neutral-800">${item.explanation}</div>` : ''}
+          </div>
+        `;
+      });
+    }
+
+    // Login validation
+    async function handleExamLogin(e) {
+      e.preventDefault();
+      const errBox = document.getElementById('login-error');
+      const errText = document.getElementById('login-error-text');
+      errBox.classList.add('hidden');
+
+      const user = document.getElementById('username').value;
+      const pass = document.getElementById('password').value;
+      
+      try {
+        const res = await fetch(`/api/v1/attempts/login?exam_code=${examCode}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: user, password: pass })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) {
+          errText.innerText = data.detail || "Authentication failure";
+          errBox.classList.remove('hidden');
+          return;
+        }
+        
+        sessionToken = data.session_token;
+
+        if (data.is_completed) {
+          renderCompletedScreen(data);
+          return;
+        }
+
+        loadExamBooklet();
+      } catch (err) {
+        errText.innerText = "Failed to connect to authentication server.";
+        errBox.classList.remove('hidden');
+      }
+    }
+
+    // Call status check on load
+    checkStatusOnLoad();
+
+    let proctorSocket = null;
+
+    // Load exam info booklet
+    async function loadExamBooklet() {
+      try {
+        const res = await fetch(`/api/v1/attempts/exam-info?token=${sessionToken}`);
+        examData = await res.json();
+        
+        if (!res.ok) {
+          showLoginContainer();
+          return;
+        }
+
+        if (examData.is_completed) {
+          renderCompletedScreen(examData);
+          return;
+        }
+        
+        studentAnswers = examData.saved_answers || {};
+        secondsLeft = examData.time_remaining_seconds;
+        
+        // Hide login and show exam
+        document.getElementById('login-container').classList.add('hidden');
+        document.getElementById('exam-container').classList.remove('hidden');
+        
+        document.getElementById('exam-title-display').innerText = examData.exam_name;
+        
+        // Initialize real-time proctor WebSocket
+        try {
+          const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+          const payloadBase64 = sessionToken.split('.')[1];
+          const payloadDecoded = JSON.parse(atob(payloadBase64));
+          const submissionId = payloadDecoded.sub;
+          proctorSocket = new WebSocket(`${wsScheme}://${window.location.host}/api/v1/attempts/ws/student/${submissionId}`);
+        } catch (wsErr) {
+          console.error("WebSocket init failed, fallback active");
+        }
+        
+        // Start timers
+        startCountdown();
+        setupProctoring();
+        renderPalette();
+        renderQuestion();
+      } catch (e) {}
+    }
+
+    // Timer logic
+    function startCountdown() {
+      const el = document.getElementById('countdown-timer');
+      countdownInterval = setInterval(() => {
+        if (secondsLeft <= 0) {
+          clearInterval(countdownInterval);
+          alert("Time's up! Submitting exam.");
+          submitExam();
+          return;
+        }
+        secondsLeft--;
+        const mins = Math.floor(secondsLeft / 60);
+        const secs = secondsLeft % 60;
+        el.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      }, 1000);
+    }
+
+    // Proctoring alarms
+    function setupProctoring() {
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+          sendProctorAlert("tab_switch", "Student tab shift detected");
+        }
+      });
+
+      document.addEventListener("copy", (e) => {
+        e.preventDefault();
+        sendProctorAlert("copy_paste", "Copy event intercepted");
+      });
+
+      document.addEventListener("paste", (e) => {
+        e.preventDefault();
+        sendProctorAlert("copy_paste", "Paste event intercepted");
+      });
+    }
+
+    async function sendProctorAlert(type, details) {
+      document.getElementById('proctor-warning-box').classList.remove('hidden');
+      if (proctorSocket && proctorSocket.readyState === WebSocket.OPEN) {
+        try {
+          proctorSocket.send(JSON.stringify({ event_type: type, event_details: details }));
+          return;
+        } catch (wsErr) {
+          console.error("WS send failed, fallback to POST");
+        }
+      }
+      try {
+        await fetch(`/api/v1/attempts/proctor-alert?token=${sessionToken}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event_type: type, event_details: details })
+        });
+      } catch (e) {}
+    }
+
+    // Render palette
+    function renderPalette() {
+      const el = document.getElementById('questions-grid');
+      el.innerHTML = "";
+      examData.questions.forEach((q, idx) => {
+        const answered = studentAnswers[q.id] !== undefined;
+        const isFlagged = flaggedQuestions[q.id];
+        const isCurrent = idx === currentIndex;
+        
+        let bg = "bg-neutral-900 border-neutral-800 text-neutral-400";
+        if (answered) bg = "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 font-semibold";
+        if (isFlagged) bg = "bg-amber-500/15 border-amber-500/30 text-amber-400 font-semibold";
+        if (isCurrent) bg = "bg-indigo-600 border-indigo-500 text-white font-bold";
+        
+        el.innerHTML += `
+          <button onclick="jumpToQuestion(${idx})" class="h-10 rounded-lg text-xs border flex items-center justify-center transition-all ${bg}">
+            ${idx + 1}
+          </button>
+        `;
+      });
+    }
+
+    // Render Question
+    function renderQuestion() {
+      const q = examData.questions[currentIndex];
+      document.getElementById('q-index-header').innerText = `Question ${currentIndex + 1} of ${examData.questions.length}`;
+      document.getElementById('q-meta').innerText = `${q.question_type.toUpperCase()} | ${q.marks || 1} MARKS`;
+      document.getElementById('q-text').innerText = q.question_text;
+      
+      const optionsBox = document.getElementById('options-box');
+      optionsBox.innerHTML = "";
+      
+      if (q.options) {
+        q.options.forEach(opt => {
+          const checked = studentAnswers[q.id] === opt;
+          optionsBox.innerHTML += `
+            <button onclick="saveAnswer('${q.id}', '${opt}')" class="w-full text-left p-4 rounded-xl border text-sm transition-all flex justify-between items-center ${checked ? 'bg-indigo-600/10 border-indigo-500 text-white font-semibold' : 'bg-neutral-900/60 border-neutral-850 text-neutral-350 hover:bg-neutral-900'}">
+              <span>${opt}</span>
+              <span class="w-4.5 h-4.5 rounded-full border border-neutral-700 flex items-center justify-center">
+                ${checked ? '<span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>' : ''}
+              </span>
+            </button>
+          `;
+        });
+      } else {
+        const val = studentAnswers[q.id] || "";
+        optionsBox.innerHTML = `
+          <textarea onchange="saveAnswer('${q.id}', this.value)" placeholder="Write your detailed rubric answer..." class="w-full h-44 bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-indigo-500 leading-relaxed">${val}</textarea>
+        `;
+      }
+      
+      // Update buttons
+      if (currentIndex === examData.questions.length - 1) {
+        document.getElementById('next-btn').classList.add('hidden');
+        document.getElementById('submit-btn').classList.remove('hidden');
+      } else {
+        document.getElementById('next-btn').classList.remove('hidden');
+        document.getElementById('submit-btn').classList.add('hidden');
+      }
+    }
+
+    async function saveAnswer(qId, val) {
+      studentAnswers[qId] = val;
+      renderPalette();
+      renderQuestion();
+      
+      try {
+        await fetch(`/api/v1/attempts/save-progress?token=${sessionToken}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(studentAnswers)
+        });
+      } catch (e) {}
+    }
+
+    function jumpToQuestion(idx) {
+      currentIndex = idx;
+      renderQuestion();
+      renderPalette();
+    }
+
+    function nextQuestion() {
+      if (currentIndex < examData.questions.length - 1) {
+        currentIndex++;
+        renderQuestion();
+        renderPalette();
+      }
+    }
+
+    function prevQuestion() {
+      if (currentIndex > 0) {
+        currentIndex--;
+        renderQuestion();
+        renderPalette();
+      }
+    }
+
+    function toggleFlag() {
+      const q = examData.questions[currentIndex];
+      flaggedQuestions[q.id] = !flaggedQuestions[q.id];
+      renderPalette();
+    }
+
+    async function submitExam() {
+      try {
+        const res = await fetch(`/api/v1/attempts/submit?token=${sessionToken}`, {
+          method: "POST"
+        });
+        const data = await res.json();
+        if (res.ok) {
+          loadExamBooklet();
+        } else {
+          alert(data.detail || "Error submitting exam.");
+        }
+      } catch (e) {
+        alert("Network error submitting exam.");
+      }
+    }
+  </script>
+</body>
+</html>

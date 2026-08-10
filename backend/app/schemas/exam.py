@@ -1,0 +1,77 @@
+from pydantic import BaseModel
+from typing import Optional, List, Dict, Any
+from datetime import datetime
+
+class BlueprintSection(BaseModel):
+    topic: str
+    difficulty: str
+    question_type: str
+    marks: int
+    count: int
+
+class ExamCreate(BaseModel):
+    name: str
+    subject_id: str
+    duration_minutes: int
+    total_marks: int
+    negative_marking: Optional[float] = 0.0
+    passing_marks: int
+    start_time: datetime
+    end_time: datetime
+    blueprint: Optional[List[BlueprintSection]] = None
+    settings: Optional[Dict[str, Any]] = None # Fullscreen, shuffle, proctor limits
+
+class ExamResponse(BaseModel):
+    id: str
+    name: str
+    subject_id: str
+    duration_minutes: int
+    total_marks: int
+    negative_marking: float
+    passing_marks: int
+    start_time: datetime
+    end_time: datetime
+    exam_code: str
+    is_published: bool
+    questions_json: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class CredentialResponse(BaseModel):
+    username: str
+    password: str
+    student_name: Optional[str]
+    roll_number: Optional[str]
+    expires_at: datetime
+
+class ExamLogin(BaseModel):
+    username: str
+    password: str
+
+class SubmissionAnswer(BaseModel):
+    question_id: str
+    answer: Any  # Multiple answers format, text, etc.
+
+class SubmitExam(BaseModel):
+    answers: List[SubmissionAnswer]
+
+class ProctorLogCreate(BaseModel):
+    event_type: str  # tab_switch, copy_paste, devtools, resize, idle
+    event_details: Optional[str] = None
+
+class ExamGenerateKBRequest(BaseModel):
+    name: str
+    subject_id: Optional[str] = "general_101"
+    topic: Optional[str] = "General"
+    duration_minutes: Optional[int] = 30
+    total_marks: Optional[float] = 50.0
+    passing_marks: Optional[float] = 20.0
+    negative_marking: Optional[float] = 0.0
+    num_mcq: Optional[int] = 5
+    num_subjective: Optional[int] = 1
+    question_type: Optional[str] = "mcq"
+    difficulty: Optional[str] = "medium"
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+
