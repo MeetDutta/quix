@@ -11,7 +11,7 @@ import app.models
 # Automatically build database schema on startup for easy zero-setup local deployment!
 Base.metadata.create_all(bind=engine)
 
-# Run manual schema update to add subject_id to documents if missing (zero-setup migration)
+# Run manual schema updates (zero-setup migration)
 from sqlalchemy import text
 with engine.connect() as conn:
     try:
@@ -22,6 +22,23 @@ with engine.connect() as conn:
             conn.commit()
         except Exception:
             pass
+
+    # Ensure user verification and Google Auth columns exist
+    cols_to_add = [
+        ("is_verified", "BOOLEAN DEFAULT 1"),
+        ("verification_token", "VARCHAR(255)"),
+        ("auth_provider", "VARCHAR(50) DEFAULT 'local'"),
+        ("google_id", "VARCHAR(255)")
+    ]
+    for col_name, col_type in cols_to_add:
+        try:
+            conn.execute(text(f"SELECT {col_name} FROM users LIMIT 1"))
+        except Exception:
+            try:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                conn.commit()
+            except Exception:
+                pass
 
 # Seed default initial data for local development
 from app.database import SessionLocal

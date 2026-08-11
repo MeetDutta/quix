@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -56,7 +57,8 @@ def list_students(
             department_name=dept.name if dept else None,
             division=s.division,
             batch=s.batch,
-            status=s.status
+            status=s.status,
+            is_verified=s.user.is_verified if (s.user and s.user.is_verified is not None) else True
         ))
     return resp
 
@@ -67,22 +69,26 @@ def create_student(
     current_user: User = Depends(teacher_or_admin_required),
     db: Session = Depends(get_db)
 ):
-    """Manually creates a new student in the institution directory and sends welcome email."""
+    """Manually creates a new student profile and sends an authorization email."""
     # Check email duplicate
     exists = db.query(User).filter(User.email == student_in.email, User.is_deleted == False).first()
     if exists:
         raise HTTPException(status_code=400, detail="Student email already exists")
         
-    # Generate default password (e.g. email username + 123)
-    default_pwd = student_in.email.split("@")[0] + "123"
-    hashed_pwd = get_password_hash(default_pwd)
+    # Generate temporary verification token & initial password hash
+    verification_token = str(uuid.uuid4())
+    temp_pwd = str(uuid.uuid4())[:12]
+    hashed_pwd = get_password_hash(temp_pwd)
     
     user = User(
         email=student_in.email,
         hashed_password=hashed_pwd,
         full_name=student_in.full_name,
         role="student",
-        institution_id=current_user.institution_id
+        institution_id=current_user.institution_id,
+        is_verified=False,
+        verification_token=verification_token,
+        auth_provider="local"
     )
     db.add(user)
     db.flush() # get user id
@@ -98,12 +104,12 @@ def create_student(
     db.commit()
     db.refresh(student)
     
-    # Trigger automated welcome email via background task
+    # Trigger automated authorization email with verification link and Google auth
     background_tasks.add_task(
-        email_service.send_student_welcome_email,
+        email_service.send_student_authorization_email,
         student_name=user.full_name,
         email=user.email,
-        password=default_pwd,
+        verification_token=verification_token,
         roll_number=student.roll_number
     )
     
@@ -116,8 +122,34 @@ def create_student(
         department_name=dept.name if dept else None,
         division=student.division,
         batch=student.batch,
-        status=student.status
+        status=student.status,
+        is_verified=False
     )
+
+@router.post("/{student_id}/resend-auth")
+def resend_student_authorization(
+    student_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(teacher_or_admin_required),
+    db: Session = Depends(get_db)
+):
+    """Resends authorization email to pending student."""
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student or not student.user:
+        raise HTTPException(status_code=404, detail="Student not found")
+        
+    if not student.user.verification_token:
+        student.user.verification_token = str(uuid.uuid4())
+        db.commit()
+        
+    background_tasks.add_task(
+        email_service.send_student_authorization_email,
+        student_name=student.user.full_name,
+        email=student.user.email,
+        verification_token=student.user.verification_token,
+        roll_number=student.roll_number
+    )
+    return {"message": f"Authorization email re-sent to {student.user.email}"}
 
 @router.post("/import")
 def import_students_csv(

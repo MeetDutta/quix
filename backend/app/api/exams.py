@@ -164,10 +164,14 @@ def generate_exam_from_kb(
 
     exam_code = f"ex-{(req.name[:3] if req.name else 'quiz').lower()}-{random.randint(1000, 9999)}"
     now = datetime.utcnow()
+    dur = req.duration_minutes or 30
 
-    # Use teacher-provided schedule dates if present, otherwise default
+    # Schedule bounds validation
     exam_start = req.start_time if req.start_time else now
     exam_end = req.end_time if req.end_time else (exam_start + timedelta(days=30))
+
+    if req.end_time and req.start_time and req.end_time < req.start_time + timedelta(minutes=dur):
+        raise HTTPException(status_code=400, detail=f"Schedule End Time must be at least {dur} minutes after Start Time.")
 
     exam = Exam(
         name=req.name,

@@ -18,5 +18,10 @@ export async function apiFetch(
   if (rest.body instanceof FormData) {
     delete h["Content-Type"];
   }
-  return fetch(`${API_V1}${path}`, { ...rest, headers: h });
+  
+  // Normalize path so /api/v1 is never duplicated
+  const normalizedPath = path.startsWith("/api/v1") ? path.replace(/^\/api\/v1/, "") : path;
+  const formattedPath = normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`;
+  
+  return fetch(`${API_V1}${formattedPath}`, { ...rest, headers: h });
 }

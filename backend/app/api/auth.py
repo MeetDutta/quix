@@ -43,6 +43,19 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     db.refresh(user)
     return user
 
+import secrets
+import string
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from pydantic import BaseModel, EmailStr
+from app.services.email_service import email_service
+
+class GoogleAuthPayload(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+    google_id: Optional[str] = None
+    token: Optional[str] = None
+
 @router.post("/login", response_model=Token)
 def login(login_in: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(
@@ -53,6 +66,123 @@ def login(login_in: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Incorrect email, username, or password")
     if not user.is_active:
         raise HTTPException(status_code=400, detail="User account is deactivated")
+        
+    if user.role == "student" and user.is_verified is False:
+        raise HTTPException(
+            status_code=403, 
+            detail="Your student account is pending authorization. Please check your email to authorize your account before logging in."
+        )
+        
+    access = create_access_token(user.id)
+    refresh = create_refresh_token(user.id)
+    
+    return {
+        "access_token": access,
+        "refresh_token": refresh,
+        "token_type": "bearer",
+        "role": user.role,
+        "full_name": user.full_name
+    }
+
+@router.get("/verify-student")
+def verify_student(
+    token: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Validates email verification token, marks student as authorized,
+    generates a secure student portal password, and emails it to the student.
+    """
+    user = db.query(User).filter(User.verification_token == token, User.is_deleted == False).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification token")
+        
+    # Generate human-friendly strong password (e.g. Quiz84#Vp)
+    chars = string.ascii_letters + string.digits
+    rand_part = ''.join(secrets.choice(chars) for _ in range(6))
+    generated_pwd = f"Quiz{rand_part}!"
+    
+    user.is_verified = True
+    user.verification_token = None
+    user.hashed_password = get_password_hash(generated_pwd)
+    db.commit()
+    db.refresh(user)
+    
+    # Dispatch email with generated password
+    background_tasks.add_task(
+        email_service.send_student_credentials_email,
+        student_name=user.full_name,
+        email=user.email,
+        password=generated_pwd
+    )
+    
+    return {
+        "status": "success",
+        "message": "Account authorized successfully. Your student portal password has been generated and sent to your email.",
+        "email": user.email,
+        "full_name": user.full_name
+    }
+
+@router.post("/google-login", response_model=Token)
+@router.post("/google-authorize", response_model=Token)
+def google_auth(
+    payload: GoogleAuthPayload,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Authorizes or logs in a student using Google Workspace SSO.
+    Marks student as verified and issues JWT session.
+    """
+    user = db.query(User).filter(User.email == payload.email, User.is_deleted == False).first()
+    
+    if not user:
+        # Check if institution exists
+        inst = db.query(Institution).filter(Institution.is_deleted == False).first()
+        # Create student profile
+        generated_pwd = f"GoogleAuth{secrets.token_hex(4)}!"
+        user = User(
+            email=payload.email,
+            full_name=payload.name or payload.email.split("@")[0].title(),
+            hashed_password=get_password_hash(generated_pwd),
+            role="student",
+            is_verified=True,
+            auth_provider="google",
+            google_id=payload.google_id,
+            institution_id=inst.id if inst else None
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        
+        # Also dispatch credentials email
+        background_tasks.add_task(
+            email_service.send_student_credentials_email,
+            student_name=user.full_name,
+            email=user.email,
+            password=generated_pwd
+        )
+    else:
+        # Student was pre-enrolled by teacher
+        was_unverified = not user.is_verified
+        user.is_verified = True
+        user.google_id = payload.google_id or user.google_id
+        user.auth_provider = "google"
+        
+        if was_unverified:
+            # Generate initial portal password too
+            generated_pwd = f"Quiz{secrets.token_hex(3)}!"
+            user.hashed_password = get_password_hash(generated_pwd)
+            background_tasks.add_task(
+                email_service.send_student_credentials_email,
+                student_name=user.full_name,
+                email=user.email,
+                password=generated_pwd
+            )
+            
+        db.commit()
+        db.refresh(user)
         
     access = create_access_token(user.id)
     refresh = create_refresh_token(user.id)

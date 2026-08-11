@@ -202,11 +202,17 @@ def get_exam_info(token: str, db: Session = Depends(get_db)):
 
 @router.post("/save-progress")
 def save_progress(token: str, progress: Dict[str, Any], db: Session = Depends(get_db)):
-    """Persists responses dynamically to prevent data loss on network drops."""
+    """Persists responses dynamically; auto-submits if schedule window has ended."""
     sub = get_submission_by_token(token, db)
     if sub.status in ["submitted", "auto_submitted"]:
         raise HTTPException(status_code=400, detail="Cannot save progress on submitted exam")
         
+    now = datetime.utcnow()
+    if sub.exam and sub.exam.end_time and now > sub.exam.end_time:
+        sub.answers_json = json.dumps(progress)
+        db.commit()
+        return submit_exam(token, db)
+
     sub.answers_json = json.dumps(progress)
     db.add(sub)
     db.commit()

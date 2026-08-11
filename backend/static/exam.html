@@ -1,26 +1,61 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EduQuizX - Live Secured Exam Session</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body {
-      font-family: 'Outfit', sans-serif;
-      background-color: #050505;
+    :root {
+      --bg-main: #FAF7F2;
+      --bg-card: #FFFFFF;
+      --bg-panel: #F5F0E8;
+      --border-color: #E7E0D3;
+      --text-primary: #1C1917;
+      --text-muted: #78716C;
+      --accent: #9A3412;
     }
-    .glass-card {
-      background: rgba(20, 20, 20, 0.6);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+    html.dark {
+      --bg-main: #0F0E0D;
+      --bg-card: #191817;
+      --bg-panel: #242220;
+      --border-color: #2E2B28;
+      --text-primary: #F5F5F4;
+      --text-muted: #A8A29E;
+      --accent: #EA580C;
+    }
+    body {
+      font-family: 'Outfit', 'Inter', sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-primary);
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    .warm-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+    }
+    .warm-panel {
+      background-color: var(--bg-panel);
+      border: 1px solid var(--border-color);
     }
   </style>
 </head>
-<body class="text-neutral-200 antialiased min-h-screen">
+<body class="antialiased min-h-screen selection:bg-amber-800/20 selection:text-amber-900">
 
-  <div class="fixed top-1/4 left-1/4 w-[300px] h-[300px] rounded-full bg-red-500/5 blur-[100px] pointer-events-none z-0"></div>
+  <!-- Top-Right Theme Toggle (Persistent across all screens) -->
+  <div class="fixed top-4 right-4 z-50">
+    <button 
+      onclick="toggleTheme()" 
+      id="theme-toggle-btn"
+      class="w-13 h-7 rounded-full bg-[#F5F0E8] dark:bg-[#282522] border border-[#E7E0D3] dark:border-[#38332E] p-1 flex items-center shadow-xs cursor-pointer transition-colors duration-300 relative focus:outline-none"
+      title="Toggle Light / Dark theme"
+    >
+      <div id="toggle-knob" class="w-5 h-5 rounded-full bg-white dark:bg-[#EA580C] shadow-xs border border-[#E7E0D3] dark:border-transparent transform transition-transform duration-300 flex items-center justify-center text-[10px]">
+        ☀️
+      </div>
+    </button>
+  </div>
 
   <!-- Waiting Room Container (Scheduled Exam Countdown) -->
   <div id="waiting-container" class="hidden relative z-10 flex min-h-screen items-center justify-center px-4">
@@ -236,7 +271,7 @@
             <button onclick="nextQuestion()" id="next-btn" class="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white transition-all">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </button>
-            <button onclick="submitExam()" id="submit-btn" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-5 py-2.5 rounded-lg transition-all">
+            <button onclick="submitExam()" id="submit-btn" class="hidden bg-[#FFF8F5] dark:bg-[#EA580C] text-[#9A3412] dark:text-white border-2 border-[#F7D5CA] dark:border-transparent hover:bg-[#FCEBE6] font-bold text-xs px-5 py-2.5 rounded-lg transition-all shadow-xs">
               Submit Exam
             </button>
           </div>
@@ -646,6 +681,32 @@
         alert("Network error submitting exam.");
       }
     }
+
+    function toggleTheme() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      updateThemeIcon(isDark);
+    }
+    function initTheme() {
+      const saved = localStorage.getItem('theme');
+      const isDark = saved ? saved === 'dark' : false;
+      if (isDark) document.documentElement.classList.add('dark');
+      else document.documentElement.classList.remove('dark');
+      updateThemeIcon(isDark);
+    }
+    function updateThemeIcon(isDark) {
+      const knob = document.getElementById('toggle-knob');
+      if (knob) {
+        if (isDark) {
+          knob.className = "w-5 h-5 rounded-full bg-[#EA580C] shadow-xs border border-transparent transform translate-x-6 transition-transform duration-300 flex items-center justify-center text-[10px] text-white";
+          knob.innerHTML = "🌙";
+        } else {
+          knob.className = "w-5 h-5 rounded-full bg-white shadow-xs border border-[#E7E0D3] transform translate-x-0 transition-transform duration-300 flex items-center justify-center text-[10px] text-[#9A3412]";
+          knob.innerHTML = "☀️";
+        }
+      }
+    }
+    initTheme();
   </script>
 </body>
 </html>

@@ -1,23 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
-@layer base {
-  :root {
-    --background: #FAF7F2;
-    --foreground: #1C1917;
-    --card: #FFFFFF;
-    --card-border: #E7E0D3;
-    --primary: #9A3412;
-    --primary-hover: #7C2D12;
-    --primary-light: #FFEDD5;
-    --sidebar-bg: #F5F0E8;
-    --sidebar-border: #E7E0D3;
-  }
+@custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  --bg-main: #F7F4EF;
+  --bg-card: #FFFFFF;
+  --bg-subtle: #F0ECE4;
+  --border-color: #E5E0D8;
+  --text-primary: #242321;
+  --text-muted: #716D67;
+  --primary: #C84B18;
+  --primary-hover: #A93E12;
+  --success: #16805C;
+  --warning: #B7791F;
+  --error: #C53030;
+}
+
+html.dark, html[data-theme="dark"], .dark {
+  --bg-main: #0F0E0D;
+  --bg-card: #171615;
+  --bg-subtle: #1D1B19;
+  --border-color: #292524;
+  --text-primary: #F5F5F4;
+  --text-muted: #A8A29E;
+  --primary: #EA580C;
+  --primary-hover: #C2410C;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --error: #EF4444;
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #FAF7F2;
-  color: #1C1917;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-main) !important;
+  color: var(--text-primary) !important;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  font-size: 14px;
+}
+
+.font-mono-data {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Clean Theme System */
+html.dark body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
 }
 
 /* Custom Scrollbar */
@@ -26,47 +55,51 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(154, 52, 18, 0.03);
+  background: rgba(200, 75, 24, 0.03);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(154, 52, 18, 0.2);
+  background: rgba(200, 75, 24, 0.2);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(154, 52, 18, 0.35);
+  background: rgba(200, 75, 24, 0.35);
 }
 
-/* Card & Glass Utilities */
-.warm-card {
+/* Restrained SaaS Card Utility (No Default Shadows) */
+.saas-card {
   background-color: #FFFFFF;
-  border: 1px solid #E7E0D3;
-  border-radius: 1rem;
-  box-shadow: 0 4px 20px -2px rgba(154, 52, 18, 0.04), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+  border: 1px solid #E5E0D8;
+  border-radius: 8px;
+  box-shadow: none;
 }
 
-.warm-panel {
-  background-color: #F8F4ED;
-  border: 1px solid #EAE2D5;
-  border-radius: 0.75rem;
+.saas-panel {
+  background-color: #F0ECE4;
+  border: 1px solid #E5E0D8;
+  border-radius: 6px;
 }
 
-.btn-terracotta {
-  background: linear-gradient(135deg, #9A3412 0%, #C2410C 100%);
+/* Primary Button Styling */
+.btn-primary {
+  background-color: #C84B18;
   color: #FFFFFF;
-  font-weight: 600;
-  border-radius: 0.625rem;
-  transition: all 0.2s ease-in-out;
-  box-shadow: 0 4px 14px 0 rgba(154, 52, 18, 0.25);
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  transition: background-color 0.15s ease, transform 0.1s ease;
 }
 
-.btn-terracotta:hover {
-  background: linear-gradient(135deg, #7C2D12 0%, #9A3412 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px 0 rgba(154, 52, 18, 0.35);
+.btn-primary:hover {
+  background-color: #A93E12;
 }
 
-.btn-terracotta:active {
-  transform: translateY(0);
+html.dark .btn-primary {
+  background-color: #EA580C;
+}
+
+html.dark .btn-primary:hover {
+  background-color: #C2410C;
 }
 
 /* Toast slide-in animation */
@@ -75,15 +108,15 @@ body {
   to { opacity: 1; transform: translateX(0); }
 }
 .animate-slideIn {
-  animation: slideIn 0.3s ease-out;
+  animation: slideIn 0.15s ease-out;
 }
 
 /* Fade-in animation */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
+  from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-fadeIn {
-  animation: fadeIn 0.25s ease-out;
+  animation: fadeIn 0.15s ease-out;
 }
 

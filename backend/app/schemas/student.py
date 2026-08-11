@@ -18,6 +18,7 @@ class StudentResponse(BaseModel):
     division: Optional[str] = None
     batch: Optional[str] = None
     status: str
+    is_verified: bool = True
 
     class Config:
         from_attributes = True

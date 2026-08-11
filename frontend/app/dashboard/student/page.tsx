@@ -3,63 +3,54 @@
 import { useEffect, useState, useMemo } from "react";
 import { useAuthStore } from "../../../store/authStore";
 import { 
-  Award, 
-  Calendar, 
-  FileText, 
-  CheckCircle, 
-  TrendingUp, 
-  BookOpen, 
-  Download,
-  Trophy,
-  Target,
-  BarChart3,
-  XCircle,
-  ChevronDown,
-  ChevronUp,
-  Medal,
-  QrCode,
-  X,
-  Printer,
-  RefreshCw
+  Award, Calendar, FileText, CheckCircle, TrendingUp, BookOpen, Download,
+  Trophy, Target, BarChart3, XCircle, ChevronDown, ChevronUp, Medal,
+  RefreshCw, CheckCircle2, AlertCircle, Clock, Sparkles, User, ArrowRight,
+  BookMarked, HelpCircle, ShieldCheck
 } from "lucide-react";
 
 import { apiFetch } from "../../../lib/api";
 
 export default function StudentDashboard() {
   const { token, fullName, role } = useAuthStore();
-  const isTeacherView = role === "teacher" || role === "inst_admin" || role === "super_admin";
   const [submissions, setSubmissions] = useState<any[]>([]);
-  const [selectedSub, setSelectedSub] = useState<any | null>(null);
-  const [allExams, setAllExams] = useState<any[]>([]);
+  const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
+  const [selectedSubDetail, setSelectedSubDetail] = useState<any | null>(null);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
-  const [qrModalExam, setQrModalExam] = useState<any | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const [activeViewTab, setActiveViewTab] = useState<"questions" | "topics" | "leaderboard">("questions");
+  const [studentsList, setStudentsList] = useState<any[]>([]);
+  const [selectedStudentFilter, setSelectedStudentFilter] = useState<string>("");
+
+  const isTeacher = role === "teacher" || role === "inst_admin" || role === "super_admin";
 
   const fetchData = async (isManual = false) => {
     if (isManual) setIsRefreshing(true);
     try {
-      // Fetch published exams for active exam cards
-      const resExams = await apiFetch("/exams/", { token });
-      const examsData = await resExams.json();
-      if (resExams.ok && Array.isArray(examsData)) {
-        setAllExams(examsData.filter((e: any) => e.is_published));
-      }
-
-      // Fetch my submissions directly from dedicated backend endpoint
-      const resSub = await apiFetch("/reports/my-submissions", { token });
-      const subData = await resSub.json();
-      if (resSub.ok && Array.isArray(subData)) {
-        setSubmissions(subData);
-        setLastRefreshed(new Date());
-
-        // Auto-load details of latest submission if none selected yet
-        if (subData.length > 0 && !selectedSub) {
-          loadSubDetail(subData[0].id);
+      if (isTeacher) {
+        const sRes = await apiFetch("/students/", { token });
+        const sData = await sRes.json();
+        if (sRes.ok && Array.isArray(sData)) {
+          setStudentsList(sData);
         }
       }
-    } catch (e) {
+
+      const url = selectedStudentFilter ? `/reports/my-submissions?student_id=${selectedStudentFilter}` : "/reports/my-submissions";
+      const res = await apiFetch(url, { token });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data)) {
+        setSubmissions(data);
+        if (data.length > 0) {
+          const firstId = selectedSubId || data[0].id;
+          setSelectedSubId(firstId);
+          loadSubDetail(firstId);
+        } else {
+          setSelectedSubId(null);
+          setSelectedSubDetail(null);
+        }
+      }
+    } catch {
     } finally {
       if (isManual) setIsRefreshing(false);
     }
@@ -68,584 +59,490 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (token) {
       fetchData();
-      // Auto refresh data every 30 seconds
-      const interval = setInterval(() => fetchData(), 30000);
-      return () => clearInterval(interval);
     }
-  }, [token]);
+  }, [token, selectedStudentFilter]);
 
   const loadSubDetail = async (subId: string) => {
+    setSelectedSubId(subId);
+    setLoadingDetail(true);
     try {
       const res = await apiFetch(`/reports/submission-detail/${subId}`, { token });
       const data = await res.json();
       if (res.ok) {
-        setSelectedSub(data);
-        // Load leaderboard for this exam
+        setSelectedSubDetail(data);
         if (data.exam_id) {
           const lbRes = await apiFetch(`/reports/leaderboard/${data.exam_id}`, { token });
           const lbData = await lbRes.json();
-          if (lbRes.ok) setLeaderboard(lbData);
+          if (lbRes.ok && Array.isArray(lbData)) {
+            setLeaderboard(lbData);
+          }
         }
       }
-    } catch (e) {}
+    } catch {
+    } finally {
+      setLoadingDetail(false);
+    }
   };
 
-  // ── Computed Stats ──
+  // ── Overall KPIs ──
   const stats = useMemo(() => {
-    if (submissions.length === 0) return { best: 0, worst: 0, avg: 0, count: 0 };
-    const percs = submissions.map(s => s.percentage);
+    if (submissions.length === 0) return { best: 0, avg: 0, count: 0, passRate: 0 };
+    const percs = submissions.map(s => Number(s.percentage) || 0);
+    const best = Math.max(...percs);
+    const avg = percs.reduce((a, b) => a + b, 0) / percs.length;
+    const passed = submissions.filter(s => (s.percentage || 0) >= 50).length;
     return {
-      best: Math.max(...percs),
-      worst: Math.min(...percs),
-      avg: percs.reduce((a, b) => a + b, 0) / percs.length,
-      count: submissions.length
+      best: Math.round(best),
+      avg: Math.round(avg),
+      count: submissions.length,
+      passRate: Math.round((passed / submissions.length) * 100)
     };
   }, [submissions]);
 
-  // ── Weak Topics (for AI recommendations) ──
-  const weakTopics = useMemo(() => {
-    if (!selectedSub?.topic_analysis) return [];
-    return Object.entries(selectedSub.topic_analysis)
-      .map(([topic, data]: [string, any]) => ({ topic, accuracy: data.accuracy }))
-      .filter(t => t.accuracy < 70)
-      .sort((a, b) => a.accuracy - b.accuracy);
-  }, [selectedSub]);
-
-  // ── SVG Score Trend Chart ──
-  const TrendChart = () => {
-    if (submissions.length < 2) return null;
-    const sorted = [...submissions].sort((a, b) => new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime());
-    const w = 400, h = 120, pad = 30;
-    const maxY = 100;
-    const points = sorted.map((s, i) => {
-      const x = pad + (i / (sorted.length - 1)) * (w - pad * 2);
-      const y = h - pad - (s.percentage / maxY) * (h - pad * 2);
-      return { x, y, pct: s.percentage, name: s.exam_name };
-    });
-    const polyline = points.map(p => `${p.x},${p.y}`).join(" ");
-    const areaPath = `M${points[0].x},${h - pad} ${points.map(p => `L${p.x},${p.y}`).join(" ")} L${points[points.length - 1].x},${h - pad} Z`;
-
-    return (
-      <div className="bg-white border border-[#E7E0D3] rounded-2xl p-5 shadow-xs space-y-3">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-[#9A3412]" />
-          <h3 className="font-bold text-sm text-[#1C1917]">Score Trend</h3>
-        </div>
-        <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ maxHeight: 140 }}>
-          {/* Grid lines */}
-          {[0, 25, 50, 75, 100].map(v => {
-            const y = h - pad - (v / maxY) * (h - pad * 2);
-            return (
-              <g key={v}>
-                <line x1={pad} y1={y} x2={w - pad} y2={y} stroke="#E7E0D3" strokeWidth="0.5" strokeDasharray="4,4" />
-                <text x={pad - 6} y={y + 3} textAnchor="end" fontSize="8" fill="#A8A29E">{v}%</text>
-              </g>
-            );
-          })}
-          {/* Area fill */}
-          <path d={areaPath} fill="url(#trendGrad)" opacity="0.3" />
-          <defs>
-            <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#9A3412" />
-              <stop offset="100%" stopColor="#FAF7F2" />
-            </linearGradient>
-          </defs>
-          {/* Line */}
-          <polyline points={polyline} fill="none" stroke="#9A3412" strokeWidth="2" strokeLinejoin="round" />
-          {/* Data points */}
-          {points.map((p, i) => (
-            <g key={i}>
-              <circle cx={p.x} cy={p.y} r="4" fill="#fff" stroke="#9A3412" strokeWidth="2" />
-              <text x={p.x} y={h - pad + 14} textAnchor="middle" fontSize="7" fill="#78716C" className="select-none">
-                {sorted[i].exam_name.slice(0, 8)}
-              </text>
-            </g>
-          ))}
-        </svg>
-      </div>
-    );
-  };
-
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* ═══════ HEADER WITH REFRESH ═══════ */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-[#E7E0D3] p-5 rounded-2xl shadow-xs">
-        <div>
-          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full inline-block mb-1.5 uppercase tracking-wider ${
-            isTeacherView 
-              ? "bg-purple-100 text-purple-800 border border-purple-200"
-              : "bg-[#FCEBE6] text-[#9A3412] border border-[#F7D5CA]"
-          }`}>
-            {isTeacherView ? "📊 Classroom Population Summary" : "🎓 Personal Student Analytics"}
-          </span>
-          <h1 className="text-xl font-bold text-[#1C1917]">
-            {isTeacherView ? "Classroom Population Overview" : `Welcome, ${fullName || "Student"}`}
-          </h1>
-          <p className="text-xs text-[#78716C]">
-            {isTeacherView 
-              ? "Summarized metrics and grade distribution for the entire student population"
-              : "Personal scorecards, score trend analysis & printable response booklet access"}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-[#78716C] hidden sm:inline">
-            Updated {Math.floor((Date.now() - lastRefreshed.getTime()) / 1000)}s ago
-          </span>
-          <button
-            onClick={() => fetchData(true)}
-            disabled={isRefreshing}
-            className="bg-[#FBF9F5] border border-[#E7E0D3] hover:bg-[#F3EDE2] text-[#292524] text-xs font-semibold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-            title="Refresh dashboard data"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 text-[#9A3412] ${isRefreshing ? "animate-spin" : ""}`} />
-            <span>Refresh</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ═══════ STATS CARDS ROW ═══════ */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { icon: Trophy, label: "Best Score", value: `${stats.best.toFixed(1)}%`, color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" },
-          { icon: Target, label: "Needs Attention", value: `${stats.worst.toFixed(1)}%`, color: "text-rose-700", bg: "bg-rose-50", border: "border-rose-200" },
-          { icon: BarChart3, label: "Average Score", value: `${stats.avg.toFixed(1)}%`, color: "text-[#9A3412]", bg: "bg-[#FCEBE6]", border: "border-[#F7D5CA]" },
-          { icon: Award, label: "Tests Taken", value: `${stats.count}`, color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200" },
-        ].map(({ icon: Icon, label, value, color, bg, border }) => (
-          <div key={label} className={`${bg} border ${border} rounded-2xl p-4 space-y-2`}>
-            <div className="flex items-center gap-2">
-              <Icon className={`h-4 w-4 ${color}`} />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#78716C]">{label}</span>
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      
+      {/* ═══════ TOP HEADER & SUMMARY BANNER ═══════ */}
+      <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-5 md:p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] flex items-center justify-center font-bold text-lg border border-[#C84B18]/20">
+              <GraduationCapIcon className="h-6 w-6" />
             </div>
-            <div className={`text-2xl font-extrabold ${color}`}>{value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ═══════ TREND CHART + ACTIVE EXAMS ═══════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1 space-y-6">
-          <TrendChart />
-
-          {/* Dynamic AI Recommendations */}
-          <div className="bg-white border border-[#E7E0D3] p-5 rounded-2xl shadow-xs space-y-3">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-[#9A3412]" />
-              <h3 className="font-bold text-sm text-[#1C1917]">AI Learning Focus</h3>
-            </div>
-            {weakTopics.length > 0 ? (
-              <div className="space-y-2">
-                {weakTopics.slice(0, 3).map(t => (
-                  <div key={t.topic} className="flex items-center gap-2 text-xs">
-                    <span className="text-rose-600 font-bold">⚠</span>
-                    <span className="text-[#57534E]">
-                      Focus on <b className="text-[#1C1917]">{t.topic}</b> — {t.accuracy.toFixed(0)}% accuracy
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-[#57534E] leading-relaxed">
-                {submissions.length > 0
-                  ? "Great work! Your scores are strong across all topics. Keep reviewing regularly to maintain your edge."
-                  : "Complete your first exam to get personalized AI coaching insights."}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Main content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Active Published Exams */}
-          <div className="bg-white border border-[#E7E0D3] p-6 rounded-2xl shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-[#1C1917]">Active Published Exams</h3>
-              <span className="text-xs text-[#78716C]">{allExams.length} live</span>
-            </div>
-
-            <div className="space-y-3">
-              {allExams.map((ex) => {
-                const hasTaken = submissions.some(s => s.exam_id === ex.id);
-                return (
-                  <div key={ex.id} className="p-4 bg-[#FCEBE6] border border-[#F7D5CA] rounded-xl flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-[#1C1917]">{ex.name}</span>
-                        {hasTaken && (
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
-                            Completed ✓
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-[#78716C] mt-1">
-                        Duration: {ex.duration_minutes} mins | Code: <code className="font-mono text-[#9A3412] font-bold">{ex.exam_code}</code>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setQrModalExam(ex)}
-                        className="bg-white border border-[#F7D5CA] text-[#9A3412] hover:bg-[#FCEBE6] text-xs font-semibold px-3 py-2 rounded-xl transition-all flex items-center gap-1 shadow-xs"
-                        title="Scan QR Code to Open Exam on Mobile"
-                      >
-                        <QrCode className="h-4 w-4" />
-                        <span className="hidden sm:inline">QR</span>
-                      </button>
-                      <a
-                        href={`/exam/${ex.exam_code}`}
-                        className="bg-gradient-to-r from-[#9A3412] to-[#C2410C] text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-xs"
-                      >
-                        {hasTaken ? "Retake Portal" : "Enter Exam Portal"}
-                      </a>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {allExams.length === 0 && (
-                <div className="text-sm text-[#78716C] text-center py-6">No live exams scheduled right now.</div>
-              )}
-            </div>
-          </div>
-
-          {/* Past History */}
-          <div className="bg-white border border-[#E7E0D3] p-6 rounded-2xl shadow-xs space-y-4">
-            <h3 className="text-base font-bold text-[#1C1917]">Past Examination History</h3>
-            
-            <div className="space-y-3">
-              {submissions.map((sub) => {
-                const isPassed = sub.percentage >= 40;
-                return (
-                  <div key={sub.id} className="p-4 bg-[#FBF9F5] border border-[#E7E0D3] rounded-xl flex items-center justify-between flex-wrap gap-3">
-                    <div className="flex-1 min-w-[200px]">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-[#1C1917]">{sub.exam_name}</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                          isPassed ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
-                        }`}>
-                          {isPassed ? "Passed ✓" : "Failed ✕"}
-                        </span>
-                      </div>
-                      <div className="text-xs text-[#78716C] mt-1">
-                        Score: <b className="text-[#9A3412]">{sub.score}</b> ({sub.percentage.toFixed(1)}%)
-                        {sub.submitted_at && (
-                          <span className="ml-2 text-[#A8A29E]">
-                            • {new Date(sub.submitted_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Mini percentage badge */}
-                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xs font-extrabold ${
-                      sub.percentage >= 70 ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                      : sub.percentage >= 40 ? "bg-amber-50 text-amber-700 border border-amber-200"
-                      : "bg-rose-50 text-rose-700 border border-rose-200"
-                    }`}>
-                      {sub.percentage.toFixed(0)}%
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={`http://localhost:8000/api/v1/reports/submission-detail/${sub.id}/printable`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="bg-[#FCEBE6] border border-[#F7D5CA] text-[#9A3412] hover:bg-[#F7D5CA] text-xs font-semibold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-xs"
-                        title="Download/Print full Response Sheet with Correct Answers"
-                      >
-                        <FileText className="h-3.5 w-3.5" />
-                        <span>Sheet</span>
-                      </a>
-
-                      <button
-                        onClick={() => loadSubDetail(sub.id)}
-                        className="bg-[#FBF9F5] border border-[#E7E0D3] text-[#292524] hover:bg-[#F3EDE2] text-xs font-semibold px-3.5 py-2 rounded-xl transition-all"
-                      >
-                        View Report
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-              
-              {submissions.length === 0 && (
-                <div className="text-sm text-[#78716C] text-center py-6">No exam submissions found.</div>
-              )}
-            </div>
-          </div>
-
-          {/* ═══════ DETAILED ANALYTICS VIEW ═══════ */}
-          {selectedSub && (
-            <div className="space-y-5">
-              {/* Header + Score + Rank */}
-              <div className="bg-white border border-[#E7E0D3] p-6 rounded-2xl shadow-xs space-y-5">
-                <div className="flex justify-between items-start border-b border-[#F0E8DD] pb-4">
-                  <div>
-                    <h3 className="text-base font-bold text-[#1C1917]">{selectedSub.exam_name}</h3>
-                    <span className="text-xs text-[#78716C]">Detailed Performance Analysis</span>
-                  </div>
-                  <div className="flex gap-4 items-center">
-                    {/* Rank Badge */}
-                    {selectedSub.rank && (
-                      <div className="text-center">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-extrabold text-sm ${
-                          selectedSub.rank <= 3 ? "bg-amber-50 text-amber-700 border border-amber-300" : "bg-[#FBF9F5] text-[#78716C] border border-[#E7E0D3]"
-                        }`}>
-                          {selectedSub.rank <= 3 ? <Medal className="h-5 w-5" /> : `#${selectedSub.rank}`}
-                        </div>
-                        <span className="text-[10px] text-[#78716C] font-bold">
-                          {selectedSub.rank <= 3 ? `#${selectedSub.rank}` : "Rank"} / {selectedSub.total_participants}
-                        </span>
-                      </div>
-                    )}
-                    <div className="text-right">
-                      <div className="text-xl font-extrabold text-[#9A3412]">{selectedSub.score} / {selectedSub.max_score}</div>
-                      <span className="text-xs text-[#78716C]">{selectedSub.percentage.toFixed(1)}%</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* AI critique */}
-                {selectedSub.ai_feedback && (
-                  <div className="p-4 bg-[#FCEBE6] border border-[#F7D5CA] rounded-xl space-y-1">
-                    <span className="text-xs font-bold text-[#9A3412] uppercase tracking-wider">AI Coaching Report</span>
-                    <p className="text-xs text-[#57534E] leading-relaxed">{selectedSub.ai_feedback}</p>
-                  </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold text-[#242321] dark:text-[#F5F5F4]">
+                  {fullName || (isTeacher ? "Instructor Portal" : "Student Candidate")}
+                </h1>
+                {isTeacher ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    <span>Teacher / Staff View</span>
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    <span>Verified Student</span>
+                  </span>
                 )}
               </div>
-
-              {/* Topic Strength Bars */}
-              {selectedSub.topic_analysis && Object.keys(selectedSub.topic_analysis).length > 0 && (
-                <div className="bg-white border border-[#E7E0D3] p-6 rounded-2xl shadow-xs space-y-4">
-                  <div className="flex items-center gap-2 border-b border-[#F0E8DD] pb-3">
-                    <BarChart3 className="h-4 w-4 text-[#9A3412]" />
-                    <h3 className="font-bold text-sm text-[#1C1917]">Topic-Wise Accuracy</h3>
-                  </div>
-
-                  <div className="space-y-3">
-                    {Object.entries(selectedSub.topic_analysis).map(([topic, data]: [string, any]) => {
-                      const pct = data.accuracy;
-                      const barColor = pct >= 70 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-rose-500";
-                      const textColor = pct >= 70 ? "text-emerald-700" : pct >= 40 ? "text-amber-700" : "text-rose-700";
-                      return (
-                        <div key={topic} className="space-y-1">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-[#1C1917]">{topic}</span>
-                            <span className={`font-bold ${textColor}`}>
-                              {pct.toFixed(0)}% ({data.correct}/{data.total} correct)
-                            </span>
-                          </div>
-                          <div className="w-full bg-[#F0E8DD] rounded-full h-2">
-                            <div
-                              className={`${barColor} h-2 rounded-full transition-all duration-700`}
-                              style={{ width: `${Math.max(2, pct)}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Per-Question Breakdown Table */}
-              {selectedSub.evaluated_answers && Object.keys(selectedSub.evaluated_answers).length > 0 && (
-                <div className="bg-white border border-[#E7E0D3] rounded-2xl shadow-xs overflow-hidden">
-                  <button
-                    onClick={() => setExpandedSection(expandedSection === "questions" ? null : "questions")}
-                    className="w-full p-5 flex items-center justify-between hover:bg-[#FBF9F5] transition-all"
-                  >
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-[#9A3412]" />
-                      <h3 className="font-bold text-sm text-[#1C1917]">Question-by-Question Breakdown</h3>
-                      <span className="text-[10px] text-[#78716C] bg-[#F0E8DD] px-2 py-0.5 rounded-full font-semibold">
-                        {Object.keys(selectedSub.evaluated_answers).length} questions
-                      </span>
-                    </div>
-                    {expandedSection === "questions" ? <ChevronUp className="h-4 w-4 text-[#78716C]" /> : <ChevronDown className="h-4 w-4 text-[#78716C]" />}
-                  </button>
-
-                  {expandedSection === "questions" && (
-                    <div className="border-t border-[#E7E0D3]">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="bg-[#FBF9F5] text-[#78716C] uppercase text-[10px] tracking-wider">
-                              <th className="px-4 py-3 text-left font-bold">#</th>
-                              <th className="px-4 py-3 text-left font-bold">Question</th>
-                              <th className="px-4 py-3 text-left font-bold">Your Answer</th>
-                              <th className="px-4 py-3 text-left font-bold">Correct Answer</th>
-                              <th className="px-4 py-3 text-center font-bold">Status</th>
-                              <th className="px-4 py-3 text-right font-bold">Marks</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {Object.entries(selectedSub.evaluated_answers).map(([qId, qData]: [string, any], idx) => (
-                              <tr
-                                key={qId}
-                                className={`border-t border-[#F0E8DD] ${
-                                  qData.is_correct ? "bg-emerald-50/40" : "bg-rose-50/30"
-                                }`}
-                              >
-                                <td className="px-4 py-3 font-bold text-[#78716C]">{idx + 1}</td>
-                                <td className="px-4 py-3 text-[#1C1917] max-w-[200px] truncate font-medium">
-                                  {qData.question_text?.slice(0, 60)}{(qData.question_text?.length || 0) > 60 ? "..." : ""}
-                                </td>
-                                <td className={`px-4 py-3 max-w-[150px] truncate font-medium ${
-                                  qData.is_correct ? "text-emerald-700" : "text-rose-700"
-                                }`}>
-                                  {String(qData.selected_answer || "—").slice(0, 50)}
-                                </td>
-                                <td className="px-4 py-3 text-emerald-700 font-semibold max-w-[150px] truncate">
-                                  {String(qData.correct_answer || "—").slice(0, 50)}
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  {qData.is_correct ? (
-                                    <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">
-                                      <CheckCircle className="h-3 w-3" /> Correct
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full font-bold">
-                                      <XCircle className="h-3 w-3" /> Wrong
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 text-right font-bold text-[#1C1917]">
-                                  {(qData.score_awarded || 0).toFixed(1)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Mini Leaderboard */}
-              {leaderboard.length > 0 && (
-                <div className="bg-white border border-[#E7E0D3] p-6 rounded-2xl shadow-xs space-y-4">
-                  <div className="flex items-center gap-2 border-b border-[#F0E8DD] pb-3">
-                    <Trophy className="h-4 w-4 text-amber-600" />
-                    <h3 className="font-bold text-sm text-[#1C1917]">Exam Leaderboard</h3>
-                    <span className="text-[10px] text-[#78716C] bg-[#F0E8DD] px-2 py-0.5 rounded-full font-semibold">
-                      Top 5
-                    </span>
-                  </div>
-
-                  <div className="space-y-2">
-                    {leaderboard.slice(0, 5).map((entry, i) => {
-                      const isMe = entry.student_name === fullName;
-                      return (
-                        <div
-                          key={i}
-                          className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
-                            isMe ? "bg-[#FCEBE6] border border-[#F7D5CA]" : "bg-[#FBF9F5] border border-[#E7E0D3]"
-                          }`}
-                        >
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-extrabold ${
-                            i === 0 ? "bg-amber-100 text-amber-700 border border-amber-300"
-                            : i === 1 ? "bg-gray-100 text-gray-600 border border-gray-300"
-                            : i === 2 ? "bg-orange-100 text-orange-700 border border-orange-300"
-                            : "bg-[#FBF9F5] text-[#78716C] border border-[#E7E0D3]"
-                          }`}>
-                            {entry.rank}
-                          </div>
-                          <div className="flex-1">
-                            <span className={`text-xs font-semibold ${isMe ? "text-[#9A3412]" : "text-[#1C1917]"}`}>
-                              {entry.student_name} {isMe && "(You)"}
-                            </span>
-                          </div>
-                          <span className="text-xs font-bold text-[#9A3412]">{entry.score} pts</span>
-                          <span className="text-[10px] text-[#78716C] font-semibold">{entry.percentage.toFixed(1)}%</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Download Actions */}
-              <div className="flex flex-wrap gap-2 justify-end">
-                <a
-                  href={`http://localhost:8000/api/v1/reports/submission-detail/${selectedSub.submission_id || selectedSub.id}/printable`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="bg-gradient-to-r from-[#9A3412] to-[#C2410C] text-white font-semibold text-xs px-4 py-2 rounded-xl hover:from-[#7C2D12] hover:to-[#9A3412] transition-all flex items-center gap-1.5 shadow-xs"
-                >
-                  <FileText className="h-4 w-4" />
-                  <span>Download Printable Response Booklet (PDF)</span>
-                </a>
-
-                <button
-                  onClick={() => {
-                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(selectedSub, null, 2));
-                    const a = document.createElement("a");
-                    a.href = dataStr;
-                    a.download = `scorecard_${selectedSub.exam_name.replace(/\s+/g, "_")}.json`;
-                    a.click();
-                  }}
-                  className="bg-[#FBF9F5] border border-[#E7E0D3] text-[#292524] hover:bg-[#F3EDE2] text-xs font-semibold px-4 py-2 rounded-xl transition-all flex items-center gap-1.5"
-                >
-                  <Download className="h-4 w-4 text-[#9A3412]" />
-                  <span>Download JSON Summary</span>
-                </button>
-              </div>
+              <p className="text-xs text-[#716D67] dark:text-[#A8A29E] mt-0.5">
+                {isTeacher 
+                  ? "Instructor Preview: Inspect individual student quiz evaluations & performance trends."
+                  : "Personalized Quiz-by-Quiz Performance & Learning Analytics"}
+              </p>
             </div>
-          )}
+          </div>
+
+          <div className="flex items-center gap-2.5 self-start sm:self-auto">
+            {isTeacher && studentsList.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-[#F0ECE4]/60 dark:bg-[#1D1B19] px-3 py-1.5 rounded-lg border border-[#E5E0D8] dark:border-[#292524] text-xs">
+                <span className="text-[#716D67] font-semibold">Filter:</span>
+                <select
+                  value={selectedStudentFilter}
+                  onChange={(e) => setSelectedStudentFilter(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-[#242321] dark:text-[#F5F5F4] focus:outline-none cursor-pointer"
+                >
+                  <option value="">All Students Submissions</option>
+                  {studentsList.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      {st.full_name} ({st.roll_number})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <button
+              onClick={() => fetchData(true)}
+              disabled={isRefreshing}
+              className="px-3.5 py-1.5 rounded-lg border border-[#E5E0D8] dark:border-[#292524] hover:bg-[#F0ECE4]/60 dark:hover:bg-[#292524] text-xs font-semibold text-[#716D67] dark:text-[#A8A29E] flex items-center gap-1.5 transition-all shadow-xs"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-[#C84B18]" : ""}`} />
+              <span>Refresh</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Overall KPI Stats Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mt-5 pt-5 border-t border-[#E5E0D8] dark:border-[#292524]">
+          <div className="bg-[#F0ECE4]/40 dark:bg-[#1D1B19]/50 rounded-lg p-3.5 border border-[#E5E0D8] dark:border-[#292524]">
+            <div className="text-[11px] font-medium text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider">Quizzes Completed</div>
+            <div className="text-2xl font-bold text-[#242321] dark:text-[#F5F5F4] mt-1">{stats.count}</div>
+            <div className="text-[10px] text-[#716D67] dark:text-[#A8A29E] mt-0.5">Attempted assessments</div>
+          </div>
+
+          <div className="bg-[#F0ECE4]/40 dark:bg-[#1D1B19]/50 rounded-lg p-3.5 border border-[#E5E0D8] dark:border-[#292524]">
+            <div className="text-[11px] font-medium text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider">Overall Average</div>
+            <div className="text-2xl font-bold text-[#C84B18] dark:text-[#EA580C] mt-1">{stats.avg}%</div>
+            <div className="text-[10px] text-[#716D67] dark:text-[#A8A29E] mt-0.5">Cohort grade average</div>
+          </div>
+
+          <div className="bg-[#F0ECE4]/40 dark:bg-[#1D1B19]/50 rounded-lg p-3.5 border border-[#E5E0D8] dark:border-[#292524]">
+            <div className="text-[11px] font-medium text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider">Best Quiz Score</div>
+            <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{stats.best}%</div>
+            <div className="text-[10px] text-[#716D67] dark:text-[#A8A29E] mt-0.5">Highest recorded score</div>
+          </div>
+
+          <div className="bg-[#F0ECE4]/40 dark:bg-[#1D1B19]/50 rounded-lg p-3.5 border border-[#E5E0D8] dark:border-[#292524]">
+            <div className="text-[11px] font-medium text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider">Pass Rate</div>
+            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{stats.passRate}%</div>
+            <div className="text-[10px] text-[#716D67] dark:text-[#A8A29E] mt-0.5">Quizzes cleared successfully</div>
+          </div>
         </div>
       </div>
 
-      {/* ═══════ QR CODE MODAL ═══════ */}
-      {qrModalExam && (
-        <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full border border-[#E7E0D3] shadow-xl text-center space-y-5 animate-fadeIn relative">
-            <button
-              onClick={() => setQrModalExam(null)}
-              className="absolute top-4 right-4 p-1 rounded-lg text-[#78716C] hover:bg-[#F5F0E8] transition-all"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <div className="space-y-1">
-              <div className="inline-flex p-3 rounded-2xl bg-[#FCEBE6] text-[#9A3412] border border-[#F7D5CA] mb-1">
-                <QrCode className="h-6 w-6" />
-              </div>
-              <h3 className="text-lg font-bold text-[#1C1917]">{qrModalExam.name}</h3>
-              <p className="text-xs text-[#78716C]">Scan with mobile camera to launch secure exam portal</p>
+      {submissions.length === 0 ? (
+        <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-12 text-center space-y-3">
+          <BookOpen className="h-10 w-10 text-[#716D67] mx-auto opacity-50" />
+          <h3 className="font-bold text-base text-[#242321] dark:text-[#F5F5F4]">No Quiz Attempts Recorded Yet</h3>
+          <p className="text-xs text-[#716D67] dark:text-[#A8A29E] max-w-sm mx-auto">
+            When you complete an assessment or exam, your quiz-by-quiz performance summary, grade breakdown, and learning recommendations will appear here automatically.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          {/* ═══════ LEFT: QUIZ-WISE ATTEMPTS LIST ═══════ */}
+          <div className="lg:col-span-4 space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-xs font-bold text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider">
+                Completed Quizzes ({submissions.length})
+              </h2>
+              <span className="text-[11px] text-[#716D67]">Select to inspect</span>
             </div>
 
-            {/* High-Resolution QR Code */}
-            <div className="bg-[#FBF9F5] border border-[#E7E0D3] rounded-2xl p-4 inline-block mx-auto shadow-inner">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`http://localhost:3000/exam/${qrModalExam.exam_code}`)}`}
-                alt={`QR Code for ${qrModalExam.name}`}
-                className="w-48 h-48 mx-auto rounded-lg"
-              />
-            </div>
+            <div className="space-y-2.5">
+              {submissions.map((sub) => {
+                const isSelected = sub.id === selectedSubId;
+                const isPassed = (sub.percentage || 0) >= 50;
+                return (
+                  <button
+                    key={sub.id}
+                    onClick={() => loadSubDetail(sub.id)}
+                    className={`w-full text-left p-4 rounded-xl border transition-all text-xs space-y-2.5 ${
+                      isSelected
+                        ? "bg-[#C84B18]/5 border-[#C84B18] shadow-xs dark:bg-[#EA580C]/10 dark:border-[#EA580C]"
+                        : "bg-white dark:bg-[#171615] border-[#E5E0D8] dark:border-[#292524] hover:border-[#C84B18]/50 hover:bg-[#F0ECE4]/30 dark:hover:bg-[#1D1B19]/30"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-bold text-[#242321] dark:text-[#F5F5F4] text-xs line-clamp-1">
+                          {sub.exam_name || "Assessment"}
+                        </div>
+                        <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E] mt-0.5 flex items-center gap-1.5 font-mono">
+                          <Calendar className="h-3 w-3" />
+                          <span>{sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : "Recent"}</span>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                        isPassed 
+                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800" 
+                          : "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                      }`}>
+                        {isPassed ? "PASSED" : "FAILED"}
+                      </span>
+                    </div>
 
-            <div className="space-y-2 text-xs">
-              <div className="bg-[#FCEBE6] border border-[#F7D5CA] rounded-xl p-2.5 flex items-center justify-between gap-2">
-                <span className="font-mono font-bold text-[#9A3412] truncate">
-                  http://localhost:3000/exam/{qrModalExam.exam_code}
-                </span>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(`http://localhost:3000/exam/${qrModalExam.exam_code}`);
-                  }}
-                  className="bg-white border border-[#E7E0D3] px-2 py-1 rounded-lg text-[#9A3412] font-bold hover:bg-[#F3EDE2] shrink-0"
-                >
-                  Copy
-                </button>
-              </div>
-
-              <div className="text-[11px] text-[#78716C]">
-                Exam Code: <b className="font-mono text-[#9A3412]">{qrModalExam.exam_code}</b>
-              </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-[#E5E0D8]/60 dark:border-[#292524]">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-[#716D67]">Score:</span>
+                        <span className="font-bold text-[#242321] dark:text-[#F5F5F4]">
+                          {sub.score} / {sub.max_score}
+                        </span>
+                      </div>
+                      <div className="font-extrabold text-sm text-[#C84B18] dark:text-[#EA580C]">
+                        {sub.percentage}%
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
+
+          {/* ═══════ RIGHT: DEDICATED QUIZ PERFORMANCE SUMMARY ═══════ */}
+          <div className="lg:col-span-8">
+            {loadingDetail ? (
+              <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-16 text-center space-y-3">
+                <div className="w-8 h-8 border-2 border-[#C84B18] border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-[#716D67] font-medium">Loading Quiz Evaluation & Breakdown...</p>
+              </div>
+            ) : selectedSubDetail ? (
+              <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-5 md:p-6 shadow-xs space-y-6">
+                
+                {/* Quiz Header & Score Card */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E5E0D8] dark:border-[#292524]">
+                  <div>
+                    <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-[#716D67] dark:text-[#A8A29E]">
+                      Code: {selectedSubDetail.exam_code || "EXAM"}
+                    </span>
+                    <h2 className="text-lg font-bold text-[#242321] dark:text-[#F5F5F4] mt-0.5">
+                      {selectedSubDetail.exam_name}
+                    </h2>
+                  </div>
+
+                  <div className="flex items-center gap-3 bg-[#F0ECE4]/60 dark:bg-[#1D1B19] px-4 py-2.5 rounded-xl border border-[#E5E0D8] dark:border-[#292524] self-start sm:self-auto">
+                    <div>
+                      <div className="text-[10px] text-[#716D67] uppercase font-bold">Earned Score</div>
+                      <div className="text-xl font-extrabold text-[#C84B18] dark:text-[#EA580C]">
+                        {selectedSubDetail.score} <span className="text-xs font-normal text-[#716D67]">/ {selectedSubDetail.max_score}</span>
+                      </div>
+                    </div>
+                    <div className="h-8 w-px bg-[#E5E0D8] dark:bg-[#292524]" />
+                    <div>
+                      <div className="text-[10px] text-[#716D67] uppercase font-bold">Accuracy</div>
+                      <div className="text-xl font-extrabold text-[#242321] dark:text-[#F5F5F4]">
+                        {selectedSubDetail.percentage}%
+                      </div>
+                    </div>
+                    {selectedSubDetail.rank && (
+                      <>
+                        <div className="h-8 w-px bg-[#E5E0D8] dark:bg-[#292524]" />
+                        <div>
+                          <div className="text-[10px] text-[#716D67] uppercase font-bold">Class Rank</div>
+                          <div className="text-xl font-extrabold text-amber-600 dark:text-amber-400">
+                            #{selectedSubDetail.rank}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* AI Learning Critique & Roadmap */}
+                {selectedSubDetail.ai_feedback && (
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 space-y-1.5">
+                    <div className="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-300">
+                      <Sparkles className="h-4 w-4 text-[#C84B18] shrink-0" />
+                      <span>AI Learning Diagnosis & Recommendations</span>
+                    </div>
+                    <p className="text-xs text-amber-900 dark:text-amber-200/90 leading-relaxed pl-6">
+                      {selectedSubDetail.ai_feedback}
+                    </p>
+                  </div>
+                )}
+
+                {/* Navigation Tabs (Questions / Topics / Leaderboard) */}
+                <div className="flex gap-2 border-b border-[#E5E0D8] dark:border-[#292524] pb-2">
+                  <button
+                    onClick={() => setActiveViewTab("questions")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      activeViewTab === "questions"
+                        ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
+                        : "text-[#716D67] hover:text-[#242321]"
+                    }`}
+                  >
+                    <HelpCircle className="h-3.5 w-3.5" />
+                    <span>Question-by-Question Review</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveViewTab("topics")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      activeViewTab === "topics"
+                        ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
+                        : "text-[#716D67] hover:text-[#242321]"
+                    }`}
+                  >
+                    <BarChart3 className="h-3.5 w-3.5" />
+                    <span>Topic Mastery Breakdown</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveViewTab("leaderboard")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      activeViewTab === "leaderboard"
+                        ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
+                        : "text-[#716D67] hover:text-[#242321]"
+                    }`}
+                  >
+                    <Trophy className="h-3.5 w-3.5" />
+                    <span>Cohort Leaderboard</span>
+                  </button>
+                </div>
+
+                {/* ══════ TAB 1: QUESTION-BY-QUESTION REVIEW ══════ */}
+                {activeViewTab === "questions" && (
+                  <div className="space-y-4">
+                    {selectedSubDetail.questions && selectedSubDetail.questions.length > 0 ? (
+                      selectedSubDetail.questions.map((q: any, idx: number) => {
+                        const isCorrect = q.is_correct;
+                        return (
+                          <div
+                            key={idx}
+                            className={`p-4 rounded-xl border transition-all text-xs space-y-3 ${
+                              isCorrect
+                                ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50"
+                                : "bg-rose-50/40 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-2">
+                                <span className="font-bold text-[#716D67] font-mono">Q{idx + 1}.</span>
+                                <div>
+                                  <div className="font-semibold text-[#242321] dark:text-[#F5F5F4] text-xs leading-relaxed">
+                                    {q.question_text || q.question}
+                                  </div>
+                                  {q.topic && (
+                                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] bg-[#E5E0D8]/60 dark:bg-[#292524] text-[#716D67] dark:text-[#A8A29E] font-medium">
+                                      Topic: {q.topic}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 flex items-center gap-1 ${
+                                isCorrect 
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300"
+                                  : "bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-300"
+                              }`}>
+                                {isCorrect ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                                <span>{q.score_awarded ?? (isCorrect ? q.marks : 0)} / {q.marks || 1} Marks</span>
+                              </span>
+                            </div>
+
+                            {/* Options Breakdown */}
+                            <div className="space-y-1.5 pl-6">
+                              {q.options && typeof q.options === "object" && Object.entries(q.options).map(([optKey, optVal]: [string, any]) => {
+                                const isUserChoice = String(q.user_answer) === optKey;
+                                const isActualCorrect = String(q.correct_answer) === optKey;
+                                
+                                return (
+                                  <div
+                                    key={optKey}
+                                    className={`p-2 rounded-lg border text-xs flex items-center justify-between ${
+                                      isActualCorrect
+                                        ? "bg-emerald-100/60 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 font-semibold"
+                                        : isUserChoice
+                                        ? "bg-rose-100/60 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700 text-rose-900 dark:text-rose-200"
+                                        : "bg-white/60 dark:bg-[#171615]/60 border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E]"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono font-bold uppercase">{optKey}.</span>
+                                      <span>{optVal}</span>
+                                    </div>
+                                    <div className="text-[10px] font-bold">
+                                      {isActualCorrect && <span className="text-emerald-700 dark:text-emerald-300">✓ Correct Answer</span>}
+                                      {isUserChoice && !isActualCorrect && <span className="text-rose-700 dark:text-rose-300">✗ Your Choice</span>}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Explanation / Critique */}
+                            {q.explanation && (
+                              <div className="pl-6 pt-1 text-[11px] text-[#716D67] dark:text-[#A8A29E] leading-relaxed border-t border-[#E5E0D8]/40 dark:border-[#292524]/60">
+                                <span className="font-semibold text-[#242321] dark:text-[#F5F5F4]">Explanation: </span>
+                                {q.explanation}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="py-8 text-center text-[#716D67] text-xs">
+                        Question breakdown is not available for this record.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ══════ TAB 2: TOPIC MASTERY BREAKDOWN ══════ */}
+                {activeViewTab === "topics" && (
+                  <div className="space-y-4">
+                    {selectedSubDetail.topic_analysis && Object.keys(selectedSubDetail.topic_analysis).length > 0 ? (
+                      <div className="space-y-3">
+                        {Object.entries(selectedSubDetail.topic_analysis).map(([topicName, tdata]: [string, any]) => {
+                          const acc = tdata.accuracy ?? 0;
+                          return (
+                            <div key={topicName} className="p-4 rounded-xl bg-[#F0ECE4]/30 dark:bg-[#1D1B19]/50 border border-[#E5E0D8] dark:border-[#292524] space-y-2">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-semibold text-[#242321] dark:text-[#F5F5F4]">{topicName}</span>
+                                <span className="font-bold text-[#C84B18] dark:text-[#EA580C]">{acc}% Accuracy</span>
+                              </div>
+                              <div className="w-full bg-[#E5E0D8] dark:bg-[#292524] h-2 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    acc >= 75 ? "bg-emerald-500" : acc >= 50 ? "bg-amber-500" : "bg-rose-500"
+                                  }`}
+                                  style={{ width: `${Math.min(100, Math.max(0, acc))}%` }}
+                                />
+                              </div>
+                              <div className="flex justify-between text-[10px] text-[#716D67]">
+                                <span>{tdata.correct || 0} of {tdata.total || 0} questions correct</span>
+                                <span>{acc >= 75 ? "Mastered" : acc >= 50 ? "Developing" : "Needs Review"}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center text-[#716D67] text-xs">
+                        Topic analysis is not available for this exam.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ══════ TAB 3: LEADERBOARD ══════ */}
+                {activeViewTab === "leaderboard" && (
+                  <div className="space-y-3">
+                    <div className="divide-y divide-[#E5E0D8] dark:divide-[#292524] border border-[#E5E0D8] dark:border-[#292524] rounded-xl overflow-hidden">
+                      {leaderboard.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-[#716D67]">No leaderboard data available.</div>
+                      ) : (
+                        leaderboard.map((lb: any, idx: number) => {
+                          const isMe = lb.student_name === fullName || lb.name === fullName;
+                          return (
+                            <div
+                              key={idx}
+                              className={`p-3 flex items-center justify-between text-xs transition-colors ${
+                                isMe 
+                                  ? "bg-[#C84B18]/10 dark:bg-[#EA580C]/15 font-semibold" 
+                                  : "bg-white dark:bg-[#171615] hover:bg-[#F0ECE4]/30 dark:hover:bg-[#1D1B19]/30"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${
+                                  idx === 0 ? "bg-amber-100 text-amber-800" : idx === 1 ? "bg-slate-200 text-slate-700" : idx === 2 ? "bg-amber-700/20 text-amber-900" : "text-[#716D67]"
+                                }`}>
+                                  {idx + 1}
+                                </span>
+                                <span className="text-[#242321] dark:text-[#F5F5F4]">
+                                  {lb.student_name || lb.name || "Candidate"} {isMe && "(You)"}
+                                </span>
+                              </div>
+                              <span className="font-bold text-[#C84B18] dark:text-[#EA580C]">
+                                {lb.percentage || lb.score}%
+                              </span>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            ) : null}
+          </div>
+
         </div>
       )}
+
     </div>
+  );
+}
+
+function GraduationCapIcon(props: any) {
+  return (
+    <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+    </svg>
   );
 }

@@ -13,96 +13,262 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
 ai_service = AIService()
 
+import io
+import csv
+from fastapi.responses import StreamingResponse
+
+@router.get("/exam-analytics/{exam_id}")
 @router.get("/exam-summary/{exam_id}")
-def get_exam_summary(
+def get_exam_analytics(
     exam_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Returns high-level statistics for a completed exam.
-    Attendance rate, scores range (high, low, average), and proctor alert counts.
+    Returns generalized class-wide performance analytics for a quiz/exam.
+    Includes score ranges, pass rates, score distribution histogram,
+    topic difficulty error rates, and candidate performance table.
     """
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
         
     total_credentials = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).count()
-    submissions = db.query(ExamSubmission).filter(ExamSubmission.exam_id == exam_id, ExamSubmission.status == "submitted").all()
+    submissions = db.query(ExamSubmission).filter(
+        ExamSubmission.exam_id == exam_id, 
+        ExamSubmission.status == "submitted"
+    ).order_by(ExamSubmission.score.desc()).all()
     
-    attendance = len(submissions)
+    attendance_count = len(submissions)
+    absent_count = max(0, total_credentials - attendance_count)
+    attendance_rate = round((attendance_count / max(1, total_credentials)) * 100.0, 1) if total_credentials > 0 else 0.0
+
+    # Parse questions to track topic accuracy
+    questions_list = json.loads(exam.questions_json) if exam.questions_json else []
+    topic_map = {} # topic -> { "total_possible_marks": 0.0, "total_earned_marks": 0.0, "question_count": 0, "correct_count": 0 }
+    
+    for q in questions_list:
+        t = q.get("topic") or "General"
+        if t not in topic_map:
+            topic_map[t] = {"total_possible_marks": 0.0, "total_earned_marks": 0.0, "question_count": 0, "correct_count": 0}
+        topic_map[t]["question_count"] += 1
+        topic_map[t]["total_possible_marks"] += float(q.get("marks", 1)) * max(1, attendance_count)
+
+    # If no submissions yet
     if not submissions:
         return {
+            "exam_id": exam.id,
             "exam_name": exam.name,
-            "total_students": total_credentials,
-            "attended_students": 0,
+            "exam_code": exam.exam_code,
+            "total_marks": exam.total_marks,
+            "passing_marks": exam.passing_marks,
+            "duration_minutes": exam.duration_minutes,
+            "total_enrolled": total_credentials,
+            "attended_count": 0,
+            "absent_count": total_credentials,
+            "attendance_rate": 0.0,
             "average_score": 0.0,
+            "average_percentage": 0.0,
             "highest_score": 0.0,
             "lowest_score": 0.0,
+            "pass_count": 0,
+            "fail_count": 0,
             "pass_rate": 0.0,
+            "distribution": { "0_40": 0, "40_60": 0, "60_80": 0, "80_100": 0 },
+            "topic_analytics": [],
             "submissions": []
         }
-        
+
     scores = [s.score for s in submissions]
+    percentages = [s.percentage for s in submissions]
     avg_score = sum(scores) / len(scores)
+    avg_percentage = sum(percentages) / len(percentages)
     highest = max(scores)
     lowest = min(scores)
     
-    passing = sum(1 for s in submissions if s.score >= exam.passing_marks)
-    pass_rate = (passing / len(submissions)) * 100.0
-    
+    pass_count = sum(1 for s in submissions if s.score >= exam.passing_marks)
+    fail_count = attendance_count - pass_count
+    pass_rate = (pass_count / attendance_count) * 100.0
+
+    # Calculate score distribution brackets
+    dist = { "0_40": 0, "40_60": 0, "60_80": 0, "80_100": 0 }
+    for p in percentages:
+        if p < 40:
+            dist["0_40"] += 1
+        elif p < 60:
+            dist["40_60"] += 1
+        elif p < 80:
+            dist["60_80"] += 1
+        else:
+            dist["80_100"] += 1
+
+    # Aggregate topic scores across all student submissions
     submissions_list = []
-    for s in submissions:
+    for rank_idx, s in enumerate(submissions, 1):
         proctor_alerts_count = db.query(ProctoringLog).filter(ProctoringLog.submission_id == s.id).count()
-        submissions_list.append({
-            "submission_id": s.id,
-            "student_name": s.credential.student.user.full_name if s.credential.student else "Guest",
-            "roll_number": s.credential.student.roll_number if s.credential.student else "",
-            "score": s.score,
-            "percentage": s.percentage,
-            "proctor_alerts": proctor_alerts_count,
-            "started_at": s.started_at,
-            "submitted_at": s.submitted_at
-        })
+        student_obj = s.credential.student if s.credential else None
         
+        # Parse answers for topic accuracy
+        if s.answers_json:
+            try:
+                ans_data = json.loads(s.answers_json)
+                if isinstance(ans_data, dict):
+                    for q_id, q_eval in ans_data.items():
+                        # Find topic
+                        q_topic = "General"
+                        for eq in questions_list:
+                            if eq.get("id") == q_id:
+                                q_topic = eq.get("topic") or "General"
+                                break
+                        if q_topic in topic_map and isinstance(q_eval, dict):
+                            topic_map[q_topic]["total_earned_marks"] += float(q_eval.get("score_awarded", 0))
+                            if q_eval.get("is_correct", False):
+                                topic_map[q_topic]["correct_count"] += 1
+            except Exception:
+                pass
+
+        score_val = float(s.score) if s.score is not None else 0.0
+        pct_val = float(s.percentage) if s.percentage is not None else 0.0
+        pass_marks = float(exam.passing_marks) if exam.passing_marks is not None else 0.0
+
+        submissions_list.append({
+            "rank": rank_idx,
+            "submission_id": s.id,
+            "student_id": student_obj.id if student_obj else None,
+            "student_name": student_obj.user.full_name if (student_obj and student_obj.user) else "Guest Candidate",
+            "email": student_obj.user.email if (student_obj and student_obj.user) else "",
+            "roll_number": student_obj.roll_number if student_obj else "N/A",
+            "division": student_obj.division if student_obj else "",
+            "batch": student_obj.batch if student_obj else "",
+            "score": score_val,
+            "max_score": exam.total_marks,
+            "percentage": pct_val,
+            "is_passed": score_val >= pass_marks,
+            "proctor_alerts": proctor_alerts_count,
+            "submitted_at": s.submitted_at.strftime("%Y-%m-%d %H:%M") if s.submitted_at else ""
+        })
+
+    # Format topic analytics
+    topic_analytics_list = []
+    for t_name, t_data in topic_map.items():
+        possible = t_data["total_possible_marks"]
+        earned = t_data["total_earned_marks"]
+        accuracy = round((earned / possible) * 100.0, 1) if possible > 0 else 0.0
+        topic_analytics_list.append({
+            "topic": t_name,
+            "accuracy": accuracy,
+            "question_count": t_data["question_count"],
+            "difficulty": "Challenging" if accuracy < 50 else ("Moderate" if accuracy < 75 else "Mastered")
+        })
+
     return {
+        "exam_id": exam.id,
         "exam_name": exam.name,
-        "total_students": total_credentials,
-        "attended_students": attendance,
+        "exam_code": exam.exam_code,
+        "total_marks": exam.total_marks,
+        "passing_marks": exam.passing_marks,
+        "duration_minutes": exam.duration_minutes,
+        "total_enrolled": total_credentials,
+        "attended_count": attendance_count,
+        "absent_count": absent_count,
+        "attendance_rate": attendance_rate,
         "average_score": round(avg_score, 2),
+        "average_percentage": round(avg_percentage, 1),
         "highest_score": highest,
         "lowest_score": lowest,
-        "pass_rate": round(pass_rate, 2),
+        "pass_count": pass_count,
+        "fail_count": fail_count,
+        "pass_rate": round(pass_rate, 1),
+        "distribution": dist,
+        "topic_analytics": topic_analytics_list,
         "submissions": submissions_list
     }
 
+@router.get("/export-exam-csv/{exam_id}")
+def export_exam_csv(
+    exam_id: str,
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """Exports class gradebook CSV for a specific quiz/exam."""
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+        
+    submissions = db.query(ExamSubmission).filter(
+        ExamSubmission.exam_id == exam_id,
+        ExamSubmission.status == "submitted"
+    ).order_by(ExamSubmission.score.desc()).all()
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Rank", "Student Name", "Email", "Roll Number", "Division", "Score", "Max Marks", "Percentage", "Result", "Proctor Flags", "Submitted At"])
+    
+    for rank_idx, s in enumerate(submissions, 1):
+        st = s.credential.student if s.credential else None
+        alerts = db.query(ProctoringLog).filter(ProctoringLog.submission_id == s.id).count()
+        writer.writerow([
+            rank_idx,
+            st.user.full_name if (st and st.user) else "Guest",
+            st.user.email if (st and st.user) else "",
+            st.roll_number if st else "",
+            st.division if st else "",
+            s.score,
+            exam.total_marks,
+            f"{s.percentage}%",
+            "PASSED" if s.score >= exam.passing_marks else "FAILED",
+            alerts,
+            s.submitted_at.isoformat() if s.submitted_at else ""
+        ])
+        
+    output.seek(0)
+    filename = f"gradebook_{exam.exam_code}.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 @router.get("/my-submissions")
 def get_my_submissions(
+    student_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Returns all submitted exam attempts for the logged-in student/user.
+    Returns all submitted exam attempts for the logged-in student,
+    or allows teachers/admins to inspect any student's quiz submissions.
     """
-    # Find student records matching current_user
-    student_records = db.query(Student).filter(
-        (Student.user_id == current_user.id) |
-        (Student.user.has(User.email == current_user.email)) |
-        (Student.user.has(User.full_name == current_user.full_name))
-    ).all()
+    is_teacher = current_user.role in ["teacher", "inst_admin", "super_admin"]
     
-    student_ids = [s.id for s in student_records]
-    
-    if student_ids:
+    if is_teacher and student_id:
         submissions = db.query(ExamSubmission).join(ExamCredential).filter(
             ExamSubmission.status == "submitted",
-            ExamCredential.student_id.in_(student_ids)
+            ExamCredential.student_id == student_id
         ).order_by(ExamSubmission.submitted_at.desc()).all()
-    else:
-        # Fallback: if student profile isn't explicitly linked, return all submitted exams
+    elif is_teacher:
         submissions = db.query(ExamSubmission).filter(
             ExamSubmission.status == "submitted"
         ).order_by(ExamSubmission.submitted_at.desc()).all()
+    else:
+        # Find student records matching current_user
+        student_records = db.query(Student).filter(
+            (Student.user_id == current_user.id) |
+            (Student.user.has(User.email == current_user.email)) |
+            (Student.user.has(User.full_name == current_user.full_name))
+        ).all()
+        
+        student_ids = [s.id for s in student_records]
+        
+        if student_ids:
+            submissions = db.query(ExamSubmission).join(ExamCredential).filter(
+                ExamSubmission.status == "submitted",
+                ExamCredential.student_id.in_(student_ids)
+            ).order_by(ExamSubmission.submitted_at.desc()).all()
+        else:
+            submissions = db.query(ExamSubmission).filter(
+                ExamSubmission.status == "submitted"
+            ).order_by(ExamSubmission.submitted_at.desc()).all()
         
     result = []
     for s in submissions:

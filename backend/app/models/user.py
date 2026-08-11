@@ -11,6 +11,10 @@ class User(TimeStampedModel):
     role = Column(String(50), nullable=False)  # "super_admin", "inst_admin", "teacher", "student"
     institution_id = Column(String(36), ForeignKey("institutions.id"), nullable=True)
     is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=True)
+    verification_token = Column(String(255), nullable=True)
+    auth_provider = Column(String(50), default="local") # "local", "google"
+    google_id = Column(String(255), nullable=True)
     
     institution = relationship("Institution", back_populates="users")
     student_profile = relationship("Student", back_populates="user", uselist=False, cascade="all, delete-orphan")

@@ -13,8 +13,36 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="bg-[#FAF7F2] text-[#1C1917] antialiased min-h-screen selection:bg-amber-800/20 selection:text-amber-900">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var m = localStorage.getItem('theme_mode') || localStorage.getItem('theme');
+                  var isDark = false;
+                  if (m === 'dark') {
+                    isDark = true;
+                  } else if (m === 'system') {
+                    isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  } else {
+                    isDark = false;
+                  }
+                  if (isDark) {
+                    document.documentElement.classList.add('dark');
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                    document.documentElement.setAttribute('data-theme', 'light');
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body className="antialiased min-h-screen selection:bg-amber-800/20 selection:text-amber-900">
         <Providers>{children}</Providers>
       </body>
     </html>
