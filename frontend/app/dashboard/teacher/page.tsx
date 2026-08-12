@@ -8,7 +8,7 @@ import {
   Upload, Plus, FileSpreadsheet, BookOpen, Cpu, Calendar, Lock, ChevronRight, 
   Clipboard, Check, Download, Users, LineChart, Eye, Trash2, AlertCircle,
   Sparkles, Key, Trophy, Share2, FileText, Printer, Copy, BarChart3, 
-  GraduationCap, FolderOpen, Clock, QrCode, X, ArrowRight, ArrowLeft, Pencil, Mail, CheckCircle
+  GraduationCap, FolderOpen, Clock, QrCode, X, ArrowRight, ArrowLeft, Pencil, Mail, CheckCircle, StopCircle
 } from "lucide-react";
 
 export default function TeacherDashboard() {
@@ -81,7 +81,7 @@ export default function TeacherDashboard() {
   const [examPass, setExamPass] = useState("20");
   const [examNegative, setExamNegative] = useState("0");
   const [numMcq, setNumMcq] = useState("5");
-  const [numSubjective, setNumSubjective] = useState("1");
+  const [numSubjective, setNumSubjective] = useState("0");
   const [questionType, setQuestionType] = useState<"mcq" | "subjective" | "tf" | "mixed">("mcq");
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -354,8 +354,8 @@ export default function TeacherDashboard() {
           total_marks: parseFloat(examMarks) || 50,
           passing_marks: parseFloat(examPass) || 20,
           negative_marking: parseFloat(examNegative) || 0,
-          num_mcq: parseInt(numMcq) || 5,
-          num_subjective: parseInt(numSubjective) || 1,
+          num_mcq: questionType === "subjective" ? 0 : (parseInt(numMcq) || 5),
+          num_subjective: (questionType === "mcq" || questionType === "tf") ? 0 : (parseInt(numSubjective) || 0),
           question_type: questionType,
           difficulty,
           ...(examStartDate ? { start_time: new Date(examStartDate).toISOString() } : {}),
@@ -384,6 +384,46 @@ export default function TeacherDashboard() {
         }
       }
     } catch {}
+  };
+
+  const handleEndExamEarly = async (examId: string, examName: string) => {
+    if (!confirm(`Are you sure you want to end "${examName}" early? Students will no longer be able to enter or submit.`)) {
+      return;
+    }
+    try {
+      const res = await apiFetch(`/exams/${examId}/end-early`, { token, method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`Assessment "${examName}" has been ended early.`, "success");
+        fetchExams();
+        if (previewExam && previewExam.id === examId) {
+          setPreviewExam({ ...previewExam, end_time: new Date().toISOString() });
+        }
+      } else {
+        showToast(data.detail || "Failed to end exam early", "error");
+      }
+    } catch {
+      showToast("Network error ending exam early", "error");
+    }
+  };
+
+  const handleDeleteExam = async (examId: string) => {
+    try {
+      const res = await apiFetch(`/exams/${examId}`, { token, method: "DELETE" });
+      const data = await res.json();
+      if (res.ok) {
+        showToast("Assessment deleted successfully.", "success");
+        setDeleteConfirmId(null);
+        fetchExams();
+        if (previewExam && previewExam.id === examId) {
+          setPreviewExam(null);
+        }
+      } else {
+        showToast(data.detail || "Failed to delete exam", "error");
+      }
+    } catch {
+      showToast("Network error deleting exam", "error");
+    }
   };
 
 
@@ -702,6 +742,19 @@ export default function TeacherDashboard() {
                               <Eye className="h-3.5 w-3.5" />
                             </button>
 
+                            {/* End Early Button (if active & published) */}
+                            {exam.is_published && (!sched || sched.status === "live" || sched.status === "scheduled") && (
+                              <button
+                                type="button"
+                                onClick={() => handleEndExamEarly(exam.id, exam.name)}
+                                className="px-2 py-1 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all flex items-center gap-1 text-[10px] font-semibold"
+                                title="End Live Assessment Early"
+                              >
+                                <StopCircle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                                <span>End Early</span>
+                              </button>
+                            )}
+
                             {/* Publish Live Button (if draft) */}
                             {!exam.is_published && (
                               <button
@@ -744,9 +797,31 @@ export default function TeacherDashboard() {
                             </button>
 
                             {deleteConfirmId === exam.id ? (
-                              <button onClick={() => handleDeleteExam(exam.id)} className="px-2 py-1 bg-red-600 text-white rounded text-[11px] font-semibold">Confirm</button>
+                              <div className="flex items-center gap-1">
+                                <button 
+                                  type="button"
+                                  onClick={() => handleDeleteExam(exam.id)} 
+                                  className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold shadow-xs cursor-pointer"
+                                  title="Permanently Delete Assessment"
+                                >
+                                  Delete
+                                </button>
+                                <button 
+                                  type="button"
+                                  onClick={() => setDeleteConfirmId(null)} 
+                                  className="px-1.5 py-1 bg-[#E5E0D8] dark:bg-[#292524] text-[#242321] dark:text-[#F5F5F4] rounded text-[10px] font-medium hover:opacity-80"
+                                  title="Cancel"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             ) : (
-                              <button onClick={() => setDeleteConfirmId(exam.id)} className="p-1.5 rounded text-[#716D67] hover:text-red-600" title="Delete">
+                              <button 
+                                type="button"
+                                onClick={() => setDeleteConfirmId(exam.id)} 
+                                className="p-1.5 rounded text-[#716D67] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" 
+                                title="Delete Assessment"
+                              >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             )}
@@ -851,21 +926,10 @@ export default function TeacherDashboard() {
               <div className="space-y-4 max-w-xl">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className={labelCls}>No. of MCQs</label>
-                    <input type="number" value={numMcq} onChange={(e) => setNumMcq(e.target.value)} min="0" max="50" className={inputCls} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className={labelCls}>No. of Subjective</label>
-                    <input type="number" value={numSubjective} onChange={(e) => setNumSubjective(e.target.value)} min="0" max="20" className={inputCls} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className={labelCls}>Question Type</label>
+                    <label className={labelCls}>Question Format</label>
                     <select value={questionType} onChange={(e: any) => setQuestionType(e.target.value)} className={inputCls}>
-                      <option value="mcq">MCQ Only</option>
-                      <option value="subjective">Subjective Only</option>
+                      <option value="mcq">Multiple Choice (MCQ)</option>
+                      <option value="subjective">Subjective / Descriptive</option>
                       <option value="tf">True / False</option>
                       <option value="mixed">Mixed (MCQ + Subjective)</option>
                     </select>
@@ -879,6 +943,64 @@ export default function TeacherDashboard() {
                     </select>
                   </div>
                 </div>
+
+                {/* Conditional Question Count Controls */}
+                {questionType === "mcq" && (
+                  <div className="space-y-1.5">
+                    <label className={labelCls}>Number of Multiple Choice Questions (MCQs)</label>
+                    <input 
+                      type="number" 
+                      value={numMcq} 
+                      onChange={(e) => setNumMcq(e.target.value)} 
+                      min="1" 
+                      max="50" 
+                      className={inputCls} 
+                    />
+                    <p className="text-[11px] text-[#716D67]">Each question will have 4 domain-specific options with single correct answer.</p>
+                  </div>
+                )}
+
+                {questionType === "tf" && (
+                  <div className="space-y-1.5">
+                    <label className={labelCls}>Number of True / False Questions</label>
+                    <input 
+                      type="number" 
+                      value={numMcq} 
+                      onChange={(e) => setNumMcq(e.target.value)} 
+                      min="1" 
+                      max="50" 
+                      className={inputCls} 
+                    />
+                  </div>
+                )}
+
+                {questionType === "subjective" && (
+                  <div className="space-y-1.5">
+                    <label className={labelCls}>Number of Subjective Questions</label>
+                    <input 
+                      type="number" 
+                      value={numSubjective || "5"} 
+                      onChange={(e) => setNumSubjective(e.target.value)} 
+                      min="1" 
+                      max="20" 
+                      className={inputCls} 
+                    />
+                    <p className="text-[11px] text-[#716D67]">Students will provide descriptive answers evaluated against rubric key concepts.</p>
+                  </div>
+                )}
+
+                {questionType === "mixed" && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className={labelCls}>No. of MCQs</label>
+                      <input type="number" value={numMcq} onChange={(e) => setNumMcq(e.target.value)} min="1" max="40" className={inputCls} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={labelCls}>No. of Subjective</label>
+                      <input type="number" value={numSubjective || "2"} onChange={(e) => setNumSubjective(e.target.value)} min="1" max="15" className={inputCls} />
+                    </div>
+                  </div>
+                )}
 
                 <div className="pt-4 flex justify-between">
                   <button type="button" onClick={() => setCreateStep(1)} className="px-4 py-2 border border-[#E5E0D8] dark:border-[#292524] rounded-md text-xs font-medium text-[#716D67] hover:text-[#242321] flex items-center gap-1.5">
@@ -1899,6 +2021,30 @@ export default function TeacherDashboard() {
                   className="px-4 py-2 rounded-md border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] text-xs font-medium"
                 >
                   Close Preview
+                </button>
+
+                {previewExam.is_published && (
+                  <button
+                    type="button"
+                    onClick={() => handleEndExamEarly(previewExam.id, previewExam.name)}
+                    className="px-3 py-2 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 text-xs font-semibold flex items-center gap-1.5"
+                  >
+                    <StopCircle className="h-3.5 w-3.5" />
+                    <span>End Assessment Early</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Permanently delete assessment "${previewExam.name}"?`)) {
+                      handleDeleteExam(previewExam.id);
+                    }
+                  }}
+                  className="px-3 py-2 rounded-md border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 text-xs font-semibold flex items-center gap-1.5"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Delete</span>
                 </button>
 
                 {!previewExam.is_published && (

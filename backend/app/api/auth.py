@@ -233,3 +233,33 @@ def change_password(pass_in: PasswordChange, current_user: User = Depends(get_cu
     db.add(current_user)
     db.commit()
     return {"message": "Password changed successfully"}
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+@router.post("/forgot-password")
+def forgot_password(
+    req: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Generates a secure temporary password and dispatches a password recovery email.
+    """
+    user = db.query(User).filter(User.email == req.email, User.is_deleted == False).first()
+    if not user:
+        # Return generic success to prevent email enumeration
+        return {"message": "If an account with this email exists, a password reset link has been dispatched."}
+        
+    temp_pwd = f"Reset{secrets.token_hex(3)}!"
+    user.hashed_password = get_password_hash(temp_pwd)
+    db.commit()
+    
+    background_tasks.add_task(
+        email_service.send_password_reset_email,
+        user_name=user.full_name,
+        email=user.email,
+        new_password=temp_pwd
+    )
+    
+    return {"message": "A temporary recovery password has been dispatched to your email address."}

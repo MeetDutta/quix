@@ -512,8 +512,8 @@ export default function ExamPortal() {
 
             {/* Answer Options / Response area */}
             <div className="space-y-3">
-              {currentQ?.question_type === "mcq" || currentQ?.question_type === "true_false" ? (
-                currentQ?.options?.map((opt: string, i: number) => {
+              {(Array.isArray(currentQ?.options) && currentQ.options.length > 0) || ["mcq", "tf", "true_false", "choice"].includes(String(currentQ?.question_type || "").toLowerCase()) ? (
+                (currentQ?.options || ["True", "False"]).map((opt: string, i: number) => {
                   const isSelected = examStore.answers[currentQ.id] === opt;
                   return (
                     <button

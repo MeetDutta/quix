@@ -154,6 +154,20 @@ class AIService:
                 q["question_text"] = q.get("question") or q.get("question_text", "Examination Question")
                 q["citation_text"] = q.get("source_used") or q.get("explanation", "")
                 
+                # Normalize question_type to standard lowercase
+                raw_type = str(q.get("question_type") or question_type).lower()
+                if "mcq" in raw_type or "choice" in raw_type:
+                    q["question_type"] = "mcq"
+                elif "true" in raw_type or "false" in raw_type or "tf" in raw_type:
+                    q["question_type"] = "true_false"
+                    if not q.get("options"):
+                        q["options"] = ["True", "False"]
+                elif "subjective" in raw_type or "short" in raw_type or "long" in raw_type or "essay" in raw_type:
+                    q["question_type"] = "subjective"
+                    q["options"] = None
+                else:
+                    q["question_type"] = "mcq" if q.get("options") else "subjective"
+                
                 if context_chunks:
                     chunk_match = context_chunks[idx % len(context_chunks)]
                     q["citation_chunk_id"] = chunk_match.get("chunk_id")
@@ -168,7 +182,9 @@ class AIService:
                 
             # Run answer diversification and position shuffling safeguard
             valid_questions = self._shuffle_and_balance_options(valid_questions)
-            return valid_questions
+            
+            # Guarantee EXACT question count (never return extra questions)
+            return valid_questions[:count]
         except Exception as e:
             logger.error(f"Error generating questions via Gemini: {str(e)}")
             return self._mock_questions(question_type, difficulty, count, topic, context_chunks)

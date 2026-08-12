@@ -32,13 +32,29 @@ class RAGService:
     def _save_vectors(self):
         """Saves vectors to local JSON file."""
         os.makedirs(os.path.dirname(self.vector_store_path), exist_ok=True)
-        with open(self.vector_store_path, "w") as f:
-            json.dump(self.vectors, f)
+        with open(self.vector_store_path, "w", encoding="utf-8") as f:
+            json.dump(self.vectors, f, ensure_ascii=False)
+
+    def _sanitize_unicode(self, text: Optional[str]) -> str:
+        """
+        Cleans lone surrogate code points (\ud800-\udfff) and unencodable characters
+        extracted from complex PDFs or non-standard fonts so they encode cleanly to UTF-8.
+        """
+        if not text or not isinstance(text, str):
+            return ""
+        try:
+            # Replaces lone surrogate code points with clean character
+            cleaned = text.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+            # Strip remaining replacement characters if any, and ensure valid UTF-8
+            return cleaned.encode("utf-8", "ignore").decode("utf-8", "ignore")
+        except Exception:
+            return "".join(c for c in text if not (0xD800 <= ord(c) <= 0xDFFF))
 
     def extract_text(self, file_path: str, filename: str) -> List[Dict[str, Any]]:
         """
         Extracts text from PDF, DOCX, PPTX, or Images.
         For images or complex pages, falls back to Gemini multi-modal text extraction.
+        Sanitizes all extracted strings against Unicode surrogates.
         """
         ext = os.path.splitext(filename.lower())[1]
         pages = []
@@ -47,17 +63,22 @@ class RAGService:
             if ext == ".pdf":
                 reader = pypdf.PdfReader(file_path)
                 for page_idx, page in enumerate(reader.pages):
-                    text = page.extract_text() or ""
-                    if text.strip():
-                        pages.append({"page_number": page_idx + 1, "text": text})
+                    try:
+                        raw_text = page.extract_text() or ""
+                    except Exception:
+                        raw_text = ""
+                    clean_text = self._sanitize_unicode(raw_text)
+                    if clean_text.strip():
+                        pages.append({"page_number": page_idx + 1, "text": clean_text})
             elif ext == ".docx":
                 doc = docx.Document(file_path)
                 full_text = []
                 for para in doc.paragraphs:
                     full_text.append(para.text)
-                text = "\n".join(full_text)
-                if text.strip():
-                    pages.append({"page_number": 1, "text": text})
+                raw_text = "\n".join(full_text)
+                clean_text = self._sanitize_unicode(raw_text)
+                if clean_text.strip():
+                    pages.append({"page_number": 1, "text": clean_text})
             elif ext == ".pptx":
                 prs = pptx.Presentation(file_path)
                 for slide_idx, slide in enumerate(prs.slides):
@@ -65,9 +86,10 @@ class RAGService:
                     for shape in slide.shapes:
                         if hasattr(shape, "text") and shape.text.strip():
                             slide_text.append(shape.text)
-                    text = "\n".join(slide_text)
-                    if text.strip():
-                        pages.append({"page_number": slide_idx + 1, "text": text})
+                    raw_text = "\n".join(slide_text)
+                    clean_text = self._sanitize_unicode(raw_text)
+                    if clean_text.strip():
+                        pages.append({"page_number": slide_idx + 1, "text": clean_text})
             elif ext in [".png", ".jpg", ".jpeg", ".webp"]:
                 # Use Gemini Vision model directly for OCR to bypass tesseract binary limits!
                 if self.enabled:
@@ -83,15 +105,17 @@ class RAGService:
                         image_part, 
                         "Extract all readable text, titles, numbers, diagrams description, and facts from this image exactly."
                     ])
-                    text = response.text
+                    raw_text = response.text
                 else:
-                    text = f"[Mock OCR Text for {filename}]"
-                pages.append({"page_number": 1, "text": text})
+                    raw_text = f"[Mock OCR Text for {filename}]"
+                clean_text = self._sanitize_unicode(raw_text)
+                pages.append({"page_number": 1, "text": clean_text})
             elif ext in [".txt", ".csv", ".md"]:
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as txt_file:
-                    text = txt_file.read()
-                if text.strip():
-                    pages.append({"page_number": 1, "text": text})
+                    raw_text = txt_file.read()
+                clean_text = self._sanitize_unicode(raw_text)
+                if clean_text.strip():
+                    pages.append({"page_number": 1, "text": clean_text})
         except Exception as e:
             raise ValueError(f"Error parsing file {filename}: {str(e)}")
 
@@ -105,7 +129,7 @@ class RAGService:
         chunk_idx = 0
         
         for p in pages:
-            text = p["text"]
+            text = self._sanitize_unicode(p["text"])
             page_num = p["page_number"]
             
             # Simple word-based chunker
@@ -118,7 +142,7 @@ class RAGService:
                 chunks.append({
                     "chunk_index": chunk_idx,
                     "page_number": page_num,
-                    "content": chunk_text
+                    "content": self._sanitize_unicode(chunk_text)
                 })
                 
                 chunk_idx += 1
@@ -131,11 +155,12 @@ class RAGService:
         Computes text embedding vector using Google Gemini model models/text-embedding-004.
         Falls back to a hashed float array if AI is not enabled.
         """
+        sanitized_text = self._sanitize_unicode(text)
         if self.enabled:
             try:
                 result = genai.embed_content(
                     model="models/text-embedding-004",
-                    content=text,
+                    content=sanitized_text,
                     task_type="retrieval_document"
                 )
                 return result["embedding"]
@@ -143,7 +168,7 @@ class RAGService:
                 pass
                 
         # Simple deterministic fallback vector of dimension 768
-        h = hashlib.sha256(text.encode("utf-8")).digest()
+        h = hashlib.sha256(sanitized_text.encode("utf-8")).digest()
         vector = []
         for index in range(768):
             val = h[index % len(h)] / 255.0
@@ -156,13 +181,14 @@ class RAGService:
         Stores subject_id for strict subject-level vector search scoping.
         """
         for c in chunks:
-            vector = self.compute_embedding(c["content"])
+            clean_content = self._sanitize_unicode(c["content"])
+            vector = self.compute_embedding(clean_content)
             self.vectors.append({
                 "chunk_id": f"{doc_id}_{c['chunk_index']}",
                 "document_id": doc_id,
                 "subject_id": subject_id,
-                "doc_title": doc_title,
-                "content": c["content"],
+                "doc_title": self._sanitize_unicode(doc_title),
+                "content": clean_content,
                 "page_number": c["page_number"],
                 "embedding": vector
             })

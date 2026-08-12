@@ -63,10 +63,22 @@ def generate_exam_from_kb(
             "content": f"Core concepts and topics regarding {req.topic or 'General Course Study'} in subject {req.subject_id or 'General'}. Fundamental principles, definitions, key components, processes, and practical applications."
         }]
     
-    # 2. Determine questions count & types
-    total_count = (req.num_mcq or 5) + (req.num_subjective or 0)
-    q_type = req.question_type or "mcq"
-    if q_type == "mixed":
+    # 2. Determine questions count & types strictly based on question_type
+    q_type_req = str(req.question_type or "mcq").lower()
+    
+    if q_type_req in ["mcq", "tf", "true_false"]:
+        total_count = int(req.num_mcq) if (req.num_mcq and int(req.num_mcq) > 0) else 5
+        q_type = "mcq" if q_type_req == "mcq" else "true_false"
+    elif q_type_req == "subjective":
+        total_count = int(req.num_subjective) if (req.num_subjective and int(req.num_subjective) > 0) else 5
+        q_type = "short_answer"
+    elif q_type_req == "mixed":
+        mcq_c = int(req.num_mcq) if (req.num_mcq and int(req.num_mcq) > 0) else 3
+        sub_c = int(req.num_subjective) if (req.num_subjective and int(req.num_subjective) > 0) else 2
+        total_count = mcq_c + sub_c
+        q_type = "mcq"
+    else:
+        total_count = int(req.num_mcq) if (req.num_mcq and int(req.num_mcq) > 0) else 5
         q_type = "mcq"
         
     try:
@@ -115,28 +127,30 @@ def generate_exam_from_kb(
                 "marks": round((req.total_marks or 50) / max(total_count, 1), 2),
                 "estimated_time_seconds": 60,
                 "topic": topic_title
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "question_text": f"Explain the key architectural components involved in {topic_title}.",
-                "question_type": "subjective",
-                "options": None,
-                "correct_answer": "Key components include input processing, core algorithmic execution, and output validation.",
-                "explanation": "Subjective response evaluated against key concepts: input, processing, output validation.",
-                "marks": round((req.total_marks or 50) / max(total_count, 1), 2),
-                "estimated_time_seconds": 120,
-                "topic": topic_title
             }
         ]
 
+    # Strictly limit to exact requested count
+    raw_questions = raw_questions[:total_count]
+
     # Format questions list
     compiled = []
-    marks_per_q = round((req.total_marks or 50.0) / len(raw_questions), 2) if raw_questions else 10.0
+    marks_per_q = round((req.total_marks or 50.0) / max(len(raw_questions), 1), 2)
     for idx, q in enumerate(raw_questions, start=1):
+        q_type_str = str(q.get("question_type") or "mcq").lower()
+        if "mcq" in q_type_str or "choice" in q_type_str:
+            norm_type = "mcq"
+        elif "true" in q_type_str or "false" in q_type_str or "tf" in q_type_str:
+            norm_type = "true_false"
+        elif "subjective" in q_type_str or "short" in q_type_str or "long" in q_type_str:
+            norm_type = "subjective"
+        else:
+            norm_type = "mcq" if q.get("options") else "subjective"
+
         compiled.append({
             "id": q.get("id") or str(uuid.uuid4()),
             "question_text": q.get("question_text") or f"Question {idx} on {req.topic}",
-            "question_type": q.get("question_type") or "mcq",
+            "question_type": norm_type,
             "options": q.get("options"),
             "correct_answer": q.get("correct_answer") or "Option A",
             "explanation": q.get("explanation") or "Standard concept explanation.",
@@ -542,16 +556,54 @@ def export_credentials_csv(
         headers={"Content-Disposition": f"attachment; filename=credentials_{exam_id}.csv"}
     )
 
+@router.post("/{exam_id}/end-early")
+def end_exam_early(
+    exam_id: str,
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """
+    Immediately ends an assessment early by setting its end_time to now.
+    Prevents new student logins and closes active exam sessions.
+    """
+    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+        
+    exam.end_time = datetime.utcnow()
+    
+    # Auto-expire credentials
+    db.query(ExamCredential).filter(
+        ExamCredential.exam_id == exam_id
+    ).update({"expires_at": datetime.utcnow()}, synchronize_session=False)
+    
+    db.commit()
+    db.refresh(exam)
+    return {
+        "message": f"Assessment '{exam.name}' has been ended early.",
+        "exam_id": exam.id,
+        "end_time": exam.end_time.isoformat()
+    }
+
 @router.delete("/{exam_id}")
 def delete_exam(
     exam_id: str,
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
-    """Soft deletes an exam."""
+    """Deletes an exam (published or draft) and cleanly cascades associated test records."""
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
+        
+    # Cascade delete logs, submissions, and credentials
+    submissions = db.query(ExamSubmission).filter(ExamSubmission.exam_id == exam_id).all()
+    for s in submissions:
+        db.query(ProctoringLog).filter(ProctoringLog.submission_id == s.id).delete(synchronize_session=False)
+        
+    db.query(ExamSubmission).filter(ExamSubmission.exam_id == exam_id).delete(synchronize_session=False)
+    db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).delete(synchronize_session=False)
+    
     exam.is_deleted = True
     db.commit()
     return {"message": "Exam deleted successfully"}

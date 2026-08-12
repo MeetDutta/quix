@@ -63,9 +63,11 @@ def upload_document(
         chunks = rag_service.chunk_text(pages)
         
         # 3. Create document record
+        clean_title = rag_service._sanitize_unicode(os.path.splitext(file.filename)[0])
+        clean_filename = rag_service._sanitize_unicode(file.filename)
         doc = Document(
-            title=os.path.splitext(file.filename)[0],
-            filename=file.filename,
+            title=clean_title or "Uploaded Document",
+            filename=clean_filename,
             file_path=file_path,
             file_hash=file_hash,
             uploader_id=current_user.id,
