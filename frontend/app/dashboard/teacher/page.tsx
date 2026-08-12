@@ -410,7 +410,11 @@ export default function TeacherDashboard() {
   const handleDeleteExam = async (examId: string) => {
     try {
       const res = await apiFetch(`/exams/${examId}`, { token, method: "DELETE" });
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {}
+      
       if (res.ok) {
         showToast("Assessment deleted successfully.", "success");
         setDeleteConfirmId(null);
@@ -419,10 +423,10 @@ export default function TeacherDashboard() {
           setPreviewExam(null);
         }
       } else {
-        showToast(data.detail || "Failed to delete exam", "error");
+        showToast(data.detail || `Failed to delete exam (${res.status})`, "error");
       }
-    } catch {
-      showToast("Network error deleting exam", "error");
+    } catch (err: any) {
+      showToast(`Delete request failed: ${err?.message || "Network error"}`, "error");
     }
   };
 

@@ -13,7 +13,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import User, Student
 from app.models.document import Document
-from app.models.exam import Exam, ExamCredential, ExamSubmission
+from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog
 from app.models.question import Question
 from app.models.institution import Subject, Institution, Department, Course
 from app.schemas.exam import ExamCreate, ExamResponse, CredentialResponse, ExamGenerateKBRequest
@@ -596,17 +596,21 @@ def delete_exam(
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
         
-    # Cascade delete logs, submissions, and credentials
-    submissions = db.query(ExamSubmission).filter(ExamSubmission.exam_id == exam_id).all()
-    for s in submissions:
-        db.query(ProctoringLog).filter(ProctoringLog.submission_id == s.id).delete(synchronize_session=False)
+    try:
+        # Cascade delete logs, submissions, and credentials
+        submissions = db.query(ExamSubmission).filter(ExamSubmission.exam_id == exam_id).all()
+        for s in submissions:
+            db.query(ProctoringLog).filter(ProctoringLog.submission_id == s.id).delete(synchronize_session=False)
+            
+        db.query(ExamSubmission).filter(ExamSubmission.exam_id == exam_id).delete(synchronize_session=False)
+        db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).delete(synchronize_session=False)
         
-    db.query(ExamSubmission).filter(ExamSubmission.exam_id == exam_id).delete(synchronize_session=False)
-    db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).delete(synchronize_session=False)
-    
-    exam.is_deleted = True
-    db.commit()
-    return {"message": "Exam deleted successfully"}
+        exam.is_deleted = True
+        db.commit()
+        return {"message": "Exam deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete exam: {str(e)}")
 
 from fastapi.responses import HTMLResponse
 
