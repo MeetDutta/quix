@@ -17,9 +17,9 @@ import io
 import csv
 from fastapi.responses import StreamingResponse
 
-@router.get("/{exam_id}")
 @router.get("/exam-analytics/{exam_id}")
 @router.get("/exam-summary/{exam_id}")
+@router.get("/exam/{exam_id}")
 def get_exam_analytics(
     exam_id: str,
     current_user: User = Depends(get_current_user),
@@ -559,4 +559,12 @@ def export_printable_submission_response(
     </html>
     """
     return HTMLResponse(content=html)
+    
+@router.get("/{exam_id}")
+def get_exam_analytics_alias(
+    exam_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return get_exam_analytics(exam_id=exam_id, current_user=current_user, db=db)
 
