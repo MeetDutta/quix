@@ -1,13 +1,16 @@
 import uuid
+import json
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
 from app.models.user import User, Student
+from app.models.exam import Exam, ExamCredential, ExamSubmission
 from app.models.institution import Department, Institution
 from app.schemas.student import StudentCreate, StudentResponse, InstitutionResponse
-from app.utils.security import get_password_hash, RoleChecker
+from app.utils.security import get_password_hash, RoleChecker, get_current_user
 from app.services.email_service import email_service
 
 router = APIRouter(prefix="/students", tags=["students"])
@@ -295,3 +298,82 @@ def delete_student(
     student.user.delete()
     db.commit()
     return {"message": "Student successfully deleted."}
+
+@router.get("/assigned-exams")
+def get_student_assigned_exams(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns all active, scheduled, and completed assessments for the student portal,
+    along with student-specific session passcodes, start times, and test room URLs.
+    """
+    now = datetime.utcnow()
+    
+    # Fetch all published exams
+    exams = db.query(Exam).filter(
+        Exam.is_published == True,
+        Exam.is_deleted == False
+    ).order_by(Exam.start_time.desc()).all()
+    
+    student = db.query(Student).filter(
+        (Student.user_id == current_user.id) |
+        (Student.user.has(User.email == current_user.email))
+    ).first()
+    
+    results = []
+    for exam in exams:
+        cred = None
+        if student:
+            cred = db.query(ExamCredential).filter(
+                ExamCredential.exam_id == exam.id,
+                ExamCredential.student_id == student.id
+            ).first()
+            
+        submission = None
+        if cred:
+            submission = db.query(ExamSubmission).filter(
+                ExamSubmission.exam_id == exam.id,
+                ExamSubmission.credential_id == cred.id
+            ).first()
+        elif student:
+            submission = db.query(ExamSubmission).join(ExamCredential).filter(
+                ExamSubmission.exam_id == exam.id,
+                ExamCredential.student_id == student.id
+            ).first()
+            
+        if exam.end_time < now:
+            sched_status = "ended"
+        elif exam.start_time > now:
+            sched_status = "upcoming"
+        else:
+            sched_status = "active"
+            
+        try:
+            questions_count = len(json.loads(exam.questions_json)) if exam.questions_json else 0
+        except Exception:
+            questions_count = 0
+            
+        results.append({
+            "exam_id": exam.id,
+            "name": exam.name,
+            "exam_code": exam.exam_code,
+            "duration_minutes": exam.duration_minutes,
+            "total_marks": exam.total_marks,
+            "passing_marks": exam.passing_marks,
+            "start_time": exam.start_time.isoformat(),
+            "end_time": exam.end_time.isoformat(),
+            "status": sched_status,
+            "questions_count": questions_count,
+            "has_submitted": submission is not None and submission.status in ["submitted", "auto_submitted"],
+            "submission_score": submission.score if submission else None,
+            "submission_percentage": submission.percentage if submission else None,
+            "submission_id": submission.id if submission else None,
+            "credentials": {
+                "username": cred.username,
+                "password": cred.password,
+                "expires_at": cred.expires_at.isoformat()
+            } if cred else None
+        })
+        
+    return results
