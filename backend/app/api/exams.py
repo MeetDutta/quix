@@ -16,7 +16,10 @@ from app.models.document import Document
 from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog
 from app.models.question import Question
 from app.models.institution import Subject, Institution, Department, Course
-from app.schemas.exam import ExamCreate, ExamResponse, CredentialResponse, ExamGenerateKBRequest
+from app.schemas.exam import (
+    ExamCreate, ExamResponse, CredentialResponse, ExamGenerateKBRequest,
+    UpdateQuestionsRequest, RegenerateQuestionRequest
+)
 from app.utils.security import RoleChecker, get_current_user
 from app.services.rag_service import RAGService
 from app.services.ai_service import AIService
@@ -611,6 +614,138 @@ def delete_exam(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete exam: {str(e)}")
+
+@router.put("/{exam_id}/questions")
+def update_exam_questions(
+    exam_id: str,
+    req: UpdateQuestionsRequest,
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """
+    Saves edited question paper items (question stems, options, answers, marks, solutions).
+    Recalculates marks and validates paper consistency.
+    """
+    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+        
+    cleaned_questions = []
+    for idx, q in enumerate(req.questions, start=1):
+        q_type_str = str(q.get("question_type") or "mcq").lower()
+        if "mcq" in q_type_str or "choice" in q_type_str:
+            norm_type = "mcq"
+        elif "true" in q_type_str or "false" in q_type_str or "tf" in q_type_str:
+            norm_type = "true_false"
+        elif "subjective" in q_type_str or "short" in q_type_str or "long" in q_type_str:
+            norm_type = "subjective"
+        else:
+            norm_type = "mcq" if q.get("options") else "subjective"
+            
+        cleaned_questions.append({
+            "id": q.get("id") or str(uuid.uuid4()),
+            "question_text": q.get("question_text") or f"Question {idx}",
+            "question_type": norm_type,
+            "options": q.get("options"),
+            "correct_answer": q.get("correct_answer") or (q.get("options")[0] if q.get("options") else "Answer"),
+            "explanation": q.get("explanation") or "Teacher validated solution rationale.",
+            "marks": float(q.get("marks", 1.0)),
+            "estimated_time_seconds": int(q.get("estimated_time_seconds", 60)),
+            "topic": q.get("topic") or "General"
+        })
+        
+    exam.questions_json = json.dumps(cleaned_questions)
+    # Automatically sync total marks sum if custom marks are provided
+    if cleaned_questions:
+        calc_total = sum(float(q.get("marks", 1.0)) for q in cleaned_questions)
+        if calc_total > 0:
+            exam.total_marks = calc_total
+            
+    db.commit()
+    db.refresh(exam)
+    return {
+        "message": "Questions updated successfully.",
+        "exam_id": exam.id,
+        "questions_count": len(cleaned_questions),
+        "total_marks": exam.total_marks,
+        "questions_json": exam.questions_json
+    }
+
+@router.post("/{exam_id}/regenerate-question")
+def regenerate_single_question(
+    exam_id: str,
+    req: RegenerateQuestionRequest,
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """
+    Regenerates a single specific question in the assessment paper using AI & Knowledge Base context.
+    """
+    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+        
+    # Query context chunks from knowledge base for this subject
+    chunks = rag_service.search_similarity(
+        query=req.topic or req.custom_instruction or "Core domain concepts",
+        limit=5,
+        subject_id=exam.subject_id
+    )
+    
+    if not chunks:
+        chunks = [{
+            "chunk_id": "reroll_fallback",
+            "doc_title": f"Subject Material ({exam.subject_id})",
+            "content": f"Core concepts and topics regarding {req.topic or 'General Course Study'}. Key principles and mechanisms."
+        }]
+        
+    q_type = req.question_type or "mcq"
+    diff = req.difficulty or "medium"
+    topic = req.topic or (req.custom_instruction if req.custom_instruction else "General")
+    
+    new_questions = ai_service.generate_questions(
+        context_chunks=chunks,
+        question_type=q_type,
+        difficulty=diff,
+        count=1,
+        topic=topic
+    )
+    
+    if not new_questions or len(new_questions) == 0:
+        raise HTTPException(status_code=500, detail="AI service was unable to generate a replacement question. Please try again.")
+        
+    new_q = new_questions[0]
+    
+    # Existing questions list
+    existing = json.loads(exam.questions_json) if exam.questions_json else []
+    target_idx = req.question_index
+    
+    formatted_new_q = {
+        "id": str(uuid.uuid4()),
+        "question_text": new_q.get("question_text") or new_q.get("question", "Regenerated Assessment Question"),
+        "question_type": str(new_q.get("question_type") or q_type).lower(),
+        "options": new_q.get("options"),
+        "correct_answer": new_q.get("correct_answer") or "Option A",
+        "explanation": new_q.get("explanation") or new_q.get("citation_text") or "Grounded academic solution.",
+        "marks": existing[target_idx].get("marks", 5.0) if 0 <= target_idx < len(existing) else 5.0,
+        "estimated_time_seconds": 60,
+        "topic": topic
+    }
+    
+    if 0 <= target_idx < len(existing):
+        existing[target_idx] = formatted_new_q
+    else:
+        existing.append(formatted_new_q)
+        
+    exam.questions_json = json.dumps(existing)
+    db.commit()
+    db.refresh(exam)
+    
+    return {
+        "message": f"Question #{target_idx + 1} regenerated successfully.",
+        "question": formatted_new_q,
+        "questions_json": exam.questions_json
+    }
 
 from fastapi.responses import HTMLResponse
 

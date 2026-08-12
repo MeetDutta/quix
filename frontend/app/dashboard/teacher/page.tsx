@@ -8,8 +8,10 @@ import {
   Upload, Plus, FileSpreadsheet, BookOpen, Cpu, Calendar, Lock, ChevronRight, 
   Clipboard, Check, Download, Users, LineChart, Eye, Trash2, AlertCircle,
   Sparkles, Key, Trophy, Share2, FileText, Printer, Copy, BarChart3, 
-  GraduationCap, FolderOpen, Clock, QrCode, X, ArrowRight, ArrowLeft, Pencil, Mail, CheckCircle, StopCircle
+  GraduationCap, FolderOpen, Clock, QrCode, X, ArrowRight, ArrowLeft, Pencil, Mail, CheckCircle, StopCircle,
+  RefreshCw, Save, ShieldAlert, Radio, Edit3
 } from "lucide-react";
+import MathText from "../../../components/MathText";
 
 export default function TeacherDashboard() {
   const { token, fullName } = useAuthStore();
@@ -48,6 +50,14 @@ export default function TeacherDashboard() {
   const [credsModalData, setCredsModalData] = useState<{ examName: string; examId: string; creds: any[] } | null>(null);
   const [kbSubjects, setKbSubjects] = useState<any[]>([]);
   const [previewExam, setPreviewExam] = useState<any | null>(null);
+  const [isEditingPaper, setIsEditingPaper] = useState(false);
+  const [editedQuestions, setEditedQuestions] = useState<any[]>([]);
+  const [rerollingIdx, setRerollingIdx] = useState<number | null>(null);
+  const [isSavingPaper, setIsSavingPaper] = useState(false);
+
+  // Live Proctoring Command Center
+  const [liveProctorExam, setLiveProctorExam] = useState<any | null>(null);
+  const [liveProctorAlerts, setLiveProctorAlerts] = useState<any[]>([]);
   const [selectedReportExamId, setSelectedReportExamId] = useState<string | null>(null);
   const [reportAnalytics, setReportAnalytics] = useState<any | null>(null);
   const [loadingReport, setLoadingReport] = useState(false);
@@ -430,6 +440,130 @@ export default function TeacherDashboard() {
     }
   };
 
+  // Sync edited questions when previewExam opens
+  useEffect(() => {
+    if (previewExam) {
+      try {
+        const qList = typeof previewExam.questions_json === "string" 
+          ? JSON.parse(previewExam.questions_json) 
+          : (previewExam.questions_json || []);
+        setEditedQuestions(qList);
+      } catch {
+        setEditedQuestions([]);
+      }
+      setIsEditingPaper(false);
+    } else {
+      setEditedQuestions([]);
+    }
+  }, [previewExam]);
+
+  // Live WebSocket Proctoring Stream
+  useEffect(() => {
+    if (!liveProctorExam) return;
+    const wsUrl = `ws://localhost:8000/api/v1/attempts/ws/teacher/${liveProctorExam.id}`;
+    let socket: WebSocket | null = null;
+    try {
+      socket = new WebSocket(wsUrl);
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setLiveProctorAlerts((prev) => [data, ...prev.slice(0, 49)]);
+        } catch {}
+      };
+    } catch {}
+
+    return () => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+    };
+  }, [liveProctorExam]);
+
+  const handleSaveQuestions = async () => {
+    if (!previewExam) return;
+    setIsSavingPaper(true);
+    try {
+      const res = await apiFetch(`/exams/${previewExam.id}/questions`, {
+        token,
+        method: "PUT",
+        body: JSON.stringify({ questions: editedQuestions })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast("Assessment questions saved successfully!", "success");
+        setPreviewExam({ ...previewExam, questions_json: data.questions_json, total_marks: data.total_marks });
+        fetchExams();
+        setIsEditingPaper(false);
+      } else {
+        showToast(data.detail || "Failed to save questions", "error");
+      }
+    } catch {
+      showToast("Network error saving questions", "error");
+    } finally {
+      setIsSavingPaper(false);
+    }
+  };
+
+  const handleRerollQuestion = async (index: number) => {
+    if (!previewExam) return;
+    setRerollingIdx(index);
+    try {
+      const currentQ = editedQuestions[index];
+      const res = await apiFetch(`/exams/${previewExam.id}/regenerate-question`, {
+        token,
+        method: "POST",
+        body: JSON.stringify({
+          question_index: index,
+          topic: currentQ?.topic || previewExam.name,
+          question_type: currentQ?.question_type || "mcq",
+          difficulty: "medium"
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`Question #${index + 1} regenerated with AI!`, "success");
+        const updated = [...editedQuestions];
+        updated[index] = data.question;
+        setEditedQuestions(updated);
+        setPreviewExam({ ...previewExam, questions_json: data.questions_json });
+        fetchExams();
+      } else {
+        showToast(data.detail || "AI Re-roll failed", "error");
+      }
+    } catch {
+      showToast("Network error re-rolling question", "error");
+    } finally {
+      setRerollingIdx(null);
+    }
+  };
+
+  const handleAddCustomQuestion = () => {
+    const newQ = {
+      id: "custom_" + Date.now(),
+      question_text: "New custom examination question stem...",
+      question_type: "mcq",
+      options: ["Option A", "Option B", "Option C", "Option D"],
+      correct_answer: "Option A",
+      explanation: "Teacher provided solution rationale.",
+      marks: 5,
+      estimated_time_seconds: 60,
+      topic: "General"
+    };
+    setEditedQuestions([...editedQuestions, newQ]);
+    setIsEditingPaper(true);
+    showToast("Added custom question card. Click 'Save Paper Changes' when done.", "info");
+  };
+
+  const handleDeleteSingleQuestion = (index: number) => {
+    if (editedQuestions.length <= 1) {
+      showToast("An exam paper must contain at least 1 question.", "error");
+      return;
+    }
+    const updated = editedQuestions.filter((_, i) => i !== index);
+    setEditedQuestions(updated);
+    showToast(`Question #${index + 1} removed. Click 'Save Paper Changes' to apply.`, "info");
+  };
+
 
 
   const handleImportCSV = async (e: React.FormEvent) => {
@@ -736,12 +870,25 @@ export default function TeacherDashboard() {
                         </td>
                         <td className="py-3.5 px-4 text-right relative">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Live Anti-Cheat Monitoring Room */}
+                            {exam.is_published && (
+                              <button
+                                type="button"
+                                onClick={() => { setLiveProctorExam(exam); setLiveProctorAlerts([]); }}
+                                className="p-1.5 rounded border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-all flex items-center gap-1 text-[10px] font-semibold"
+                                title="Open Live Anti-Cheat Proctor Room"
+                              >
+                                <Radio className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 animate-pulse" />
+                                <span className="hidden sm:inline">Proctor</span>
+                              </button>
+                            )}
+
                             {/* Preview Question Paper Modal Button */}
                             <button
                               type="button"
                               onClick={() => setPreviewExam(exam)}
                               className="p-1.5 rounded border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#C84B18] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] transition-all"
-                              title="Preview Generated Exam Paper"
+                              title="Interactive Question Studio & Preview"
                             >
                               <Eye className="h-3.5 w-3.5" />
                             </button>
@@ -1864,17 +2011,18 @@ export default function TeacherDashboard() {
         </div>
       )}
 
-      {/* ═══════ GENERATED EXAM PREVIEW WINDOW / MODAL ═══════ */}
+      {/* ═══════ INTERACTIVE AI QUESTION STUDIO & EXAM PAPER EDITOR ═══════ */}
       {previewExam && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl max-w-3xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] flex flex-col">
+          <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl max-w-4xl w-full p-6 shadow-2xl space-y-5 max-h-[92vh] flex flex-col">
             
             {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-4 shrink-0">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20">
-                    Exam Paper Preview
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20 flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    <span>AI Question Studio</span>
                   </span>
                   {previewExam.is_published ? (
                     <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200">
@@ -1883,6 +2031,11 @@ export default function TeacherDashboard() {
                   ) : (
                     <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200">
                       Draft (Unpublished)
+                    </span>
+                  )}
+                  {isEditingPaper && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 animate-pulse">
+                      Edit Mode Active
                     </span>
                   )}
                 </div>
@@ -1898,110 +2051,214 @@ export default function TeacherDashboard() {
                 </div>
               </div>
 
-              <button
-                onClick={() => setPreviewExam(null)}
-                className="p-1.5 rounded-md text-[#716D67] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] transition-all"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingPaper(!isEditingPaper)}
+                  className={`px-3 py-1.5 rounded-md border text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    isEditingPaper
+                      ? "bg-blue-600 text-white border-blue-700 shadow-xs"
+                      : "border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] hover:bg-[#E5E0D8]/40"
+                  }`}
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                  <span>{isEditingPaper ? "Viewing Paper" : "Edit Paper"}</span>
+                </button>
+                <button
+                  onClick={() => setPreviewExam(null)}
+                  className="p-1.5 rounded-md text-[#716D67] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] transition-all"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             {/* Questions Scrollable Body */}
             <div className="overflow-y-auto flex-1 space-y-4 pr-1">
-              {(() => {
-                let parsedQuestions: any[] = [];
-                try {
-                  parsedQuestions = typeof previewExam.questions_json === "string" 
-                    ? JSON.parse(previewExam.questions_json) 
-                    : (previewExam.questions_json || []);
-                } catch {
-                  parsedQuestions = [];
-                }
+              <div className="flex items-center justify-between text-xs font-semibold text-[#716D67] dark:text-[#A8A29E]">
+                <span>{editedQuestions.length} Examination Questions</span>
+                <div className="flex items-center gap-3">
+                  <span>Total: {editedQuestions.reduce((acc, q) => acc + (parseFloat(q.marks) || 0), 0)} Marks</span>
+                  <button
+                    type="button"
+                    onClick={handleAddCustomQuestion}
+                    className="text-[#C84B18] dark:text-[#EA580C] hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Add Custom Question</span>
+                  </button>
+                </div>
+              </div>
 
-                if (parsedQuestions.length === 0) {
+              {editedQuestions.length === 0 ? (
+                <div className="py-12 text-center text-xs text-[#716D67] dark:text-[#A8A29E]">
+                  No questions in this paper. Click "+ Add Custom Question" to create one.
+                </div>
+              ) : (
+                editedQuestions.map((q: any, idx: number) => {
+                  const isMcq = q.question_type === "mcq" || q.type === "mcq" || (q.options && q.options.length > 0);
+                  const isRerolling = rerollingIdx === idx;
+
                   return (
-                    <div className="py-12 text-center text-xs text-[#716D67] dark:text-[#A8A29E]">
-                      No questions found in this assessment paper.
-                    </div>
-                  );
-                }
+                    <div
+                      key={q.id || idx}
+                      className="bg-[#F0ECE4]/40 dark:bg-[#1D1B19]/50 border border-[#E5E0D8] dark:border-[#292524] rounded-lg p-4 space-y-3 relative group transition-all"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="h-6 w-6 rounded-md bg-[#C84B18] dark:bg-[#EA580C] text-white font-bold text-xs flex items-center justify-center shrink-0">
+                            {idx + 1}
+                          </span>
+                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-[#E5E0D8]/60 dark:bg-[#292524] text-[#716D67] dark:text-[#A8A29E]">
+                            {isMcq ? "Multiple Choice" : "Subjective"}
+                          </span>
+                        </div>
 
-                return (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between text-xs font-semibold text-[#716D67] dark:text-[#A8A29E]">
-                      <span>{parsedQuestions.length} Questions Generated</span>
-                      <span>Total Marks: {previewExam.total_marks}</span>
-                    </div>
+                        <div className="flex items-center gap-2">
+                          {/* AI Single-Question Re-Roll Button */}
+                          <button
+                            type="button"
+                            disabled={isRerolling}
+                            onClick={() => handleRerollQuestion(idx)}
+                            className="px-2.5 py-1 rounded bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[11px] font-semibold text-[#716D67] hover:text-[#C84B18] hover:border-[#C84B18] transition-all flex items-center gap-1 disabled:opacity-50"
+                            title="Regenerate only this question with AI"
+                          >
+                            <RefreshCw className={`h-3 w-3 ${isRerolling ? "animate-spin text-[#C84B18]" : ""}`} />
+                            <span>{isRerolling ? "Re-rolling..." : "AI Re-Roll"}</span>
+                          </button>
 
-                    {parsedQuestions.map((q: any, idx: number) => {
-                      const isMcq = q.question_type === "mcq" || q.type === "mcq" || (q.options && q.options.length > 0);
-                      return (
-                        <div
-                          key={idx}
-                          className="bg-[#F0ECE4]/40 dark:bg-[#1D1B19]/50 border border-[#E5E0D8] dark:border-[#292524] rounded-lg p-4 space-y-3"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <span className="h-6 w-6 rounded-md bg-[#C84B18] dark:bg-[#EA580C] text-white font-bold text-xs flex items-center justify-center shrink-0">
-                                {idx + 1}
-                              </span>
-                              <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-[#E5E0D8]/60 dark:bg-[#292524] text-[#716D67] dark:text-[#A8A29E]">
-                                {isMcq ? "Multiple Choice" : "Subjective"}
-                              </span>
-                            </div>
-                            <span className="text-xs font-semibold text-[#716D67] dark:text-[#A8A29E]">
-                              {q.marks || 1} Marks
-                            </span>
+                          {/* Delete Question button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSingleQuestion(idx)}
+                            className="p-1 rounded text-[#716D67] hover:text-red-600 transition-colors"
+                            title="Delete this question"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+
+                          <div className="flex items-center gap-1 text-xs text-[#716D67] dark:text-[#A8A29E] font-semibold">
+                            {isEditingPaper ? (
+                              <input
+                                type="number"
+                                value={q.marks || 1}
+                                onChange={(e) => {
+                                  const updated = [...editedQuestions];
+                                  updated[idx].marks = parseFloat(e.target.value) || 1;
+                                  setEditedQuestions(updated);
+                                }}
+                                className="w-12 bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded px-1.5 py-0.5 text-xs text-right"
+                              />
+                            ) : (
+                              <span>{q.marks || 1}</span>
+                            )}
+                            <span>Marks</span>
                           </div>
+                        </div>
+                      </div>
 
-                          {/* Question Text */}
-                          <p className="text-xs font-semibold text-[#242321] dark:text-[#F5F5F4] leading-relaxed">
-                            {q.question_text || q.text || q.question}
-                          </p>
+                      {/* Question Text with KaTeX Math support */}
+                      {isEditingPaper ? (
+                        <textarea
+                          rows={2}
+                          value={q.question_text || q.text || q.question}
+                          onChange={(e) => {
+                            const updated = [...editedQuestions];
+                            updated[idx].question_text = e.target.value;
+                            setEditedQuestions(updated);
+                          }}
+                          className="w-full bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-md p-2 text-xs text-[#242321] dark:text-[#F5F5F4] focus:outline-none focus:border-[#C84B18]"
+                        />
+                      ) : (
+                        <p className="text-xs font-semibold text-[#242321] dark:text-[#F5F5F4] leading-relaxed">
+                          <MathText text={q.question_text || q.text || q.question} />
+                        </p>
+                      )}
 
-                          {/* MCQ Options */}
-                          {isMcq && q.options && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                              {q.options.map((opt: string, optIdx: number) => {
-                                const optLetter = String.fromCharCode(65 + optIdx);
-                                const isCorrect = q.correct_option === optLetter || q.correct_answer === optLetter || q.correct_answer === opt;
-                                return (
-                                  <div
-                                    key={optIdx}
-                                    className={`px-3 py-2 rounded-md border text-xs flex items-center gap-2 transition-all ${
-                                      isCorrect
-                                        ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-semibold"
-                                        : "bg-[#FFFFFF] dark:bg-[#171615] border-[#E5E0D8] dark:border-[#292524] text-[#242321] dark:text-[#F5F5F4]"
-                                    }`}
+                      {/* MCQ Options with KaTeX Math */}
+                      {isMcq && q.options && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          {q.options.map((opt: string, optIdx: number) => {
+                            const optLetter = String.fromCharCode(65 + optIdx);
+                            const isCorrect = q.correct_option === optLetter || q.correct_answer === optLetter || q.correct_answer === opt;
+                            return (
+                              <div
+                                key={optIdx}
+                                className={`px-3 py-2 rounded-md border text-xs flex items-center gap-2 transition-all ${
+                                  isCorrect
+                                    ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-semibold"
+                                    : "bg-[#FFFFFF] dark:bg-[#171615] border-[#E5E0D8] dark:border-[#292524] text-[#242321] dark:text-[#F5F5F4]"
+                                }`}
+                              >
+                                <span className={`w-5 h-5 rounded flex items-center justify-center font-bold text-[10px] shrink-0 ${
+                                  isCorrect
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-[#E5E0D8] dark:bg-[#292524] text-[#716D67] dark:text-[#A8A29E]"
+                                }`}>
+                                  {optLetter}
+                                </span>
+                                {isEditingPaper ? (
+                                  <input
+                                    type="text"
+                                    value={opt}
+                                    onChange={(e) => {
+                                      const updated = [...editedQuestions];
+                                      const newOpts = [...updated[idx].options];
+                                      newOpts[optIdx] = e.target.value;
+                                      updated[idx].options = newOpts;
+                                      if (isCorrect) updated[idx].correct_answer = e.target.value;
+                                      setEditedQuestions(updated);
+                                    }}
+                                    className="flex-1 bg-transparent border-b border-[#E5E0D8] dark:border-[#292524] px-1 py-0.5 text-xs focus:outline-none focus:border-[#C84B18]"
+                                  />
+                                ) : (
+                                  <span className="truncate"><MathText text={opt} /></span>
+                                )}
+                                {isEditingPaper ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = [...editedQuestions];
+                                      updated[idx].correct_answer = opt;
+                                      setEditedQuestions(updated);
+                                    }}
+                                    className={`text-[10px] px-1.5 py-0.5 rounded ml-auto ${isCorrect ? "bg-emerald-600 text-white font-bold" : "bg-neutral-200 dark:bg-neutral-800 text-neutral-600"}`}
                                   >
-                                    <span className={`w-5 h-5 rounded flex items-center justify-center font-bold text-[10px] shrink-0 ${
-                                      isCorrect
-                                        ? "bg-emerald-600 text-white"
-                                        : "bg-[#E5E0D8] dark:bg-[#292524] text-[#716D67] dark:text-[#A8A29E]"
-                                    }`}>
-                                      {optLetter}
-                                    </span>
-                                    <span className="truncate">{opt}</span>
-                                    {isCorrect && <Check className="h-3.5 w-3.5 text-emerald-600 ml-auto shrink-0" />}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
+                                    {isCorrect ? "Correct" : "Set Correct"}
+                                  </button>
+                                ) : (
+                                  isCorrect && <Check className="h-3.5 w-3.5 text-emerald-600 ml-auto shrink-0" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
 
-                          {/* Explanation / Solution */}
-                          {q.explanation && (
-                            <div className="p-2.5 rounded-md bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[11px] text-[#716D67] dark:text-[#A8A29E] space-y-1">
-                              <span className="font-semibold text-[#242321] dark:text-[#F5F5F4]">Solution / Rationale:</span>
-                              <p>{q.explanation}</p>
-                            </div>
+                      {/* Explanation / Solution */}
+                      {q.explanation && (
+                        <div className="p-2.5 rounded-md bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[11px] text-[#716D67] dark:text-[#A8A29E] space-y-1">
+                          <span className="font-semibold text-[#242321] dark:text-[#F5F5F4]">Solution / Rationale:</span>
+                          {isEditingPaper ? (
+                            <input
+                              type="text"
+                              value={q.explanation}
+                              onChange={(e) => {
+                                const updated = [...editedQuestions];
+                                updated[idx].explanation = e.target.value;
+                                setEditedQuestions(updated);
+                              }}
+                              className="w-full bg-transparent border-b border-[#E5E0D8] dark:border-[#292524] p-1 text-xs focus:outline-none focus:border-[#C84B18]"
+                            />
+                          ) : (
+                            <p><MathText text={q.explanation} /></p>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             {/* Modal Footer Actions */}
@@ -2016,6 +2273,18 @@ export default function TeacherDashboard() {
                   <Printer className="h-3.5 w-3.5" />
                   <span>Print Paper PDF</span>
                 </a>
+
+                {isEditingPaper && (
+                  <button
+                    type="button"
+                    disabled={isSavingPaper}
+                    onClick={handleSaveQuestions}
+                    className="px-3.5 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    <span>{isSavingPaper ? "Saving Paper..." : "Save Paper Changes"}</span>
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -2024,7 +2293,7 @@ export default function TeacherDashboard() {
                   onClick={() => setPreviewExam(null)}
                   className="px-4 py-2 rounded-md border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] text-xs font-medium"
                 >
-                  Close Preview
+                  Close Studio
                 </button>
 
                 {previewExam.is_published && (
@@ -2062,6 +2331,94 @@ export default function TeacherDashboard() {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════ LIVE ANTI-CHEAT PROCTORING COMMAND CENTER MODAL ═══════ */}
+      {liveProctorExam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl max-w-4xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] flex flex-col">
+            {/* Proctor Header */}
+            <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-4 shrink-0">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
+                    <span>Live Anti-Cheat Stream</span>
+                  </span>
+                  <span className="text-xs text-[#716D67] font-mono">Exam Code: {liveProctorExam.exam_code}</span>
+                </div>
+                <h2 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">{liveProctorExam.name}</h2>
+              </div>
+              <button
+                onClick={() => setLiveProctorExam(null)}
+                className="p-1.5 rounded-md text-[#716D67] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Proctoring Stream Feed */}
+            <div className="flex-1 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800 rounded-lg p-3">
+                  <div className="text-[10px] uppercase font-bold text-rose-700 dark:text-rose-300">Live Red Flags</div>
+                  <div className="text-xl font-extrabold text-rose-700 dark:text-rose-300 mt-0.5 font-mono">{liveProctorAlerts.length}</div>
+                </div>
+                <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3">
+                  <div className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300">Proctoring Guard</div>
+                  <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 mt-1">Active & Listening</div>
+                </div>
+                <div className="bg-[#F0ECE4]/60 dark:bg-[#1D1B19]/60 border border-[#E5E0D8] dark:border-[#292524] rounded-lg p-3">
+                  <div className="text-[10px] uppercase font-bold text-[#716D67]">Duration</div>
+                  <div className="text-xs font-semibold text-[#242321] dark:text-[#F5F5F4] mt-1">{liveProctorExam.duration_minutes} Minutes</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] uppercase tracking-wider">Real-Time Event Stream</h3>
+                {liveProctorAlerts.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-[#716D67] dark:text-[#A8A29E] bg-[#F0ECE4]/30 dark:bg-[#1D1B19]/30 rounded-lg border border-dashed border-[#E5E0D8] dark:border-[#292524]">
+                    No violations detected. All candidates currently active and within exam focus.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {liveProctorAlerts.map((alert, i) => (
+                      <div key={i} className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg flex items-center justify-between text-xs animate-fadeIn">
+                        <div className="flex items-center gap-2">
+                          <ShieldAlert className="h-4 w-4 text-rose-600 shrink-0" />
+                          <div>
+                            <span className="font-bold text-rose-800 dark:text-rose-300 uppercase">{alert.event_type || "Violation"}: </span>
+                            <span className="text-rose-700 dark:text-rose-400">{alert.details || "Tab focus lost"}</span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-rose-600 font-mono">{new Date().toLocaleTimeString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Proctor Footer */}
+            <div className="pt-3 border-t border-[#E5E0D8] dark:border-[#292524] flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => handleEndExamEarly(liveProctorExam.id, liveProctorExam.name)}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-semibold flex items-center gap-1"
+              >
+                <StopCircle className="h-3.5 w-3.5" />
+                <span>End Assessment Early</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLiveProctorExam(null)}
+                className="px-4 py-1.5 border border-[#E5E0D8] dark:border-[#292524] rounded-md text-xs font-medium"
+              >
+                Close Room
+              </button>
             </div>
           </div>
         </div>

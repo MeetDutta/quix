@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "katex/dist/katex.min.css";
 import Providers from "./providers/Providers";
 
 export const metadata: Metadata = {

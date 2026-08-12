@@ -6,6 +6,7 @@ import { useExamStore } from "../../../store/examStore";
 import { apiFetch } from "../../../lib/api";
 import { useToast } from "../../../components/Toast";
 import { AlertCircle, Lock, Timer, Flag, ChevronLeft, ChevronRight, CheckSquare, ShieldAlert, CheckCircle2, FileText, Clock, CalendarClock } from "lucide-react";
+import MathText from "../../../components/MathText";
 
 type ExamStatus = "loading" | "not_started" | "active" | "ended";
 
@@ -493,7 +494,7 @@ export default function ExamPortal() {
                   Question {currentIndex + 1} of {examStore.questions.length} • {currentQ?.marks || 1} Marks
                 </span>
                 <h2 className="text-lg font-bold text-[#1C1917] mt-1 leading-snug">
-                  {currentQ?.question_text}
+                  <MathText text={currentQ?.question_text || ""} />
                 </h2>
               </div>
 
@@ -528,7 +529,7 @@ export default function ExamPortal() {
                         }`}>
                         {String.fromCharCode(65 + i)}
                       </div>
-                      <span className="text-sm">{opt}</span>
+                      <span className="text-sm"><MathText text={opt} /></span>
                     </button>
                   );
                 })

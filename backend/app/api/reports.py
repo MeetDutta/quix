@@ -17,6 +17,7 @@ import io
 import csv
 from fastapi.responses import StreamingResponse
 
+@router.get("/{exam_id}")
 @router.get("/exam-analytics/{exam_id}")
 @router.get("/exam-summary/{exam_id}")
 def get_exam_analytics(

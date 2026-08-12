@@ -69,9 +69,19 @@ class ExamGenerateKBRequest(BaseModel):
     passing_marks: Optional[float] = 20.0
     negative_marking: Optional[float] = 0.0
     num_mcq: Optional[int] = 5
-    num_subjective: Optional[int] = 1
+    num_subjective: Optional[int] = 0
     question_type: Optional[str] = "mcq"
     difficulty: Optional[str] = "medium"
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
+
+class UpdateQuestionsRequest(BaseModel):
+    questions: List[Dict[str, Any]]
+
+class RegenerateQuestionRequest(BaseModel):
+    question_index: int
+    topic: Optional[str] = None
+    difficulty: Optional[str] = "medium"
+    question_type: Optional[str] = "mcq"
+    custom_instruction: Optional[str] = None
 
