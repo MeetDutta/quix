@@ -67,10 +67,6 @@ export default function GuidePage() {
 
       {/* ═══════ HERO SECTION ═══════ */}
       <section className="max-w-6xl mx-auto px-4 md:px-8 pt-12 pb-8 text-center space-y-4 relative">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-xs font-semibold text-[#C84B18] dark:text-[#EA580C] shadow-2xs">
-          <Sparkles className="h-3.5 w-3.5 text-[#C84B18]" />
-          <span>Interactive Application Guide & Platform Walkthrough</span>
-        </div>
 
         <h1 className="text-3xl md:text-5xl font-black tracking-tight max-w-3xl mx-auto text-[#242321] dark:text-[#F5F5F4] leading-tight">
           How to Use <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#C84B18] via-amber-600 to-[#EA580C]">EduQuizX</span>
