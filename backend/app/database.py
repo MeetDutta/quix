@@ -3,7 +3,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
 
-db_url = settings.DATABASE_URL
+raw_db_url = settings.DATABASE_URL or ""
+db_url = raw_db_url.strip().strip('"').strip("'")
 
 connect_args = {}
 if db_url.startswith("sqlite"):
