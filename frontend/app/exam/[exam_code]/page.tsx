@@ -469,10 +469,10 @@ export default function ExamPortal() {
   return (
     <div className="min-h-screen bg-[#FAF7F2] flex flex-col selection:bg-none select-none">
       {/* ═══════ TOP HEADER & TIMER BAR ═══════ */}
-      <header className="sticky top-0 z-30 bg-white border-b border-[#E7E0D3] px-6 py-3 shadow-xs">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="font-extrabold text-[#1C1917] text-base truncate max-w-xs">{examStore.examName}</div>
+      <header className="sticky top-0 z-30 bg-white border-b border-[#E7E0D3] px-3 sm:px-6 py-2.5 shadow-xs">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="font-extrabold text-[#1C1917] text-sm sm:text-base truncate max-w-[140px] sm:max-w-xs">{examStore.examName}</div>
             <span className="text-xs text-[#78716C] bg-[#F5F0E8] border border-[#E7E0D3] px-2.5 py-1 rounded-full font-mono">
               Q{currentIndex + 1} / {examStore.questions.length}
             </span>

@@ -101,54 +101,54 @@ export default function GuidePage() {
       </section>
 
       {/* ═══════ WORKFLOW STEP TAB SWITCHER ═══════ */}
-      <section className="max-w-6xl mx-auto px-4 md:px-8 py-8 space-y-6">
-        <div className="flex items-center justify-center gap-2 flex-wrap border-b border-[#E5E0D8] dark:border-[#292524] pb-4">
+      <section className="max-w-6xl mx-auto px-4 md:px-8 py-6 sm:py-8 space-y-6">
+        <div className="flex items-center justify-center gap-1.5 sm:gap-2 flex-wrap border-b border-[#E5E0D8] dark:border-[#292524] pb-4">
           <button
             onClick={() => setActiveWorkflow("teacher")}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer ${
               activeWorkflow === "teacher"
                 ? "bg-[#C84B18] text-white dark:bg-[#EA580C] shadow-md"
                 : "bg-white dark:bg-[#171615] text-[#716D67] hover:text-[#242321] border border-[#E5E0D8] dark:border-[#292524]"
             }`}
           >
-            <BookOpen className="h-4 w-4" />
-            <span>1. Quiz Creator Guide</span>
+            <BookOpen className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span>1. Creator Guide</span>
           </button>
 
           <button
             onClick={() => setActiveWorkflow("student")}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer ${
               activeWorkflow === "student"
                 ? "bg-[#C84B18] text-white dark:bg-[#EA580C] shadow-md"
                 : "bg-white dark:bg-[#171615] text-[#716D67] hover:text-[#242321] border border-[#E5E0D8] dark:border-[#292524]"
             }`}
           >
-            <GraduationCap className="h-4 w-4" />
-            <span>2. Student Portal Guide</span>
+            <GraduationCap className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span>2. Student Guide</span>
           </button>
 
           <button
             onClick={() => setActiveWorkflow("proctoring")}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer ${
               activeWorkflow === "proctoring"
                 ? "bg-[#C84B18] text-white dark:bg-[#EA580C] shadow-md"
                 : "bg-white dark:bg-[#171615] text-[#716D67] hover:text-[#242321] border border-[#E5E0D8] dark:border-[#292524]"
             }`}
           >
-            <ShieldCheck className="h-4 w-4" />
-            <span>3. Anti-Cheat Proctoring</span>
+            <ShieldCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span>3. Anti-Cheat</span>
           </button>
 
           <button
             onClick={() => setActiveWorkflow("analytics")}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer ${
               activeWorkflow === "analytics"
                 ? "bg-[#C84B18] text-white dark:bg-[#EA580C] shadow-md"
                 : "bg-white dark:bg-[#171615] text-[#716D67] hover:text-[#242321] border border-[#E5E0D8] dark:border-[#292524]"
             }`}
           >
-            <BarChart3 className="h-4 w-4" />
-            <span>4. Gradebook & Analytics</span>
+            <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span>4. Gradebook</span>
           </button>
         </div>
 
