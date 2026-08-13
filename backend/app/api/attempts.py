@@ -252,8 +252,8 @@ def submit_exam(token: str, db: Session = Depends(get_db)):
     for q in original_questions:
         q_id = q["id"]
         q_type = q["question_type"]
-        correct_ans = q["correct_answer"]
-        marks = float(q.get("marks", 1.0))
+        correct_ans = q.get("correct_answer") or ""
+        marks = float(q.get("marks") or 1.0)
         student_ans = student_responses.get(q_id)
         
         is_correct = False
@@ -269,7 +269,7 @@ def submit_exam(token: str, db: Session = Depends(get_db)):
                     score_awarded = marks
                 else:
                     # Apply negative marking
-                    score_awarded = -float(exam.negative_marking) * marks
+                    score_awarded = -float(exam.negative_marking or 0.0) * marks
             
             # Subjective scoring using AI Service
             elif q_type in ["short_answer", "long_answer", "subjective"]:
@@ -306,7 +306,7 @@ def submit_exam(token: str, db: Session = Depends(get_db)):
             
     # 2. Finalize submission states
     sub.score = max(0.0, total_score) # prevent negative total marks
-    sub.percentage = (sub.score / float(exam.total_marks)) * 100.0 if exam.total_marks > 0 else 0.0
+    sub.percentage = (sub.score / float(exam.total_marks or 1.0)) * 100.0 if exam.total_marks else 0.0
     sub.status = "submitted"
     sub.submitted_at = datetime.utcnow()
     

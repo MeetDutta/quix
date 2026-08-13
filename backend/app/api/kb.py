@@ -123,7 +123,8 @@ def list_documents(
     """Lists all uploaded documents."""
     query = db.query(Document).filter(Document.is_deleted == False)
     if subject_id:
-        query = query.filter(Document.subject_id == subject_id)
+        from sqlalchemy import func
+        query = query.filter(func.lower(Document.subject_id) == func.lower(subject_id.strip()))
     return query.order_by(Document.created_at.desc()).all()
 
 @router.get("/subjects")
@@ -190,7 +191,11 @@ def generate_ai_questions(
     # 1. Retrieve related context chunks based on config topic or subject
     doc_ids = config.document_ids
     if not doc_ids and config.subject_id:
-        docs = db.query(Document).filter(Document.subject_id == config.subject_id, Document.is_deleted == False).all()
+        from sqlalchemy import func
+        docs = db.query(Document).filter(
+            func.lower(Document.subject_id) == func.lower(config.subject_id.strip()),
+            Document.is_deleted == False
+        ).all()
         doc_ids = [d.id for d in docs]
         
     query = config.topic if config.topic else f"Questions about subject"
@@ -255,7 +260,8 @@ def list_questions(
     """Lists questions in the bank matching filters."""
     query = db.query(Question).filter(Question.is_deleted == False)
     if subject_id:
-        query = query.filter(Question.subject_id == subject_id)
+        from sqlalchemy import func
+        query = query.filter(func.lower(Question.subject_id) == func.lower(subject_id.strip()))
     if difficulty:
         query = query.filter(Question.difficulty == difficulty)
     if is_approved is not None:
@@ -361,7 +367,8 @@ def batch_approve_questions(
     if req.question_ids:
         query = query.filter(Question.id.in_(req.question_ids))
     elif req.subject_id:
-        query = query.filter(Question.subject_id == req.subject_id)
+        from sqlalchemy import func
+        query = query.filter(func.lower(Question.subject_id) == func.lower(req.subject_id.strip()))
         
     count = query.update({Question.is_approved: True}, synchronize_session=False)
     db.commit()

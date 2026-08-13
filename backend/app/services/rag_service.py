@@ -252,7 +252,7 @@ class RAGService:
         # Filter vectors if document_ids or subject_id are provided
         target_vectors = self.vectors
         if subject_id:
-            target_vectors = [v for v in target_vectors if v.get("subject_id") == subject_id]
+            target_vectors = [v for v in target_vectors if v.get("subject_id") and str(v.get("subject_id")).strip().lower() == str(subject_id).strip().lower()]
         if document_ids:
             target_vectors = [v for v in target_vectors if v.get("document_id") in document_ids]
             

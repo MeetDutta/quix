@@ -342,7 +342,6 @@ export default function ExamCalculator({ isOpen, onClose }: ExamCalculatorProps)
           </button>
           <button
             onClick={handleEvaluate}
-            rowSpan={2}
             className="row-span-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center text-lg transition-colors shadow-xs"
           >
             =
