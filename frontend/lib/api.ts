@@ -1,5 +1,9 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-export const API_V1 = `${API_BASE}/api/v1`;
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Clean trailing slashes and redundant /api/v1 suffixes
+const baseHost = rawApiUrl.replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "");
+
+export const API_BASE = baseHost;
+export const API_V1 = `${baseHost}/api/v1`;
 
 /**
  * Authenticated fetch wrapper. Automatically injects Bearer token and handles JSON.
@@ -20,7 +24,7 @@ export async function apiFetch(
   }
   
   // Normalize path so /api/v1 is never duplicated
-  const normalizedPath = path.startsWith("/api/v1") ? path.replace(/^\/api\/v1/, "") : path;
+  const normalizedPath = path.replace(/^\/api\/v1/, "");
   const formattedPath = normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`;
   
   return fetch(`${API_V1}${formattedPath}`, { ...rest, headers: h });
