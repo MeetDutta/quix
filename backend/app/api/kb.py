@@ -33,6 +33,9 @@ def upload_document(
     Uploads a learning document, extracts text (PDF, Word, Slides, Image with OCR),
     chunks it, indexes it using Gemini Embeddings, and stores it in the local index.
     """
+    from app.models.institution import get_or_create_subject
+    get_or_create_subject(db, subject_id)
+    
     file_bytes = file.file.read()
     file_hash = hashlib.sha256(file_bytes).hexdigest()
     
@@ -321,7 +324,9 @@ def create_bank_question(
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
-    """Adds a new custom question directly into the Question Bank."""
+    from app.models.institution import get_or_create_subject
+    get_or_create_subject(db, question_in.subject_id)
+    
     q = Question(
         subject_id=question_in.subject_id,
         question_type=question_in.question_type,

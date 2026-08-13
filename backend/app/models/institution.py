@@ -65,3 +65,34 @@ class AcademicYear(TimeStampedModel):
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     is_active = Column(Boolean, default=True)
+
+def get_or_create_subject(db, subject_id: str):
+    if not subject_id:
+        subject_id = "general_101"
+    subj = db.query(Subject).filter(Subject.id == subject_id).first()
+    if subj:
+        return subj
+
+    inst = db.query(Institution).filter(Institution.is_deleted == False).first()
+    if not inst:
+        inst = Institution(id="inst-aegeus-001", name="Aegeus Educational Institute")
+        db.add(inst)
+        db.flush()
+
+    dept = db.query(Department).filter(Department.institution_id == inst.id).first()
+    if not dept:
+        dept = Department(id="dept-cs-001", name="Computer Science", institution_id=inst.id)
+        db.add(dept)
+        db.flush()
+
+    course = db.query(Course).filter(Course.department_id == dept.id).first()
+    if not course:
+        course = Course(id="course-ug-001", name="Undergraduate Program", department_id=dept.id)
+        db.add(course)
+        db.flush()
+
+    subj = Subject(id=subject_id, name=subject_id.replace("_", " ").title(), course_id=course.id)
+    db.add(subj)
+    db.commit()
+    db.refresh(subj)
+    return subj

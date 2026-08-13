@@ -198,20 +198,8 @@ def generate_exam_from_kb(
 
     # Auto-provision subject matching req.subject_id
     subj_id = req.subject_id or "general_101"
-    subj = db.query(Subject).filter(Subject.id == subj_id).first()
-    if not subj:
-        try:
-            course = db.query(Course).first()
-            if course:
-                subj = Subject(
-                    id=subj_id,
-                    name=subj_id.replace("_", " ").title(),
-                    course_id=course.id
-                )
-                db.add(subj)
-                db.flush()
-        except Exception:
-            db.rollback()
+    from app.models.institution import get_or_create_subject
+    get_or_create_subject(db, subj_id)
 
     exam_code = f"ex-{(req.name[:3] if req.name else 'quiz').lower()}-{random.randint(1000, 9999)}"
     now = datetime.utcnow()

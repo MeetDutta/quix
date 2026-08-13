@@ -85,15 +85,16 @@ CREATE TABLE IF NOT EXISTS students (
     is_deleted BOOLEAN DEFAULT FALSE
 );
 
--- 7. KNOWLEDGE SOURCES TABLE
-CREATE TABLE IF NOT EXISTS knowledge_sources (
+-- 7. DOCUMENTS TABLE
+CREATE TABLE IF NOT EXISTS documents (
     id VARCHAR(255) PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
-    subject_code VARCHAR(100) NOT NULL,
+    filename VARCHAR(255) NOT NULL,
     file_path VARCHAR(500) NOT NULL,
-    uploaded_by_id VARCHAR(255) REFERENCES users(id) ON DELETE CASCADE,
-    version INTEGER DEFAULT 1,
-    chunk_count INTEGER DEFAULT 0,
+    file_hash VARCHAR(64) UNIQUE NOT NULL,
+    version INTEGER DEFAULT 1 NOT NULL,
+    uploader_id VARCHAR(255) REFERENCES users(id) ON DELETE CASCADE,
+    subject_id VARCHAR(255) REFERENCES subjects(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     is_deleted BOOLEAN DEFAULT FALSE
@@ -102,9 +103,10 @@ CREATE TABLE IF NOT EXISTS knowledge_sources (
 -- 8. DOCUMENT CHUNKS TABLE
 CREATE TABLE IF NOT EXISTS document_chunks (
     id VARCHAR(255) PRIMARY KEY,
-    source_id VARCHAR(255) REFERENCES knowledge_sources(id) ON DELETE CASCADE,
-    chunk_index INTEGER NOT NULL,
+    document_id VARCHAR(255) REFERENCES documents(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
+    page_number INTEGER,
+    chunk_index INTEGER NOT NULL,
     vector_embedding JSONB,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -117,8 +119,9 @@ CREATE TABLE IF NOT EXISTS exams (
     name VARCHAR(255) NOT NULL,
     subject_id VARCHAR(255) REFERENCES subjects(id) ON DELETE CASCADE,
     duration_minutes INTEGER NOT NULL,
-    total_marks INTEGER NOT NULL,
-    passing_marks INTEGER NOT NULL,
+    total_marks DOUBLE PRECISION NOT NULL,
+    negative_marking DOUBLE PRECISION DEFAULT 0.0,
+    passing_marks DOUBLE PRECISION NOT NULL,
     start_time TIMESTAMP WITHOUT TIME ZONE,
     end_time TIMESTAMP WITHOUT TIME ZONE,
     is_published BOOLEAN DEFAULT FALSE,
@@ -196,6 +199,33 @@ CREATE TABLE IF NOT EXISTS notifications (
     type VARCHAR(50) DEFAULT 'info',
     is_read BOOLEAN DEFAULT FALSE,
     link VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    is_deleted BOOLEAN DEFAULT FALSE
+);
+
+-- 15. QUESTIONS TABLE
+CREATE TABLE IF NOT EXISTS questions (
+    id VARCHAR(255) PRIMARY KEY,
+    subject_id VARCHAR(255) REFERENCES subjects(id) ON DELETE SET NULL,
+    question_type VARCHAR(50) NOT NULL,
+    question_text TEXT NOT NULL,
+    options_json TEXT,
+    correct_answer TEXT NOT NULL,
+    explanation TEXT,
+    difficulty VARCHAR(50) DEFAULT 'medium',
+    bloom_level VARCHAR(100) DEFAULT 'applying',
+    estimated_time_seconds INTEGER DEFAULT 60,
+    topic VARCHAR(255),
+    subtopic VARCHAR(255),
+    citation_chunk_id VARCHAR(255) REFERENCES document_chunks(id) ON DELETE SET NULL,
+    confidence_score VARCHAR(50) DEFAULT '1.0',
+    is_approved BOOLEAN DEFAULT FALSE,
+    is_bank_question BOOLEAN DEFAULT FALSE,
+    tags TEXT,
+    exam_id VARCHAR(255) REFERENCES exams(id) ON DELETE SET NULL,
+    version INTEGER DEFAULT 1,
+    statistics TEXT,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     is_deleted BOOLEAN DEFAULT FALSE

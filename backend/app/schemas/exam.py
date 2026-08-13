@@ -26,13 +26,13 @@ class ExamResponse(BaseModel):
     name: str
     subject_id: str
     duration_minutes: int
-    total_marks: int
-    negative_marking: float
-    passing_marks: int
-    start_time: datetime
-    end_time: datetime
+    total_marks: float
+    negative_marking: Optional[float] = 0.0
+    passing_marks: float
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
     exam_code: str
-    is_published: bool
+    is_published: Optional[bool] = False
     questions_json: Optional[str] = None
 
     class Config:
