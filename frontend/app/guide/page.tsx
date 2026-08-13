@@ -160,7 +160,7 @@ export default function GuidePage() {
                 Navigate to the <b>Knowledge Base</b> tab. Upload lecture slides, PDFs, or textbooks. The system automatically chunks the text and indexes vector embeddings using Gemini AI.
               </p>
               <div className="p-3 bg-[#F7F4EF] dark:bg-[#141312] rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-[11px] text-[#716D67]">
-                💡 Supported formats: PDF, DOCX, TXT, PPTX (Max 25MB per document).
+                Supported formats: PDF, DOCX, TXT, PPTX (Max 25MB per document).
               </div>
             </div>
 
@@ -173,7 +173,7 @@ export default function GuidePage() {
                 Use the <b>Assessment Stepper Wizard</b> to specify knowledge sources, topic keywords, question counts, passing marks, and exam timing presets.
               </p>
               <div className="p-3 bg-[#F7F4EF] dark:bg-[#141312] rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-[11px] text-[#716D67]">
-                ✨ Review and refine questions in Question Studio before publishing.
+                Review and refine questions in Question Studio before publishing.
               </div>
             </div>
 
@@ -186,7 +186,7 @@ export default function GuidePage() {
                 Monitor active and scheduled exams from the high-density <b>Assessments Table</b>. Launch Live Proctoring streams or end exams early.
               </p>
               <div className="p-3 bg-[#F7F4EF] dark:bg-[#141312] rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-[11px] text-[#716D67]">
-                📧 Students receive automated email notification with test links.
+                Students receive automated email notification with test links.
               </div>
             </div>
 
@@ -199,7 +199,7 @@ export default function GuidePage() {
                 Browse curated questions filtered by difficulty, topic, and subject in the <b>Question Bank Studio</b>.
               </p>
               <div className="p-3 bg-[#F7F4EF] dark:bg-[#141312] rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-[11px] text-[#716D67]">
-                🔒 Full teacher control over grade release and manual mark overrides.
+                Full teacher control over grade release and manual mark overrides.
               </div>
             </div>
           </div>
