@@ -158,13 +158,15 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Set up CORS middleware for dev client requests
+# Set up CORS middleware for dev & production client requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict to frontend domain
-    allow_credentials=True,
+    allow_origin_regex=r"https?://.*",
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Register routers
