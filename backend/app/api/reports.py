@@ -293,8 +293,20 @@ def get_my_submissions(
             "submitted_at": s.submitted_at.isoformat() if s.submitted_at else ""
         })
         
-    # Sort responses by student name (A-Z)
-    result.sort(key=lambda x: (x.get("student_name", "").lower(), x.get("submitted_at", "")))
+    # Context-aware sorting:
+    if is_teacher and not student_id:
+        # Sort student-wise (Student Name A-Z, then Exam Name A-Z)
+        result.sort(key=lambda x: (
+            x.get("student_name", "").lower(),
+            x.get("exam_name", "").lower(),
+            x.get("submitted_at", "")
+        ))
+    else:
+        # Sort exam-wise (Exam Name A-Z, then Submitted At)
+        result.sort(key=lambda x: (
+            x.get("exam_name", "").lower(),
+            x.get("submitted_at", "")
+        ))
     return result
 
 @router.get("/submission-detail/{submission_id}")

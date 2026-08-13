@@ -465,8 +465,20 @@ export default function StudentDashboard() {
                             {sub.score} / {sub.max_score}
                           </span>
                         </div>
-                        <div className="font-extrabold text-sm text-[#C84B18] dark:text-[#EA580C]">
-                          {sub.percentage}%
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`http://localhost:8000/api/v1/reports/submission-detail/${sub.id}/printable`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1 rounded-md text-[#716D67] hover:text-[#C84B18] hover:bg-[#F0ECE4] dark:hover:bg-[#292524] transition-all"
+                            title="Print / View Official Student Response Sheet"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                          </a>
+                          <div className="font-extrabold text-sm text-[#C84B18] dark:text-[#EA580C]">
+                            {sub.percentage}%
+                          </div>
                         </div>
                       </div>
                     </button>
@@ -488,9 +500,22 @@ export default function StudentDashboard() {
                   {/* Quiz Header & Score Card */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E5E0D8] dark:border-[#292524]">
                     <div>
-                      <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-[#716D67] dark:text-[#A8A29E]">
-                        Code: {selectedSubDetail.exam_code || "EXAM"}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-[#716D67] dark:text-[#A8A29E]">
+                          Code: {selectedSubDetail.exam_code || "EXAM"}
+                        </span>
+                        <a
+                          href={`http://localhost:8000/api/v1/reports/submission-detail/${selectedSubDetail.submission_id}/printable`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#C84B18]/10 text-[#C84B18] hover:bg-[#C84B18]/20 transition-all"
+                          title="Open Official Student Response Sheet (PDF/Print)"
+                        >
+                          <FileText className="h-3 w-3" />
+                          <span>Official Response Booklet</span>
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      </div>
                       <h2 className="text-lg font-bold text-[#242321] dark:text-[#F5F5F4] mt-0.5">
                         {selectedSubDetail.exam_name}
                       </h2>

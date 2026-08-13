@@ -1744,19 +1744,32 @@ export default function TeacherDashboard() {
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4]">
-                    Student Evaluation Sheet — {studentAnswerModal.exam_name}
+                    Candidate Evaluation Sheet — {studentAnswerModal.student_name}
                   </h3>
                   <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">
-                    Score: <b className="text-[#C84B18]">{studentAnswerModal.score} / {studentAnswerModal.max_score} ({studentAnswerModal.percentage}%)</b>
+                    Exam: <b>{studentAnswerModal.exam_name}</b> | Roll: <b>{studentAnswerModal.roll_number || "N/A"}</b> | Score: <b className="text-[#C84B18]">{studentAnswerModal.score} / {studentAnswerModal.max_score} ({studentAnswerModal.percentage}%)</b>
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setStudentAnswerModal(null)}
-                className="p-1.5 rounded-lg text-[#716D67] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`http://localhost:8000/api/v1/reports/submission-detail/${studentAnswerModal.submission_id}/printable`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-[#C84B18]/10 text-[#C84B18] hover:bg-[#C84B18]/20 font-bold text-xs flex items-center gap-1.5 transition-all"
+                  title="Open Official Student Response Booklet (PDF/Print)"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Print Response Sheet</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                <button
+                  onClick={() => setStudentAnswerModal(null)}
+                  className="p-1.5 rounded-lg text-[#716D67] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             {/* Questions Breakdown List */}
@@ -1782,9 +1795,12 @@ export default function TeacherDashboard() {
                         </span>
                       </div>
 
-                      <div className="pl-4 space-y-1 text-[11px]">
-                        <div><b>Student Answer:</b> <span className="font-mono">{String(q.user_answer || "No response")}</span></div>
-                        <div><b>Correct Answer:</b> <span className="font-mono text-emerald-700 dark:text-emerald-300 font-bold">{String(q.correct_answer)}</span></div>
+                      <div className="pl-4 space-y-1.5 text-[11px]">
+                        <div><b>Student Response:</b> <span className="font-mono text-[#242321] dark:text-[#F5F5F4]">{String(q.user_answer_text || q.user_answer || "No response provided.")}</span></div>
+                        <div><b>Correct Answer:</b> <span className="font-mono text-emerald-700 dark:text-emerald-300 font-bold">{String(q.correct_answer_text || q.correct_answer)}</span></div>
+                        {q.ai_feedback && (
+                          <div className="text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-md mt-1 border border-amber-200"><b>AI Evaluator Feedback:</b> {q.ai_feedback}</div>
+                        )}
                         {q.explanation && (
                           <div className="text-[#716D67] pt-1"><b>Explanation:</b> {q.explanation}</div>
                         )}
@@ -1797,7 +1813,16 @@ export default function TeacherDashboard() {
               )}
             </div>
 
-            <div className="pt-3 border-t border-[#E5E0D8] dark:border-[#292524] flex justify-end shrink-0">
+            <div className="pt-3 border-t border-[#E5E0D8] dark:border-[#292524] flex justify-between items-center shrink-0">
+              <a
+                href={`http://localhost:8000/api/v1/reports/submission-detail/${studentAnswerModal.submission_id}/printable`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-[#C84B18] font-bold hover:underline flex items-center gap-1"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span>Open Full Printable Answer Booklet</span>
+              </a>
               <button
                 onClick={() => setStudentAnswerModal(null)}
                 className="btn-primary px-5"
