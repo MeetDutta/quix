@@ -33,11 +33,11 @@ export default function StudentRoster({ students, token, onRefresh }: StudentRos
         setStudentName(""); setStudentEmail(""); setStudentRoll("");
         onRefresh();
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({ detail: "Server error creating student record." }));
         showToast(err.detail || "Failed to create student", "error");
       }
     } catch {
-      showToast("Network error creating student", "error");
+      showToast("Network error creating student. Please check server connection.", "error");
     } finally {
       setIsCreatingStudent(false);
     }
