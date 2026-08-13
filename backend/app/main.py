@@ -9,52 +9,55 @@ from app.api import auth, students, kb, exams, attempts, reports, notifications,
 import app.models
 
 # Automatically build database schema on startup for easy zero-setup local deployment!
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
 
-# Run manual schema updates (zero-setup migration)
-from sqlalchemy import text
-with engine.connect() as conn:
-    try:
-        conn.execute(text("SELECT subject_id FROM documents LIMIT 1"))
-    except Exception:
+    # Run manual schema updates (zero-setup migration)
+    from sqlalchemy import text
+    with engine.connect() as conn:
         try:
-            conn.execute(text("ALTER TABLE documents ADD COLUMN subject_id VARCHAR(36) REFERENCES subjects(id)"))
-            conn.commit()
-        except Exception:
-            pass
-
-    # Ensure user verification and Google Auth columns exist
-    cols_to_add = [
-        ("is_verified", "BOOLEAN DEFAULT 1"),
-        ("verification_token", "VARCHAR(255)"),
-        ("auth_provider", "VARCHAR(50) DEFAULT 'local'"),
-        ("google_id", "VARCHAR(255)")
-    ]
-    for col_name, col_type in cols_to_add:
-        try:
-            conn.execute(text(f"SELECT {col_name} FROM users LIMIT 1"))
+            conn.execute(text("SELECT subject_id FROM documents LIMIT 1"))
         except Exception:
             try:
-                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                conn.execute(text("ALTER TABLE documents ADD COLUMN subject_id VARCHAR(36) REFERENCES subjects(id)"))
                 conn.commit()
             except Exception:
                 pass
-                
-    # Ensure question bank columns exist
-    q_cols_to_add = [
-        ("is_bank_question", "BOOLEAN DEFAULT 0"),
-        ("tags", "TEXT"),
-        ("exam_id", "VARCHAR(36)")
-    ]
-    for col_name, col_type in q_cols_to_add:
-        try:
-            conn.execute(text(f"SELECT {col_name} FROM questions LIMIT 1"))
-        except Exception:
+
+        # Ensure user verification and Google Auth columns exist
+        cols_to_add = [
+            ("is_verified", "BOOLEAN DEFAULT 1"),
+            ("verification_token", "VARCHAR(255)"),
+            ("auth_provider", "VARCHAR(50) DEFAULT 'local'"),
+            ("google_id", "VARCHAR(255)")
+        ]
+        for col_name, col_type in cols_to_add:
             try:
-                conn.execute(text(f"ALTER TABLE questions ADD COLUMN {col_name} {col_type}"))
-                conn.commit()
+                conn.execute(text(f"SELECT {col_name} FROM users LIMIT 1"))
             except Exception:
-                pass
+                try:
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                    conn.commit()
+                except Exception:
+                    pass
+                    
+        # Ensure question bank columns exist
+        q_cols_to_add = [
+            ("is_bank_question", "BOOLEAN DEFAULT 0"),
+            ("tags", "TEXT"),
+            ("exam_id", "VARCHAR(36)")
+        ]
+        for col_name, col_type in q_cols_to_add:
+            try:
+                conn.execute(text(f"SELECT {col_name} FROM questions LIMIT 1"))
+            except Exception:
+                try:
+                    conn.execute(text(f"ALTER TABLE questions ADD COLUMN {col_name} {col_type}"))
+                    conn.commit()
+                except Exception:
+                    pass
+except Exception as startup_db_err:
+    print(f"⚠️ Startup Database initialization notice: {startup_db_err}")
 
 # Seed default initial data for local development
 from app.database import SessionLocal
