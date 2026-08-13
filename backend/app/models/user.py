@@ -15,6 +15,7 @@ class User(TimeStampedModel):
     verification_token = Column(String(255), nullable=True)
     auth_provider = Column(String(50), default="local") # "local", "google"
     google_id = Column(String(255), nullable=True)
+    reset_token = Column(String(255), nullable=True)
     
     institution = relationship("Institution", back_populates="users")
     student_profile = relationship("Student", back_populates="user", uselist=False, cascade="all, delete-orphan")

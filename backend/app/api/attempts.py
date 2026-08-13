@@ -7,6 +7,7 @@ from app.database import get_db, SessionLocal
 from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog
 from app.schemas.exam import ExamLogin, SubmitExam, ProctorLogCreate
 from app.services.ai_service import AIService
+from app.services.notification_service import create_notification
 from jose import jwt
 from app.config import settings
 
@@ -318,6 +319,17 @@ def submit_exam(token: str, db: Session = Depends(get_db)):
     
     db.add(sub)
     db.commit()
+    
+    # Notify student in-app
+    if sub.credential and sub.credential.student and sub.credential.student.user_id:
+        create_notification(
+            db,
+            user_id=sub.credential.student.user_id,
+            title=f"Submission Received: {exam.name}",
+            message=f"Your responses for '{exam.name}' have been recorded successfully.",
+            notification_type="grade",
+            link="/dashboard/student"
+        )
     
     return {
         "message": "Exam submitted successfully.",

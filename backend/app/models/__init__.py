@@ -5,6 +5,7 @@ from app.models.user import User, Student
 from app.models.document import Document, DocumentChunk
 from app.models.question import Question
 from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog, AuditLog
+from app.models.notification import Notification
 
 __all__ = [
     "Base",
@@ -25,5 +26,6 @@ __all__ = [
     "ExamCredential",
     "ExamSubmission",
     "ProctoringLog",
-    "AuditLog"
+    "AuditLog",
+    "Notification"
 ]

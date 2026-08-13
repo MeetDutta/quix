@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import timedelta
@@ -19,6 +20,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserProfile)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
+    # Restrict public self-registration to student role
+    if user_in.role and user_in.role != "student":
+        raise HTTPException(
+            status_code=400, 
+            detail="Public self-registration is restricted to student accounts. Teacher and Administrative roles must be provisioned by an institution administrator."
+        )
+
     # Check if user exists
     db_user = db.query(User).filter(User.email == user_in.email, User.is_deleted == False).first()
     if db_user:
@@ -35,7 +43,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         email=user_in.email,
         hashed_password=hashed_pwd,
         full_name=user_in.full_name,
-        role=user_in.role,
+        role="student",
         institution_id=user_in.institution_id
     )
     db.add(user)
@@ -244,22 +252,47 @@ def forgot_password(
     db: Session = Depends(get_db)
 ):
     """
-    Generates a secure temporary password and dispatches a password recovery email.
+    Generates a secure password reset token link and dispatches recovery email.
     """
     user = db.query(User).filter(User.email == req.email, User.is_deleted == False).first()
     if not user:
         # Return generic success to prevent email enumeration
         return {"message": "If an account with this email exists, a password reset link has been dispatched."}
         
-    temp_pwd = f"Reset{secrets.token_hex(3)}!"
-    user.hashed_password = get_password_hash(temp_pwd)
+    reset_token = str(uuid.uuid4())
+    user.reset_token = reset_token
     db.commit()
     
     background_tasks.add_task(
         email_service.send_password_reset_email,
         user_name=user.full_name,
         email=user.email,
-        new_password=temp_pwd
+        reset_token=reset_token
     )
     
-    return {"message": "A temporary recovery password has been dispatched to your email address."}
+    return {"message": "A password reset link has been dispatched to your email address."}
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+@router.post("/reset-password")
+def reset_password(
+    req: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Validates password reset token and sets the new password.
+    """
+    if not req.token or not req.new_password:
+        raise HTTPException(status_code=400, detail="Token and new_password are required")
+        
+    user = db.query(User).filter(User.reset_token == req.token, User.is_deleted == False).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+        
+    user.hashed_password = get_password_hash(req.new_password)
+    user.reset_token = None
+    db.commit()
+    
+    return {"message": "Password reset successfully. You may now log in with your new password."}

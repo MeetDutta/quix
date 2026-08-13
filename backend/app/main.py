@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 from app.config import settings
 from app.database import engine, Base
-from app.api import auth, students, kb, exams, attempts, reports
+from app.api import auth, students, kb, exams, attempts, reports, notifications, institutions
 
 import app.models
 
@@ -36,6 +36,22 @@ with engine.connect() as conn:
         except Exception:
             try:
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                conn.commit()
+            except Exception:
+                pass
+                
+    # Ensure question bank columns exist
+    q_cols_to_add = [
+        ("is_bank_question", "BOOLEAN DEFAULT 0"),
+        ("tags", "TEXT"),
+        ("exam_id", "VARCHAR(36)")
+    ]
+    for col_name, col_type in q_cols_to_add:
+        try:
+            conn.execute(text(f"SELECT {col_name} FROM questions LIMIT 1"))
+        except Exception:
+            try:
+                conn.execute(text(f"ALTER TABLE questions ADD COLUMN {col_name} {col_type}"))
                 conn.commit()
             except Exception:
                 pass
@@ -155,6 +171,8 @@ app.include_router(kb.router, prefix=settings.API_V1_STR)
 app.include_router(exams.router, prefix=settings.API_V1_STR)
 app.include_router(attempts.router, prefix=settings.API_V1_STR)
 app.include_router(reports.router, prefix=settings.API_V1_STR)
+app.include_router(notifications.router, prefix=settings.API_V1_STR)
+app.include_router(institutions.router, prefix=settings.API_V1_STR)
 
 # Serve static playground files
 static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")

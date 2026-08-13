@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import MathText from "../../../components/MathText";
 import { apiFetch } from "../../../lib/api";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, Radar } from "recharts";
 
 export default function StudentDashboard() {
   const { token, fullName, role } = useAuthStore();
@@ -23,12 +24,22 @@ export default function StudentDashboard() {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   
   // UI States
-  const [activePortalTab, setActivePortalTab] = useState<"assigned" | "submissions">("assigned");
+  const [activePortalTab, setActivePortalTab] = useState<"assigned" | "submissions" | "progress">("assigned");
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeViewTab, setActiveViewTab] = useState<"questions" | "topics" | "leaderboard">("questions");
   const [studentsList, setStudentsList] = useState<any[]>([]);
   const [selectedStudentFilter, setSelectedStudentFilter] = useState<string>("");
+  const [progressData, setProgressData] = useState<any | null>(null);
+
+  const fetchProgressData = async () => {
+    try {
+      const res = await apiFetch("/reports/my-progress", { token });
+      if (res.ok) {
+        setProgressData(await res.json());
+      }
+    } catch {}
+  };
 
   const isTeacher = role === "teacher" || role === "inst_admin" || role === "super_admin";
 
@@ -70,6 +81,9 @@ export default function StudentDashboard() {
           setSelectedSubDetail(null);
         }
       }
+
+      // 4. Fetch Student Progress Analytics
+      fetchProgressData();
     } catch {
     } finally {
       if (isManual) setIsRefreshing(false);
@@ -217,6 +231,18 @@ export default function StudentDashboard() {
           >
             <Trophy className="h-3.5 w-3.5" />
             <span>Past Submissions & Analytics ({submissions.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActivePortalTab("progress")}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+              activePortalTab === "progress"
+                ? "bg-[#C84B18] text-white dark:bg-[#EA580C] shadow-xs"
+                : "bg-[#F0ECE4]/60 dark:bg-[#1D1B19] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
+            }`}
+          >
+            <TrendingUp className="h-3.5 w-3.5" />
+            <span>Learning Trends & Mastery</span>
           </button>
         </div>
 
@@ -791,6 +817,123 @@ export default function StudentDashboard() {
 
           </div>
         )
+      )}
+
+      {/* ═══════ PORTAL TAB 3: LEARNING TRENDS & MASTERY ═══════ */}
+      {activePortalTab === "progress" && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Summary Banner */}
+          <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-5 space-y-4 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-[#C84B18]" />
+                  <span>Performance & Topic Mastery Diagnosis</span>
+                </h2>
+                <p className="text-xs text-[#716D67] dark:text-[#A8A29E] mt-0.5">
+                  AI-driven analytics analyzing score trajectories and subject area proficiency.
+                </p>
+              </div>
+
+              {progressData?.average_percentage && (
+                <div className="bg-[#C84B18]/10 text-[#C84B18] px-4 py-2 rounded-xl text-center shrink-0">
+                  <div className="text-[10px] font-bold uppercase tracking-wider">Overall Mastery</div>
+                  <div className="text-xl font-extrabold">{progressData.average_percentage}%</div>
+                </div>
+              )}
+            </div>
+
+            {/* Strengths & Weaknesses Callouts */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  <span>Topic Strengths</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {progressData?.strength_topics?.length > 0 ? (
+                    progressData.strength_topics.map((st: string, idx: number) => (
+                      <span key={idx} className="px-2.5 py-1 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 rounded-md text-xs font-medium">
+                        {st}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-emerald-700 dark:text-emerald-400">Complete more quizzes to identify strengths.</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-300">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <span>Recommended Focus Areas</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {progressData?.weak_topics?.length > 0 ? (
+                    progressData.weak_topics.map((wt: string, idx: number) => (
+                      <span key={idx} className="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 rounded-md text-xs font-medium">
+                        {wt}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-amber-700 dark:text-amber-400">No weak topics detected. Great job!</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Charts Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Score History Line Chart */}
+            <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-5 space-y-4 shadow-sm">
+              <h3 className="text-sm font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-[#C84B18]" />
+                <span>Score Trajectory Over Time</span>
+              </h3>
+              <div className="h-64 w-full pt-2">
+                {progressData?.score_trend?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={progressData.score_trend}>
+                      <XAxis dataKey="date" stroke="#716D67" fontSize={11} />
+                      <YAxis domain={[0, 100]} stroke="#716D67" fontSize={11} />
+                      <Tooltip contentStyle={{ backgroundColor: '#171615', borderRadius: '8px', color: '#fff', fontSize: '12px' }} />
+                      <Line type="monotone" dataKey="percentage" stroke="#C84B18" strokeWidth={3} dot={{ r: 5 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-xs text-[#716D67]">
+                    No submission trend history recorded yet.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Topic Mastery Radar Chart */}
+            <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-5 space-y-4 shadow-sm">
+              <h3 className="text-sm font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2">
+                <Target className="h-4 w-4 text-[#C84B18]" />
+                <span>Topic Mastery Breakdown (%)</span>
+              </h3>
+              <div className="h-64 w-full pt-2">
+                {progressData?.topic_mastery?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={progressData.topic_mastery}>
+                      <PolarGrid stroke="#E5E0D8" />
+                      <PolarAngleAxis dataKey="topic" stroke="#716D67" fontSize={10} />
+                      <Radar name="Accuracy" dataKey="accuracy" stroke="#EA580C" fill="#EA580C" fillOpacity={0.4} />
+                      <Tooltip contentStyle={{ backgroundColor: '#171615', borderRadius: '8px', color: '#fff', fontSize: '12px' }} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-xs text-[#716D67]">
+                    Complete assessments to generate topic mastery breakdown.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

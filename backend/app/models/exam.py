@@ -15,6 +15,7 @@ class Exam(TimeStampedModel):
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     is_published = Column(Boolean, default=False)
+    is_result_published = Column(Boolean, default=False)
     exam_code = Column(String(100), unique=True, index=True, nullable=False) # For isolated portal link
     
     blueprint_json = Column(Text, nullable=True) # JSON config for paper builder

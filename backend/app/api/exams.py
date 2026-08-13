@@ -25,6 +25,7 @@ from app.utils.security import RoleChecker, get_current_user
 from app.services.rag_service import RAGService
 from app.services.ai_service import AIService
 from app.services.email_service import email_service
+from app.services.notification_service import create_notification
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
@@ -440,7 +441,45 @@ def publish_exam(exam_id: str, current_user: User = Depends(teacher_required), d
         raise HTTPException(status_code=404, detail="Exam not found")
     exam.is_published = True
     db.commit()
+    
+    # Notify enrolled students
+    creds = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).all()
+    for c in creds:
+        if c.student and c.student.user_id:
+            create_notification(
+                db,
+                user_id=c.student.user_id,
+                title=f"Exam Published: {exam.name}",
+                message=f"The exam '{exam.name}' is now live. Exam Code: {exam.exam_code}",
+                notification_type="exam",
+                link=f"/exam/{exam.exam_code}"
+            )
+            
     return {"message": "Exam published.", "exam_code": exam.exam_code}
+
+@router.post("/{exam_id}/publish-results")
+def publish_results(exam_id: str, current_user: User = Depends(teacher_required), db: Session = Depends(get_db)):
+    """Releases exam grades and student response sheets."""
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    exam.is_result_published = True
+    db.commit()
+    
+    # Notify enrolled students that grades are ready
+    creds = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).all()
+    for c in creds:
+        if c.student and c.student.user_id:
+            create_notification(
+                db,
+                user_id=c.student.user_id,
+                title=f"Results Published: {exam.name}",
+                message=f"Official evaluation results for '{exam.name}' have been released.",
+                notification_type="grade",
+                link="/dashboard/student"
+            )
+            
+    return {"message": "Grades and response sheets published successfully."}
 
 @router.post("/{exam_id}/credentials", response_model=List[CredentialResponse])
 def generate_credentials(
@@ -526,6 +565,16 @@ def generate_credentials(
                 exam_code=exam.exam_code,
                 username=username,
                 password=password
+            )
+            
+            # Send in-app notification to student
+            create_notification(
+                db,
+                user_id=s.user_id,
+                title=f"Assigned Exam: {exam.name}",
+                message=f"You have been enrolled in '{exam.name}'. Exam Code: {exam.exam_code}",
+                notification_type="credential",
+                link=f"/exam/{exam.exam_code}"
             )
         
     db.commit()

@@ -3,6 +3,7 @@
 import { useAuthStore } from "../../store/authStore";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { apiFetch } from "../../lib/api";
 import { 
   GraduationCap, 
   BookOpen, 
@@ -44,6 +45,41 @@ export default function DashboardLayout({
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [currentTab, setCurrentTab] = useState<string>("exams");
+  
+  // Notification Center State
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [notifOpen, setNotifOpen] = useState<boolean>(false);
+
+  const fetchNotifications = async () => {
+    if (!token) return;
+    try {
+      const res = await apiFetch("/notifications/?limit=10", { token });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data);
+      }
+      const countRes = await apiFetch("/notifications/unread-count", { token });
+      if (countRes.ok) {
+        const cData = await countRes.json();
+        setUnreadCount(cData.count || 0);
+      }
+    } catch {}
+  };
+
+  const markRead = async (id: string) => {
+    try {
+      await apiFetch(`/notifications/${id}/read`, { token, method: "POST" });
+      fetchNotifications();
+    } catch {}
+  };
+
+  const markAllRead = async () => {
+    try {
+      await apiFetch("/notifications/read-all", { token, method: "POST" });
+      fetchNotifications();
+    } catch {}
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -51,7 +87,11 @@ export default function DashboardLayout({
     const mode = saved || "light";
     setThemeMode(mode);
     applyTheme(mode);
-  }, []);
+    
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 20000);
+    return () => clearInterval(interval);
+  }, [token]);
 
   const applyTheme = (mode: "light" | "dark" | "system") => {
     let isDark = false;
@@ -244,6 +284,19 @@ export default function DashboardLayout({
                   </button>
 
                   <button 
+                    onClick={() => navToTab("bank")}
+                    title="Question Bank Library"
+                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
+                      pathname === "/dashboard/teacher" && currentTab === "bank"
+                        ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
+                        : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
+                    }`}
+                  >
+                    <Layers className="h-4 w-4 shrink-0" />
+                    {!sidebarCollapsed && <span>Question Bank</span>}
+                  </button>
+
+                  <button 
                     onClick={() => navToTab("kb")}
                     title="Knowledge Base"
                     className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
@@ -428,10 +481,88 @@ export default function DashboardLayout({
             <button className="p-1.5 rounded text-[#716D67] hover:text-[#242321] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524]" title="Help & Documentation">
               <HelpCircle className="h-4 w-4" />
             </button>
-            <button className="p-1.5 rounded text-[#716D67] hover:text-[#242321] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] relative" title="Notifications">
-              <Bell className="h-4 w-4" />
-              <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-[#C84B18]" />
-            </button>
+            <div className="relative">
+              <button 
+                onClick={() => setNotifOpen(!notifOpen)}
+                className="p-1.5 rounded text-[#716D67] hover:text-[#242321] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] relative" 
+                title="Notifications"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-[#C84B18] text-white text-[9px] font-bold flex items-center justify-center">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Flyout Dropdown */}
+              {notifOpen && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524] rounded-xl shadow-2xl z-50 overflow-hidden">
+                  <div className="p-3 border-b border-[#E5E0D8] dark:border-[#292524] flex items-center justify-between bg-[#F7F4EF] dark:bg-[#141312]">
+                    <div className="flex items-center gap-2">
+                      <Bell className="h-4 w-4 text-[#C84B18]" />
+                      <span className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4]">Notifications</span>
+                      {unreadCount > 0 && (
+                        <span className="text-[10px] bg-[#C84B18]/10 text-[#C84B18] px-1.5 py-0.5 rounded font-semibold">
+                          {unreadCount} unread
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button 
+                        onClick={markAllRead}
+                        className="text-[11px] text-[#C84B18] hover:underline font-medium"
+                      >
+                        Mark all as read
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto divide-y divide-[#E5E0D8]/50 dark:divide-[#292524]">
+                    {notifications.length === 0 ? (
+                      <div className="p-6 text-center text-xs text-[#716D67] dark:text-[#A8A29E]">
+                        No notifications yet.
+                      </div>
+                    ) : (
+                      notifications.map((n) => (
+                        <div 
+                          key={n.id} 
+                          className={`p-3 text-xs transition-all hover:bg-[#F7F4EF]/60 dark:hover:bg-[#24211D] flex items-start justify-between gap-2 ${
+                            !n.is_read ? "bg-[#C84B18]/5 dark:bg-[#EA580C]/10 font-medium" : ""
+                          }`}
+                        >
+                          <div className="space-y-1 flex-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-[#242321] dark:text-[#F5F5F4]">{n.title}</span>
+                              <span className="text-[10px] text-[#716D67] dark:text-[#A8A29E]">
+                                {n.created_at ? new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E] leading-relaxed">{n.message}</p>
+                            {n.link && (
+                              <a 
+                                href={n.link}
+                                onClick={() => { markRead(n.id); setNotifOpen(false); }}
+                                className="inline-flex items-center gap-1 text-[11px] text-[#C84B18] hover:underline font-medium mt-1"
+                              >
+                                View details &rarr;
+                              </a>
+                            )}
+                          </div>
+                          {!n.is_read && (
+                            <button 
+                              onClick={() => markRead(n.id)}
+                              className="h-2 w-2 rounded-full bg-[#C84B18] hover:scale-125 transition-all shrink-0 mt-1"
+                              title="Mark read"
+                            />
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Theme Toggle (Light / Dark / System) */}
             <div className="flex items-center bg-[#E5E0D8]/60 dark:bg-[#292524] p-0.5 rounded-md text-[11px] font-medium border border-[#E5E0D8] dark:border-[#292524]">

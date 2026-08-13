@@ -1,5 +1,7 @@
 import uuid
 import json
+import io
+import csv
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, BackgroundTasks
 from fastapi.responses import StreamingResponse
@@ -12,23 +14,10 @@ from app.models.institution import Department, Institution
 from app.schemas.student import StudentCreate, StudentResponse, InstitutionResponse
 from app.utils.security import get_password_hash, RoleChecker, get_current_user
 from app.services.email_service import email_service
+from app.services.notification_service import create_notification
 
 router = APIRouter(prefix="/students", tags=["students"])
 teacher_or_admin_required = RoleChecker(["inst_admin", "teacher", "super_admin"])
-
-@router.get("/institutions", response_model=List[InstitutionResponse])
-def get_institutions(db: Session = Depends(get_db)):
-    """Fetch active institutions list."""
-    return db.query(Institution).filter(Institution.is_deleted == False).all()
-
-@router.post("/institutions", response_model=InstitutionResponse)
-def create_institution(name: str, db: Session = Depends(get_db)):
-    """Creates a new institution workspace."""
-    inst = Institution(name=name)
-    db.add(inst)
-    db.commit()
-    db.refresh(inst)
-    return inst
 
 @router.get("/", response_model=List[StudentResponse])
 def list_students(
@@ -107,6 +96,15 @@ def create_student(
     db.commit()
     db.refresh(student)
     
+    # Send in-app notification
+    create_notification(
+        db, 
+        user_id=user.id, 
+        title="Welcome to EduQuizX", 
+        message="Your student profile has been created. Check your email for authorization steps.", 
+        notification_type="system"
+    )
+    
     # Trigger automated authorization email with verification link and Google auth
     background_tasks.add_task(
         email_service.send_student_authorization_email,
@@ -156,6 +154,7 @@ def resend_student_authorization(
 
 @router.post("/import")
 def import_students_csv(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(teacher_or_admin_required),
     db: Session = Depends(get_db)
@@ -187,8 +186,9 @@ def import_students_csv(
             # Skip or update
             continue
             
-        default_pwd = email.split("@")[0] + "123"
-        hashed_pwd = get_password_hash(default_pwd)
+        verification_token = str(uuid.uuid4())
+        temp_pwd = str(uuid.uuid4())[:12]
+        hashed_pwd = get_password_hash(temp_pwd)
         
         try:
             user = User(
@@ -196,7 +196,10 @@ def import_students_csv(
                 hashed_password=hashed_pwd,
                 full_name=full_name,
                 role="student",
-                institution_id=current_user.institution_id
+                institution_id=current_user.institution_id,
+                is_verified=False,
+                verification_token=verification_token,
+                auth_provider="local"
             )
             db.add(user)
             db.flush()
@@ -209,11 +212,20 @@ def import_students_csv(
             )
             db.add(student)
             imported_count += 1
+
+            # Dispatch authorization email for each CSV imported student
+            background_tasks.add_task(
+                email_service.send_student_authorization_email,
+                student_name=user.full_name,
+                email=user.email,
+                verification_token=verification_token,
+                roll_number=student.roll_number
+            )
         except Exception as e:
             errors.append(f"Row {idx+1}: Error saving to DB ({str(e)})")
             
     db.commit()
-    return {"message": f"Successfully imported {imported_count} students.", "errors": errors}
+    return {"message": f"Successfully imported {imported_count} students. Authorization emails dispatched.", "errors": errors}
 
 @router.get("/export")
 def export_students_csv(

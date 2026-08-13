@@ -268,6 +268,95 @@ def list_questions(
         query = query.filter(Question.is_approved == is_approved)
     return query.all()
 
+@router.get("/questions/bank")
+def list_bank_questions(
+    subject_id: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    search: Optional[str] = None,
+    tags: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Returns curated reusable Question Bank library."""
+    query = db.query(Question).filter(
+        Question.is_deleted == False,
+        (Question.is_bank_question == True) | (Question.is_approved == True)
+    )
+    if subject_id:
+        query = query.filter(Question.subject_id == subject_id)
+    if difficulty:
+        query = query.filter(Question.difficulty == difficulty)
+    if search:
+        from sqlalchemy import func
+        query = query.filter(func.lower(Question.question_text).contains(search.lower()))
+    if tags:
+        query = query.filter(Question.tags.contains(tags))
+        
+    questions = query.order_by(Question.created_at.desc()).all()
+    return [
+        {
+            "id": q.id,
+            "subject_id": q.subject_id,
+            "subject_name": q.subject.name if q.subject else "General",
+            "question_type": q.question_type,
+            "question_text": q.question_text,
+            "options_json": q.options_json,
+            "correct_answer": q.correct_answer,
+            "explanation": q.explanation,
+            "difficulty": q.difficulty,
+            "bloom_level": q.bloom_level,
+            "topic": q.topic,
+            "subtopic": q.subtopic,
+            "is_approved": q.is_approved,
+            "is_bank_question": q.is_bank_question,
+            "tags": q.tags,
+            "created_at": q.created_at.isoformat() if q.created_at else ""
+        }
+        for q in questions
+    ]
+
+@router.post("/questions/bank")
+def create_bank_question(
+    question_in: QuestionCreate,
+    tags: Optional[str] = None,
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """Adds a new custom question directly into the Question Bank."""
+    q = Question(
+        subject_id=question_in.subject_id,
+        question_type=question_in.question_type,
+        question_text=question_in.question_text,
+        options_json=question_in.options_json,
+        correct_answer=question_in.correct_answer,
+        explanation=question_in.explanation,
+        difficulty=question_in.difficulty,
+        bloom_level=question_in.bloom_level or "applying",
+        topic=question_in.topic or "General",
+        subtopic=question_in.subtopic,
+        is_approved=True,
+        is_bank_question=True,
+        tags=tags or "custom,bank"
+    )
+    db.add(q)
+    db.commit()
+    db.refresh(q)
+    return {"message": "Question added to bank successfully", "id": q.id}
+
+@router.post("/questions/{question_id}/save-to-bank")
+def save_question_to_bank(
+    question_id: str,
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """Marks an exam question as a persistent bank question."""
+    q = db.query(Question).filter(Question.id == question_id).first()
+    if not q:
+        raise HTTPException(status_code=404, detail="Question not found")
+    q.is_bank_question = True
+    q.is_approved = True
+    db.commit()
+    return {"message": "Question saved to Question Bank", "id": q.id}
+
 @router.put("/questions/{question_id}", response_model=QuestionResponse)
 def update_question(
     question_id: str,

@@ -32,8 +32,8 @@ class QuestionCreate(BaseModel):
     correct_answer: str
     explanation: Optional[str] = None
     difficulty: str
-    bloom_level: str
-    estimated_time_seconds: int
+    bloom_level: Optional[str] = "applying"
+    estimated_time_seconds: Optional[int] = 60
     topic: Optional[str] = None
     subtopic: Optional[str] = None
     subject_id: Optional[str] = None

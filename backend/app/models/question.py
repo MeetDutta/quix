@@ -22,6 +22,9 @@ class Question(TimeStampedModel):
     confidence_score = Column(String(50), default="1.0")
     
     is_approved = Column(Boolean, default=False)
+    is_bank_question = Column(Boolean, default=False)
+    tags = Column(Text, nullable=True)
+    exam_id = Column(String(36), ForeignKey("exams.id"), nullable=True)
     version = Column(Integer, default=1)
     statistics = Column(Text, nullable=True) # JSON containing usage statistics like wrong_rate, avg_score, etc.
     

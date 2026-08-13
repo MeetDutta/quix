@@ -22,14 +22,18 @@ class EmailService:
                 
                 msg.attach(MIMEText(html_content, "html"))
                 
-                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=3) as server:
+                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=5) as server:
                     server.starttls()
                     server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                     server.send_message(msg)
                 logger.info(f"⚡ Real SMTP email transmitted to {to_email}")
                 print(f"⚡ Real SMTP email transmitted to {to_email}")
+                return True
             except Exception as e:
-                logger.info(f"SMTP notification note (logged locally): {str(e)}")
+                logger.error(f"❌ SMTP delivery failed for {to_email}: {str(e)}")
+                print(f"❌ SMTP delivery failed for {to_email}: {str(e)}")
+                return False
+        return False
 
     def send_student_authorization_email(self, student_name: str, email: str, verification_token: str, roll_number: Optional[str] = None):
         """Dispatches an authorization email requesting the student to verify their account or authorize with Google."""
@@ -118,10 +122,10 @@ class EmailService:
         
         logger.info(f"📧 [CREDENTIALS EMAIL] Dispatched generated password to {student_name} ({email}) | Pass: {password}")
         print(f"📧 [CREDENTIALS EMAIL] Dispatched generated password to {student_name} ({email}) | Pass: {password}")
-    def send_password_reset_email(self, user_name: str, email: str, new_password: str):
-        """Dispatches a password reset recovery email containing newly generated portal password."""
-        portal_url = "http://localhost:3000"
-        subject = "EduQuizX — Your Password Reset Credentials"
+    def send_password_reset_email(self, user_name: str, email: str, reset_token: str):
+        """Dispatches a password reset recovery email containing a secure tokenized reset link."""
+        reset_url = f"http://localhost:3000/reset-password?token={reset_token}"
+        subject = "EduQuizX — Password Reset Request"
         
         html_content = f"""
         <!DOCTYPE html>
@@ -136,28 +140,23 @@ class EmailService:
 
                 <h2 style="color: #242321; margin-top: 0; font-size: 20px; font-weight: 700;">Password Reset Request</h2>
                 <p style="font-size: 14px; line-height: 1.6;">Hello <b>{user_name}</b>,</p>
-                <p style="font-size: 14px; line-height: 1.6;">We received a request to reset your password. Your new login password for the EduQuizX Portal has been generated below:</p>
-                
-                <div style="background-color: #F0ECE4; border: 1px solid #E5E0D8; border-radius: 8px; padding: 20px; margin: 20px 0; font-size: 14px;">
-                    <p style="margin: 6px 0;"><b>Login Account Email:</b> <span style="color: #C84B18; font-family: monospace; font-size: 15px;">{email}</span></p>
-                    <p style="margin: 6px 0;"><b>New Temporary Password:</b> <span style="color: #C84B18; font-family: monospace; font-size: 17px; font-weight: bold; background: #FFF8F5; padding: 4px 10px; border-radius: 4px; border: 1px solid #F7D5CA;">{new_password}</span></p>
-                </div>
-                
-                <p style="font-size: 13px; line-height: 1.6;">Please sign in and change your password in your settings dashboard if desired.</p>
+                <p style="font-size: 14px; line-height: 1.6;">We received a request to reset your password. Click the secure button below to set a new password for your account:</p>
                 
                 <div style="margin: 24px 0; text-align: center;">
-                    <a href="{portal_url}" style="display: inline-block; background-color: #C84B18; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">Sign in to EduQuizX</a>
+                    <a href="{reset_url}" style="display: inline-block; background-color: #C84B18; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">Reset Account Password</a>
                 </div>
                 
+                <p style="font-size: 12px; color: #716D67;">Or copy and paste this link in your browser: <br/><span style="font-family: monospace; font-size: 11px; word-break: break-all;">{reset_url}</span></p>
+                
                 <hr style="border: none; border-top: 1px solid #E5E0D8; margin-top: 28px;" />
-                <p style="font-size: 11px; color: #716D67; margin-bottom: 0;">EduQuizX Autonomous Examination System • If you did not request this, please contact your administrator.</p>
+                <p style="font-size: 11px; color: #716D67; margin-bottom: 0;">EduQuizX Autonomous Examination System • If you did not request this, please ignore this email.</p>
             </div>
         </body>
         </html>
         """
         
-        logger.info(f"📧 [PASSWORD RESET EMAIL] Dispatched new password to {user_name} ({email}) | New Pass: {new_password}")
-        print(f"📧 [PASSWORD RESET EMAIL] Dispatched new password to {user_name} ({email}) | New Pass: {new_password}")
+        logger.info(f"📧 [PASSWORD RESET EMAIL] Dispatched reset link token to {user_name} ({email})")
+        print(f"📧 [PASSWORD RESET EMAIL] Dispatched reset link token to {user_name} ({email}) | Link: {reset_url}")
         self._send_smtp_email(email, subject, html_content)
 
     def send_student_welcome_email(self, student_name: str, email: str, password: str, roll_number: Optional[str] = None):
