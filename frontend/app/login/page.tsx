@@ -120,19 +120,7 @@ export default function LoginPage() {
     }
   };
 
-  const autofillTeacher = () => {
-    setEmail("meetdutta001@gmail.com");
-    setPassword("securepassword");
-    setRole("teacher");
-    setError(null);
-  };
 
-  const autofillStudent = () => {
-    setEmail("student@eduquizx.com");
-    setPassword("securepassword");
-    setRole("student");
-    setError(null);
-  };
 
   const handleGoogleSignIn = async () => {
     setError(null);
