@@ -5,8 +5,9 @@ import { useEffect, useState, useCallback } from "react";
 import { useExamStore } from "../../../store/examStore";
 import { apiFetch } from "../../../lib/api";
 import { useToast } from "../../../components/Toast";
-import { AlertCircle, Lock, Timer, Flag, ChevronLeft, ChevronRight, CheckSquare, ShieldAlert, CheckCircle2, FileText, Clock, CalendarClock } from "lucide-react";
+import { AlertCircle, Lock, Timer, Flag, ChevronLeft, ChevronRight, CheckSquare, ShieldAlert, CheckCircle2, FileText, Clock, CalendarClock, Calculator } from "lucide-react";
 import MathText from "../../../components/MathText";
+import ExamCalculator from "../../../components/ExamCalculator";
 
 type ExamStatus = "loading" | "not_started" | "active" | "ended";
 
@@ -36,6 +37,9 @@ export default function ExamPortal() {
   const [flagged, setFlagged] = useState<Record<string, boolean>>({});
   const [syncStatus, setSyncStatus] = useState("Synced");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [autoSubmitReason, setAutoSubmitReason] = useState<string | null>(null);
 
   // Check exam status on load
   useEffect(() => {
@@ -140,8 +144,21 @@ export default function ExamPortal() {
 
     const handleVisibility = () => {
       if (document.visibilityState === "hidden") {
-        triggerProctorAlert("tab_switch", "Student switched browser tabs");
-        showToast("Proctoring Warning: Tab switch recorded!", "warning");
+        setTabSwitchCount((prev) => {
+          const nextCount = prev + 1;
+          triggerProctorAlert("tab_switch", `Tab switch violation #${nextCount} of 3 recorded.`);
+          if (nextCount >= 3) {
+            setAutoSubmitReason("Maximum tab-switch violations reached (3/3). Your exam has been automatically submitted due to anti-cheat policy.");
+            showToast("CRITICAL PROCTORING VIOLATION: 3 tab switches detected! Auto-submitting exam now...", "error");
+            // Auto submit immediately
+            setTimeout(() => {
+              handleSubmitExam();
+            }, 100);
+          } else {
+            showToast(`Proctoring Warning: Tab switch ${nextCount}/3 detected! Reaching 3 tab switches will automatically submit your exam.`, "warning");
+          }
+          return nextCount;
+        });
       }
     };
 
@@ -341,6 +358,16 @@ export default function ExamPortal() {
             <p className="text-xs text-[#78716C] mt-1">Your responses have been evaluated and recorded.</p>
           </div>
 
+          {autoSubmitReason && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3.5 text-xs text-left flex items-start gap-2.5 animate-fadeIn">
+              <ShieldAlert className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
+              <div>
+                <p className="font-bold">Anti-Cheat Auto-Submission</p>
+                <p className="text-[11px] text-rose-700 mt-0.5">{autoSubmitReason}</p>
+              </div>
+            </div>
+          )}
+
           <div className="bg-[#FBF9F5] border border-[#E7E0D3] rounded-xl p-4 flex items-center justify-around">
             <div>
               <div className="text-2xl font-extrabold text-[#9A3412]">{submittedResult.score}</div>
@@ -472,6 +499,33 @@ export default function ExamPortal() {
                 <span>{examStore.proctorEventsCount} Alerts</span>
               </span>
             )}
+
+            {/* Tab Strikes Anti-Cheat Pill (Auto-submit at 3) */}
+            <span className={`flex items-center gap-1 font-bold px-2.5 py-1 rounded-full transition-all ${
+              tabSwitchCount >= 2 
+                ? "bg-rose-100 text-rose-700 border border-rose-300 animate-pulse" 
+                : tabSwitchCount === 1 
+                ? "bg-amber-50 text-amber-700 border border-amber-300" 
+                : "bg-[#F5F0E8] text-[#78716C] border border-[#E7E0D3]"
+            }`}>
+              <ShieldAlert className="h-3.5 w-3.5" />
+              <span>Tab Strikes: {tabSwitchCount}/3</span>
+            </span>
+
+            {/* In-Exam Calculator Tool Button */}
+            <button
+              type="button"
+              onClick={() => setIsCalculatorOpen(!isCalculatorOpen)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+                isCalculatorOpen
+                  ? "bg-[#9A3412] text-white border-[#9A3412] shadow-xs"
+                  : "bg-[#FBF9F5] border-[#E7E0D3] text-[#292524] hover:bg-[#F3EDE2]"
+              }`}
+              title="Open Interactive Calculator"
+            >
+              <Calculator className="h-4 w-4" />
+              <span className="hidden sm:inline">Calculator</span>
+            </button>
 
             <button
               onClick={() => setShowConfirmModal(true)}
@@ -643,6 +697,12 @@ export default function ExamPortal() {
           </div>
         </div>
       )}
+
+      {/* ═══════ IN-EXAM INTERACTIVE CALCULATOR ═══════ */}
+      <ExamCalculator
+        isOpen={isCalculatorOpen}
+        onClose={() => setIsCalculatorOpen(false)}
+      />
     </div>
   );
 }

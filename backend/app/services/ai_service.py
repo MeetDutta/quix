@@ -14,13 +14,34 @@ class AIService:
         self.enabled = bool(self.api_key)
         if self.enabled:
             genai.configure(api_key=self.api_key)
-            self.model_name = "models/gemini-3.5-flash"
+            self.model_candidates = ["models/gemini-1.5-flash", "gemini-1.5-flash", "models/gemini-pro", "gemini-pro"]
+            self.model_name = "models/gemini-1.5-flash"
         else:
             logger.warning("GEMINI_API_KEY is not set. AI capabilities will be mocked.")
-            
+
+    def _clean_json_str(self, text: str) -> str:
+        """Strips markdown code fences and isolates JSON payload."""
+        t = text.strip()
+        if t.startswith("```"):
+            lines = t.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            t = "\n".join(lines).strip()
+        if "[" in t and "]" in t:
+            start = t.find("[")
+            end = t.rfind("]") + 1
+            return t[start:end]
+        elif "{" in t and "}" in t:
+            start = t.find("{")
+            end = t.rfind("}") + 1
+            return t[start:end]
+        return t
+
     def _call_gemini(self, prompt: str, system_instruction: Optional[str] = None, json_mode: bool = False) -> str:
         """
-        Communicates with the Google Gemini API with error handling, retries, and rate limiting.
+        Communicates with the Google Gemini API with error handling, retries, and model fallbacks.
         """
         if not self.enabled:
             raise ValueError("Gemini API key is not configured.")
@@ -33,23 +54,21 @@ class AIService:
             full_prompt = f"{system_instruction}\n\nUser Request/Prompt:\n{prompt}"
             
         for attempt in range(max_retries):
-            try:
-                generation_config = {}
-                if json_mode:
-                    generation_config["response_mime_type"] = "application/json"
-                model = genai.GenerativeModel(
-                    model_name=self.model_name,
-                    generation_config=generation_config
-                )
-                response = model.generate_content(full_prompt)
-                return response.text
-            except Exception as e:
-                logger.error(f"Gemini API attempt {attempt+1} failed: {str(e)}")
-                if attempt < max_retries - 1:
-                    time.sleep(backoff_seconds)
-                    backoff_seconds *= 2
-                else:
-                    raise e
+            # Try available model candidates
+            for candidate in ["models/gemini-1.5-flash", "gemini-1.5-flash", "models/gemini-pro"]:
+                try:
+                    model = genai.GenerativeModel(model_name=candidate)
+                    response = model.generate_content(full_prompt)
+                    if response and response.text:
+                        return response.text
+                except Exception as model_err:
+                    logger.debug(f"Candidate {candidate} failed: {model_err}")
+                    continue
+                    
+            if attempt < max_retries - 1:
+                time.sleep(backoff_seconds)
+                backoff_seconds *= 2
+                
         return ""
 
     def generate_questions(
@@ -131,17 +150,7 @@ class AIService:
         
         try:
             raw_response = self._call_gemini(prompt, system_instruction=system_instruction, json_mode=True)
-            
-            # Clean markdown code block fences if present
-            cleaned_response = raw_response.strip()
-            if cleaned_response.startswith("```"):
-                lines = cleaned_response.splitlines()
-                if lines[0].startswith("```"):
-                    lines = lines[1:]
-                if lines[-1].startswith("```"):
-                    lines = lines[:-1]
-                cleaned_response = "\n".join(lines).strip()
-                
+            cleaned_response = self._clean_json_str(raw_response)
             questions = json.loads(cleaned_response)
             
             # Filter and map contract fields for frontend compatibility
@@ -318,89 +327,78 @@ class AIService:
         context_chunks: Optional[List[Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Synthesizes high-quality academic questions directly from RAG context sentences,
-        filtering metadata headers and ensuring unique distractor choices across questions.
+        Synthesizes high-quality academic questions directly from RAG context sentences.
+        Strictly domain-agnostic: uses extracted document sentences and user topic.
         """
         mocked = []
-        topic_name = topic or "Thermodynamics"
+        topic_name = (topic or "Subject Knowledge").strip().title()
         
-        # 1. Extract substantive content sentences (filtering headers/metadata)
+        # 1. Extract substantive content sentences from context chunks
         content_sentences = []
         if context_chunks:
             for c in context_chunks:
                 content = c.get("content", "")
-                for s in content.replace("?", ".").replace("!", ".").split("."):
-                    s = s.strip()
-                    if not self._is_metadata_or_header(s) and len(s) >= 30:
-                        content_sentences.append(s)
+                # Split on sentence boundaries and newlines
+                for line in content.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    for s in line.replace("?", ".").replace("!", ".").split("."):
+                        s = s.strip()
+                        if not self._is_metadata_or_header(s) and len(s) >= 25:
+                            content_sentences.append(s)
                         
         content_sentences = list(dict.fromkeys(content_sentences))
         
-        # 2. Rich domain concept library fallback if context sentences are sparse
-        domain_concepts_pool = [
-            ("Carnot Cycle Thermal Efficiency", "defines maximum theoretical work conversion limits in heat engines", "operates at 100% thermal conversion efficiency without ambient loss"),
-            ("Second Law Entropy Generation", "establishes mandatory positive entropy production in irreversible thermodynamic processes", "allows local net decrease in universal entropy without external work input"),
-            ("Isothermal Expansion Work", "calculates work output during constant-temperature heat absorption", "maintains zero heat exchange across system boundaries during volume change"),
-            ("Isentropic Compression Ratio", "governs adiabatic reversible pressure increases in gas turbine cycles", "causes exponential pressure drops during constant-volume cooling phases"),
-            ("Enthalpy and Phase Transitions", "quantifies total heat absorption during constant-pressure phase change", "eliminates latent heat requirements during liquid-to-vapor boiling states"),
-            ("Clausius Inequality Constraint", "restricts cyclic integrations of heat-to-temperature ratios for real engines", "permits negative entropy accumulation in unassisted closed power loops")
-        ]
-
         for i in range(count):
             if content_sentences:
                 raw_sentence = content_sentences[i % len(content_sentences)]
-                # Clean and extract meaningful concept phrase
                 clean_s = raw_sentence.replace("'", "").replace('"', "").strip()
                 words = [w for w in clean_s.split() if len(w) > 3]
-                concept_name = " ".join(words[:4]).capitalize() if len(words) >= 4 else f"{topic_name} Concept"
+                concept_name = " ".join(words[:3]).capitalize() if len(words) >= 3 else f"{topic_name} Concept"
                 
-                # Direct academic examination stem without stock templates or truncation cut-offs
-                academic_stems = [
-                    f"Which thermodynamic mechanism governs {concept_name} during system state transitions?",
-                    f"What physical relationship defines {concept_name} under standard operating conditions?",
-                    f"How does {concept_name} impact net entropy generation in closed systems?",
-                    f"Which boundary condition must be satisfied for {concept_name} to occur?",
-                    f"What is the primary work output associated with {concept_name}?"
+                # Dynamic academic examination stems referencing real context
+                stems = [
+                    f"Which core principle regarding {concept_name} is established in {topic_name}?",
+                    f"According to the study material on {topic_name}, how is {concept_name} defined?",
+                    f"What is the primary operational mechanism of {concept_name} in {topic_name}?",
+                    f"Which statement accurately describes the characteristics of {concept_name}?",
+                    f"In the context of {topic_name}, what condition applies directly to {concept_name}?"
                 ]
-                q_text = academic_stems[i % len(academic_stems)]
+                q_text = stems[i % len(stems)]
+                correct_ans = f"{clean_s}."
                 
-                correct_ans = f"{concept_name} satisfies energy balance as described in '{clean_s[:70]}'."
-                
-                # Dynamically construct unique distractors drawing from different sentences
-                other_sentence = content_sentences[(i + 1) % len(content_sentences)] if len(content_sentences) > 1 else "isentropic expansion"
-                other_s = other_sentence.replace("'", "").replace('"', "").strip()
-                
-                opts = [
-                    correct_ans,
-                    f"System forces {concept_name} to violate Second Law entropy constraints.",
-                    f"System causes {concept_name} to operate as an ideal perpetual motion cycle.",
-                    f"System restricts {concept_name} strictly to zero-pressure vacuum states."
+                # Pick other sentences from the same document for distractors
+                distractor_candidates = [
+                    s for s in content_sentences if s != raw_sentence
                 ]
-                explanation = f"Grounded strictly in context text: '{raw_sentence}'"
+                
+                opts = [correct_ans]
+                if len(distractor_candidates) >= 3:
+                    for d_idx in range(3):
+                        other_sentence = distractor_candidates[(i + d_idx) % len(distractor_candidates)]
+                        opts.append(f"{other_sentence.strip()}.")
+                else:
+                    opts.extend([
+                        f"{concept_name} operates independently without any interaction in {topic_name}.",
+                        f"{concept_name} is strictly prohibited under standard protocols in {topic_name}.",
+                        f"{concept_name} has no measurable effect on the underlying operations of {topic_name}."
+                    ])
+                
+                explanation = f"Grounded directly in syllabus content: '{raw_sentence}'"
                 source_excerpt = raw_sentence
             else:
-                c_item = domain_concepts_pool[i % len(domain_concepts_pool)]
-                concept_title = c_item[0]
-                correct_def = c_item[1]
-                wrong_misconception = c_item[2]
-                
-                academic_stems = [
-                    f"Which fundamental principle governs {concept_title} in {topic_name}?",
-                    f"What physical boundary condition characterizes {concept_title}?",
-                    f"How is {concept_title} evaluated in closed energy conversion cycles?",
-                    f"Which statement correctly accounts for {concept_title} under process conditions?"
-                ]
-                q_text = academic_stems[i % len(academic_stems)]
-                correct_ans = f"{concept_title} {correct_def}."
-                
+                concept_title = f"{topic_name} Core Principle {i+1}"
+                q_text = f"Which statement best characterizes {concept_title} in {topic_name}?"
+                correct_ans = f"{concept_title} provides fundamental structure and methodology for {topic_name}."
                 opts = [
                     correct_ans,
-                    f"{concept_title} {wrong_misconception}.",
-                    f"{concept_title} causes spontaneous net entropy reduction without external work.",
-                    f"{concept_title} maintains constant internal energy regardless of heat input variations."
+                    f"{concept_title} is not applicable within the theoretical scope of {topic_name}.",
+                    f"{concept_title} completely replaces all legacy models without empirical verification.",
+                    f"{concept_title} operates only under extreme isolated boundary constraints."
                 ]
-                explanation = f"Fundamental principles of {concept_title} in {topic_name}."
-                source_excerpt = f"{concept_title} is a core property in {topic_name}."
+                explanation = f"Fundamental theoretical concept in {topic_name}."
+                source_excerpt = f"{concept_title} is a core foundation of {topic_name}."
 
             if q_type == "true_false":
                 q_opts = ["True", "False"]

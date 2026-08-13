@@ -6,13 +6,14 @@ import io
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from jose import jwt
 from app.config import settings
 from app.database import get_db
 from app.models.user import User, Student
-from app.models.document import Document
+from app.models.document import Document, DocumentChunk
 from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog
 from app.models.question import Question
 from app.models.institution import Subject, Institution, Department, Course
@@ -39,31 +40,63 @@ def generate_exam_from_kb(
 ):
     """
     Dynamically generates an AI Exam paper directly from Knowledge Base context,
-    strictly restricted to the specified subject's Knowledge Base documents.
+    strictly restricted to the specified document or subject's Knowledge Base files.
     """
-    # 1. Query KB documents matching the specific subject_id
-    subject_doc_ids = None
-    if req.subject_id:
+    # 1. Resolve target document IDs strictly
+    subject_doc_ids = []
+    
+    if req.document_id:
+        target_doc = db.query(Document).filter(
+            Document.id == req.document_id,
+            Document.is_deleted == False
+        ).first()
+        if target_doc:
+            subject_doc_ids = [target_doc.id]
+    elif req.subject_id:
+        # Case-insensitive subject match
         subject_docs = db.query(Document).filter(
-            Document.subject_id == req.subject_id,
+            func.lower(Document.subject_id) == func.lower(req.subject_id.strip()),
             Document.is_deleted == False
         ).all()
         if subject_docs:
             subject_doc_ids = [d.id for d in subject_docs]
 
-    # Search vector DB for context strictly restricted to that subject's documents & subject_id
-    chunks = rag_service.search_similarity(
-        query=req.topic or "General Concept", 
-        limit=10, 
-        document_ids=subject_doc_ids,
-        subject_id=req.subject_id
-    )
+    chunks = []
     
+    # 2. Search vector store with document/subject scoping
+    if subject_doc_ids:
+        chunks = rag_service.search_similarity(
+            query=req.topic or "General Concept", 
+            limit=15, 
+            document_ids=subject_doc_ids
+        )
+    elif req.subject_id:
+        chunks = rag_service.search_similarity(
+            query=req.topic or "General Concept", 
+            limit=15, 
+            subject_id=req.subject_id
+        )
+
+    # 3. Direct DB fallback: If vector store is sparse, pull actual chunks from database table
+    if (not chunks or len(chunks) == 0) and subject_doc_ids:
+        db_chunks = db.query(DocumentChunk).filter(
+            DocumentChunk.document_id.in_(subject_doc_ids)
+        ).limit(20).all()
+        for dc in db_chunks:
+            chunks.append({
+                "chunk_id": dc.id,
+                "document_id": dc.document_id,
+                "content": dc.content,
+                "page_number": dc.page_number,
+                "doc_title": req.name or req.topic or "Subject Material",
+                "score": 1.0
+            })
+
     if not chunks:
         chunks = [{
             "chunk_id": "fallback_1",
             "doc_title": f"Subject Material ({req.subject_id or 'General'})",
-            "content": f"Core concepts and topics regarding {req.topic or 'General Course Study'} in subject {req.subject_id or 'General'}. Fundamental principles, definitions, key components, processes, and practical applications."
+            "content": f"Fundamental concepts, core definitions, practical applications, algorithms, principles, and problem solving regarding {req.topic or req.name or 'Subject Knowledge'}."
         }]
     
     # 2. Determine questions count & types strictly based on question_type

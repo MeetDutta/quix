@@ -85,6 +85,7 @@ export default function TeacherDashboard() {
   // Form: Exam Generator
   const [examName, setExamName] = useState("");
   const [examSubject, setExamSubject] = useState("");
+  const [examDocumentId, setExamDocumentId] = useState("");
   const [examTopic, setExamTopic] = useState("General");
   const [examDuration, setExamDuration] = useState("30");
   const [examMarks, setExamMarks] = useState("50");
@@ -359,6 +360,7 @@ export default function TeacherDashboard() {
         body: JSON.stringify({
           name: examName || "Sample AI Quiz",
           subject_id: examSubject || "general_101",
+          document_id: examDocumentId || undefined,
           topic: examTopic || "General Concepts",
           duration_minutes: parseInt(examDuration) || 30,
           total_marks: parseFloat(examMarks) || 50,
@@ -1024,12 +1026,15 @@ export default function TeacherDashboard() {
             {createStep === 1 && (
               <div className="space-y-4 max-w-xl">
                 <div className="space-y-1.5">
-                  <label className={labelCls}>Knowledge Source</label>
+                  <label className={labelCls}>Knowledge Source (Subject)</label>
                   {kbSubjects.length > 0 ? (
                     <select
                       required
                       value={examSubject}
-                      onChange={(e) => setExamSubject(e.target.value)}
+                      onChange={(e) => {
+                        setExamSubject(e.target.value);
+                        setExamDocumentId("");
+                      }}
                       className={inputCls}
                     >
                       <option value="">Select Knowledge Source...</option>
@@ -1046,21 +1051,43 @@ export default function TeacherDashboard() {
                       required
                       value={examSubject}
                       onChange={(e) => setExamSubject(e.target.value)}
-                      placeholder="e.g. general_101 or biology_101"
+                      placeholder="e.g. general_101 or ai_unit_1"
                       className={inputCls}
                     />
                   )}
                   <p className="text-[11px] text-[#716D67]">Questions will be strictly generated using documents in this knowledge source.</p>
                 </div>
 
+                {/* Specific Document Selector (Optional) */}
+                {examSubject && (
+                  <div className="space-y-1.5 animate-fadeIn">
+                    <label className={labelCls}>Specific Document File (Optional)</label>
+                    <select
+                      value={examDocumentId}
+                      onChange={(e) => setExamDocumentId(e.target.value)}
+                      className={inputCls}
+                    >
+                      <option value="">All Documents in {examSubject.replace(/_/g, " ").toUpperCase()}</option>
+                      {documents
+                        .filter((d) => !examSubject || (d.subject_id && d.subject_id.toLowerCase() === examSubject.toLowerCase()) || examSubject === "general_101")
+                        .map((d) => (
+                          <option key={d.id} value={d.id}>
+                            📄 {d.title || d.filename}
+                          </option>
+                        ))}
+                    </select>
+                    <p className="text-[11px] text-[#716D67]">Scope generation strictly to one specific syllabus file or textbook note.</p>
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
                   <label className={labelCls}>Assessment Title</label>
-                  <input type="text" required value={examName} onChange={(e) => setExamName(e.target.value)} placeholder="e.g. Unit 4 Thermodynamics Examination" className={inputCls} />
+                  <input type="text" required value={examName} onChange={(e) => setExamName(e.target.value)} placeholder="e.g. Unit 1 Examination Paper" className={inputCls} />
                 </div>
 
                 <div className="space-y-1.5">
                   <label className={labelCls}>Topic Keyword</label>
-                  <input type="text" value={examTopic} onChange={(e) => setExamTopic(e.target.value)} placeholder="e.g. Heat Transfer, Entropy" className={inputCls} />
+                  <input type="text" value={examTopic} onChange={(e) => setExamTopic(e.target.value)} placeholder="e.g. Neural Networks, Machine Learning" className={inputCls} />
                 </div>
 
                 <div className="pt-4 flex justify-end">

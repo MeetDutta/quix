@@ -149,6 +149,9 @@ def get_exam_analytics(
             "submitted_at": s.submitted_at.strftime("%Y-%m-%d %H:%M") if s.submitted_at else ""
         })
 
+    # Sort candidates list by student name
+    submissions_list.sort(key=lambda x: (x.get("student_name", "").lower(), x.get("roll_number", "")))
+
     # Format topic analytics
     topic_analytics_list = []
     for t_name, t_data in topic_map.items():
@@ -241,15 +244,16 @@ def get_my_submissions(
     or allows teachers/admins to inspect any student's quiz submissions.
     """
     is_teacher = current_user.role in ["teacher", "inst_admin", "super_admin"]
+    valid_statuses = ["submitted", "auto_submitted"]
     
     if is_teacher and student_id:
         submissions = db.query(ExamSubmission).join(ExamCredential).filter(
-            ExamSubmission.status == "submitted",
+            ExamSubmission.status.in_(valid_statuses),
             ExamCredential.student_id == student_id
         ).order_by(ExamSubmission.submitted_at.desc()).all()
     elif is_teacher:
         submissions = db.query(ExamSubmission).filter(
-            ExamSubmission.status == "submitted"
+            ExamSubmission.status.in_(valid_statuses)
         ).order_by(ExamSubmission.submitted_at.desc()).all()
     else:
         # Find student records matching current_user
@@ -263,26 +267,34 @@ def get_my_submissions(
         
         if student_ids:
             submissions = db.query(ExamSubmission).join(ExamCredential).filter(
-                ExamSubmission.status == "submitted",
+                ExamSubmission.status.in_(valid_statuses),
                 ExamCredential.student_id.in_(student_ids)
             ).order_by(ExamSubmission.submitted_at.desc()).all()
         else:
             submissions = db.query(ExamSubmission).filter(
-                ExamSubmission.status == "submitted"
+                ExamSubmission.status.in_(valid_statuses)
             ).order_by(ExamSubmission.submitted_at.desc()).all()
         
     result = []
     for s in submissions:
+        student_obj = s.credential.student if s.credential else None
+        student_user = student_obj.user if student_obj else None
         result.append({
             "id": s.id,
             "submission_id": s.id,
             "exam_id": s.exam_id,
             "exam_name": s.exam.name if s.exam else "Exam Quiz",
+            "student_name": student_user.full_name if student_user else "Guest Student",
+            "roll_number": student_obj.roll_number if student_obj else "",
+            "student_email": student_user.email if student_user else "",
             "score": s.score,
             "max_score": s.exam.total_marks if s.exam else 50.0,
             "percentage": s.percentage,
             "submitted_at": s.submitted_at.isoformat() if s.submitted_at else ""
         })
+        
+    # Sort responses by student name (A-Z)
+    result.sort(key=lambda x: (x.get("student_name", "").lower(), x.get("submitted_at", "")))
     return result
 
 @router.get("/submission-detail/{submission_id}")
@@ -299,16 +311,69 @@ def get_submission_detail(
     if not sub:
         raise HTTPException(status_code=404, detail="Submission record not found")
         
+    valid_statuses = ["submitted", "auto_submitted"]
+        
     # Check permissions
     if current_user.role == "student":
-        # Allow access if credential student is linked to current_user
         if sub.credential and sub.credential.student and sub.credential.student.user_id:
             if sub.credential.student.user_id != current_user.id and sub.credential.student.user.email != current_user.email:
                 raise HTTPException(status_code=403, detail="Access denied to this report")
             
     # Load detailed evaluation answers from answers_json
     answers_data = json.loads(sub.answers_json) if sub.answers_json else {}
+    exam_questions = json.loads(sub.exam.questions_json) if sub.exam.questions_json else []
     
+    # Format questions list for student review
+    questions_list = []
+    for idx, eq in enumerate(exam_questions):
+        q_id = eq.get("id") or str(idx)
+        eval_item = answers_data.get(q_id, {})
+        if not eval_item and str(idx) in answers_data:
+            eval_item = answers_data.get(str(idx), {})
+        if not eval_item:
+            for k, v in answers_data.items():
+                if isinstance(v, dict) and v.get("question_text") == eq.get("question_text"):
+                    eval_item = v
+                    break
+
+        # Normalize options for frontend UI rendering
+        raw_opts = eq.get("options")
+        options_dict = {}
+        if isinstance(raw_opts, list):
+            for opt_idx, opt_text in enumerate(raw_opts):
+                key = chr(65 + opt_idx) # A, B, C, D
+                options_dict[key] = opt_text
+        elif isinstance(raw_opts, dict):
+            options_dict = raw_opts
+            
+        user_ans = eval_item.get("selected_answer", "Not Answered")
+        correct_ans = eval_item.get("correct_answer", eq.get("correct_answer", ""))
+        
+        # Match option keys if available
+        user_ans_key = user_ans
+        correct_ans_key = correct_ans
+        for k, v in options_dict.items():
+            if str(v).strip().lower() == str(user_ans).strip().lower():
+                user_ans_key = k
+            if str(v).strip().lower() == str(correct_ans).strip().lower():
+                correct_ans_key = k
+                
+        questions_list.append({
+            "id": q_id,
+            "question_text": eq.get("question_text") or eq.get("question", ""),
+            "topic": eq.get("topic", "General"),
+            "marks": eq.get("marks", 1),
+            "options": options_dict if options_dict else raw_opts,
+            "user_answer": user_ans_key,
+            "user_answer_text": user_ans,
+            "correct_answer": correct_ans_key,
+            "correct_answer_text": correct_ans,
+            "is_correct": eval_item.get("is_correct", False),
+            "score_awarded": eval_item.get("score_awarded", 0.0),
+            "explanation": eval_item.get("explanation") or eq.get("explanation", ""),
+            "ai_feedback": eval_item.get("ai_feedback")
+        })
+
     # Load proctoring alerts
     proctor_logs = db.query(ProctoringLog).filter(ProctoringLog.submission_id == submission_id).all()
     proctor_events = [
@@ -318,23 +383,17 @@ def get_submission_detail(
     
     # Build topic analysis with accuracy percentages
     topic_analysis = {}
-    exam_questions = json.loads(sub.exam.questions_json) if sub.exam.questions_json else []
-    for q_id, q_eval in answers_data.items():
-        q_topic = "General"
-        q_marks = 1.0
-        for eq in exam_questions:
-            if eq["id"] == q_id:
-                q_topic = eq.get("topic", "General")
-                q_marks = float(eq.get("marks", 1))
-                break
+    for q_item in questions_list:
+        q_topic = q_item.get("topic", "General")
+        q_marks = float(q_item.get("marks", 1))
         
         if q_topic not in topic_analysis:
             topic_analysis[q_topic] = {"correct": 0, "total": 0, "marks_earned": 0.0, "marks_possible": 0.0}
         topic_analysis[q_topic]["total"] += 1
         topic_analysis[q_topic]["marks_possible"] += q_marks
-        if q_eval.get("is_correct", False):
+        if q_item.get("is_correct", False):
             topic_analysis[q_topic]["correct"] += 1
-        topic_analysis[q_topic]["marks_earned"] += max(0, float(q_eval.get("score_awarded", 0)))
+        topic_analysis[q_topic]["marks_earned"] += max(0, float(q_item.get("score_awarded", 0)))
     
     # Compute accuracy percentage per topic
     for t in topic_analysis:
@@ -343,7 +402,7 @@ def get_submission_detail(
         else:
             topic_analysis[t]["accuracy"] = 0.0
         
-    # Call Gemini to write educational feedback dynamically!
+    # Call Gemini to write educational feedback dynamically
     ai_feedback_report = sub.ai_feedback
     if not ai_feedback_report and current_user.role == "student":
         try:
@@ -352,7 +411,6 @@ def get_submission_detail(
                 topics_scores[t] = [tdata["marks_earned"]]
             analysis = ai_service.generate_learning_analytics(topics_scores)
             ai_feedback_report = f"Strengths in: {', '.join(analysis.get('strong_topics', []))}. Action plan: {', '.join(analysis.get('recommendations', []))}."
-            # Save it back
             sub.ai_feedback = ai_feedback_report
             db.add(sub)
             db.commit()
@@ -362,7 +420,7 @@ def get_submission_detail(
     # Compute student rank for this exam
     all_subs = db.query(ExamSubmission).filter(
         ExamSubmission.exam_id == sub.exam_id,
-        ExamSubmission.status == "submitted"
+        ExamSubmission.status.in_(valid_statuses)
     ).order_by(ExamSubmission.score.desc()).all()
     
     rank = 1
@@ -374,15 +432,16 @@ def get_submission_detail(
             
     return {
         "submission_id": sub.id,
-        "student_name": sub.credential.student.user.full_name if sub.credential.student else "Guest",
-        "roll_number": sub.credential.student.roll_number if sub.credential.student else "",
-        "exam_name": sub.exam.name,
+        "student_name": sub.credential.student.user.full_name if (sub.credential and sub.credential.student and sub.credential.student.user) else "Guest Student",
+        "roll_number": sub.credential.student.roll_number if (sub.credential and sub.credential.student) else "",
+        "exam_name": sub.exam.name if sub.exam else "Assessment",
         "exam_id": sub.exam_id,
         "score": sub.score,
-        "max_score": sub.exam.total_marks,
+        "max_score": sub.exam.total_marks if sub.exam else 50.0,
         "percentage": sub.percentage,
-        "started_at": sub.started_at,
-        "submitted_at": sub.submitted_at,
+        "started_at": sub.started_at.isoformat() if sub.started_at else None,
+        "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
+        "questions": questions_list,
         "evaluated_answers": answers_data,
         "proctor_events": proctor_events,
         "topic_analysis": topic_analysis,

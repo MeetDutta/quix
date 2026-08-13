@@ -438,6 +438,12 @@ export default function StudentDashboard() {
                           <div className="font-bold text-[#242321] dark:text-[#F5F5F4] text-xs line-clamp-1">
                             {sub.exam_name || "Assessment"}
                           </div>
+                          {sub.student_name && isTeacher && (
+                            <div className="text-[11px] font-semibold text-[#9A3412] dark:text-[#EA580C] mt-0.5 flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              <span>{sub.student_name} {sub.roll_number ? `(${sub.roll_number})` : ""}</span>
+                            </div>
+                          )}
                           <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E] mt-0.5 flex items-center gap-1.5 font-mono">
                             <Calendar className="h-3 w-3" />
                             <span>{sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : "Recent"}</span>
@@ -611,34 +617,54 @@ export default function StudentDashboard() {
                               </div>
 
                               {/* Options Breakdown with KaTeX */}
-                              <div className="space-y-1.5 pl-6">
-                                {q.options && typeof q.options === "object" && Object.entries(q.options).map(([optKey, optVal]: [string, any]) => {
-                                  const isUserChoice = String(q.user_answer) === optKey;
-                                  const isActualCorrect = String(q.correct_answer) === optKey;
-                                  
-                                  return (
-                                    <div
-                                      key={optKey}
-                                      className={`p-2 rounded-lg border text-xs flex items-center justify-between ${
-                                        isActualCorrect
-                                          ? "bg-emerald-100/60 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 font-semibold"
-                                          : isUserChoice
-                                          ? "bg-rose-100/60 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700 text-rose-900 dark:text-rose-200"
-                                          : "bg-white/60 dark:bg-[#171615]/60 border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E]"
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-mono font-bold uppercase">{optKey}.</span>
-                                        <span><MathText text={String(optVal)} /></span>
+                              {q.options && typeof q.options === "object" && Object.keys(q.options).length > 0 && (
+                                <div className="space-y-1.5 pl-6">
+                                  {Object.entries(q.options).map(([optKey, optVal]: [string, any]) => {
+                                    const isUserChoice = String(q.user_answer) === optKey;
+                                    const isActualCorrect = String(q.correct_answer) === optKey;
+                                    
+                                    return (
+                                      <div
+                                        key={optKey}
+                                        className={`p-2 rounded-lg border text-xs flex items-center justify-between ${
+                                          isActualCorrect
+                                            ? "bg-emerald-100/60 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 font-semibold"
+                                            : isUserChoice
+                                            ? "bg-rose-100/60 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700 text-rose-900 dark:text-rose-200"
+                                            : "bg-white/60 dark:bg-[#171615]/60 border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E]"
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-mono font-bold uppercase">{optKey}.</span>
+                                          <span><MathText text={String(optVal)} /></span>
+                                        </div>
+                                        <div className="text-[10px] font-bold">
+                                          {isActualCorrect && <span className="text-emerald-700 dark:text-emerald-300">✓ Correct Answer</span>}
+                                          {isUserChoice && !isActualCorrect && <span className="text-rose-700 dark:text-rose-300">✗ Your Choice</span>}
+                                        </div>
                                       </div>
-                                      <div className="text-[10px] font-bold">
-                                        {isActualCorrect && <span className="text-emerald-700 dark:text-emerald-300">✓ Correct Answer</span>}
-                                        {isUserChoice && !isActualCorrect && <span className="text-rose-700 dark:text-rose-300">✗ Your Choice</span>}
-                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {/* Subjective / Written Response Display */}
+                              {(!q.options || (typeof q.options === "object" && Object.keys(q.options).length === 0)) && (
+                                <div className="space-y-2 pl-6">
+                                  <div className="p-3 rounded-lg bg-neutral-50 dark:bg-[#1D1B19] border border-[#E5E0D8] dark:border-[#292524] space-y-1">
+                                    <div className="text-[10px] font-bold uppercase text-[#716D67]">Your Written Response:</div>
+                                    <div className="text-xs text-[#242321] dark:text-[#F5F5F4] whitespace-pre-wrap">
+                                      <MathText text={String(q.user_answer_text || q.user_answer || "No response provided.")} />
                                     </div>
-                                  );
-                                })}
-                              </div>
+                                  </div>
+                                  {q.ai_feedback && (
+                                    <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs">
+                                      <b className="text-[10px] uppercase block mb-0.5">AI Evaluator Feedback:</b>
+                                      {q.ai_feedback}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
                               {/* Explanation / Critique with KaTeX */}
                               {q.explanation && (

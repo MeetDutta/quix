@@ -63,6 +63,7 @@ class ProctorLogCreate(BaseModel):
 class ExamGenerateKBRequest(BaseModel):
     name: str
     subject_id: Optional[str] = "general_101"
+    document_id: Optional[str] = None
     topic: Optional[str] = "General"
     duration_minutes: Optional[int] = 30
     total_marks: Optional[float] = 50.0
