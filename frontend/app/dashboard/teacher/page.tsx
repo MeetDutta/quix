@@ -9,7 +9,7 @@ import {
   Clipboard, Check, Download, Users, LineChart, Eye, Trash2, AlertCircle,
   Sparkles, Key, Trophy, Share2, FileText, Printer, Copy, BarChart3, 
   GraduationCap, FolderOpen, Clock, QrCode, X, ArrowRight, ArrowLeft, Pencil, Mail, CheckCircle, StopCircle,
-  RefreshCw, Save, ShieldAlert, Radio, Edit3
+  RefreshCw, Save, ShieldAlert, Radio, Edit3, ExternalLink
 } from "lucide-react";
 import MathText from "../../../components/MathText";
 
