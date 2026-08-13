@@ -27,8 +27,15 @@ class Settings(BaseSettings):
     EMAILS_FROM_EMAIL: str = "no-reply@aegeus.edu"
     EMAILS_FROM_NAME: str = "EduQuizX Examination System"
     
+    # Supabase Configuration
+    SUPABASE_URL: str = ""
+    SUPABASE_PUBLISHABLE_KEY: str = ""
+    SUPABASE_SECRET_KEY: str = ""
+    SUPABASE_JWKS_URL: str = ""
+    
     class Config:
         case_sensitive = True
+        extra = "ignore"
         env_file = ".env"
 
 settings = Settings()

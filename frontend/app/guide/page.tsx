@@ -339,11 +339,11 @@ export default function GuidePage() {
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#C84B18]/10 text-[#C84B18]">Teacher Role</span>
               </div>
               <div className="space-y-1 text-xs font-mono bg-white dark:bg-[#171615] p-3 rounded-lg border border-[#E5E0D8] dark:border-[#292524]">
-                <div><span className="text-[#716D67]">Email:</span> meetdutta001@gmail.com</div>
-                <div><span className="text-[#716D67]">Password:</span> securepassword</div>
+                <div><span className="text-[#716D67]">Email:</span> demo.teacher@eduquizx.com</div>
+                <div><span className="text-[#716D67]">Password:</span> demopassword123</div>
               </div>
               <button
-                onClick={() => copyToClipboard("meetdutta001@gmail.com", "teacher")}
+                onClick={() => copyToClipboard("demo.teacher@eduquizx.com", "teacher")}
                 className="w-full py-1.5 px-3 rounded-lg border border-[#E5E0D8] dark:border-[#292524] hover:bg-white text-xs font-semibold text-[#716D67] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 {copiedCred === "teacher" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
@@ -358,11 +358,11 @@ export default function GuidePage() {
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Student Role</span>
               </div>
               <div className="space-y-1 text-xs font-mono bg-white dark:bg-[#171615] p-3 rounded-lg border border-[#E5E0D8] dark:border-[#292524]">
-                <div><span className="text-[#716D67]">Email:</span> student@eduquizx.com</div>
-                <div><span className="text-[#716D67]">Password:</span> securepassword</div>
+                <div><span className="text-[#716D67]">Email:</span> demo.student@eduquizx.com</div>
+                <div><span className="text-[#716D67]">Password:</span> demopassword123</div>
               </div>
               <button
-                onClick={() => copyToClipboard("student@eduquizx.com", "student")}
+                onClick={() => copyToClipboard("demo.student@eduquizx.com", "student")}
                 className="w-full py-1.5 px-3 rounded-lg border border-[#E5E0D8] dark:border-[#292524] hover:bg-white text-xs font-semibold text-[#716D67] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 {copiedCred === "student" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}

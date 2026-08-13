@@ -63,6 +63,18 @@ export default function LoginPage() {
     }
   }, []);
 
+  const autofillTeacher = () => {
+    setRole("teacher");
+    setEmail("demo.teacher@eduquizx.com");
+    setPassword("demopassword123");
+  };
+
+  const autofillStudent = () => {
+    setRole("student");
+    setEmail("demo.student@eduquizx.com");
+    setPassword("demopassword123");
+  };
+
   const toggleTheme = () => {
     const next = theme === "light" ? "dark" : "light";
     setTheme(next);
