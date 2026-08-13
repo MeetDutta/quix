@@ -7,6 +7,7 @@ export const API_V1 = `${baseHost}/api/v1`;
 
 /**
  * Authenticated fetch wrapper. Automatically injects Bearer token and handles JSON.
+ * Automatically handles 401 Unauthorized / expired token by clearing session.
  */
 export async function apiFetch(
   path: string,
@@ -27,5 +28,16 @@ export async function apiFetch(
   const normalizedPath = path.replace(/^\/api\/v1/, "");
   const formattedPath = normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`;
   
-  return fetch(`${API_V1}${formattedPath}`, { ...rest, headers: h });
+  const res = await fetch(`${API_V1}${formattedPath}`, { ...rest, headers: h });
+
+  // Automatic stale session cleanup on 401
+  if (res.status === 401 && typeof window !== "undefined" && !path.includes("/auth/login")) {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("fullName");
+    localStorage.removeItem("institutionId");
+    window.location.href = "/login?expired=1";
+  }
+
+  return res;
 }

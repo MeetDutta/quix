@@ -58,7 +58,10 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
         )
     user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired or user not found. Please log in again."
+        )
     return user
 
 class RoleChecker:
