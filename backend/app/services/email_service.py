@@ -122,6 +122,7 @@ class EmailService:
         
         logger.info(f"📧 [CREDENTIALS EMAIL] Dispatched generated password to {student_name} ({email}) | Pass: {password}")
         print(f"📧 [CREDENTIALS EMAIL] Dispatched generated password to {student_name} ({email}) | Pass: {password}")
+        self._send_smtp_email(email, subject, html_content)
     def send_password_reset_email(self, user_name: str, email: str, reset_token: str):
         """Dispatches a password reset recovery email containing a secure tokenized reset link."""
         reset_url = f"http://localhost:3000/reset-password?token={reset_token}"

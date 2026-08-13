@@ -129,7 +129,8 @@ def verify_student(
         "status": "success",
         "message": "Account authorized successfully. Your student portal password has been generated and sent to your email.",
         "email": user.email,
-        "full_name": user.full_name
+        "full_name": user.full_name,
+        "generated_password": generated_pwd
     }
 
 @router.post("/google-login", response_model=Token)

@@ -19,6 +19,8 @@ function VerifyStudentContent() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
   const [verifiedName, setVerifiedName] = useState<string | null>(null);
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
+  const [copiedPwd, setCopiedPwd] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -35,6 +37,9 @@ function VerifyStudentContent() {
           setSuccess(true);
           setVerifiedEmail(data.email);
           setVerifiedName(data.full_name);
+          if (data.generated_password) {
+            setGeneratedPassword(data.generated_password);
+          }
         } else {
           setErrorMessage(data.detail || "Invalid or expired verification link.");
         }
@@ -47,6 +52,14 @@ function VerifyStudentContent() {
 
     verifyToken();
   }, [token]);
+
+  const copyPassword = () => {
+    if (generatedPassword) {
+      navigator.clipboard.writeText(generatedPassword);
+      setCopiedPwd(true);
+      setTimeout(() => setCopiedPwd(false), 2000);
+    }
+  };
 
   const handleGoogleAuthorize = async () => {
     // Simulated Google OAuth authorization popup / client token
@@ -112,14 +125,29 @@ function VerifyStudentContent() {
             </div>
 
             {/* Notice Card */}
-            <div className="bg-[#F0ECE4]/60 dark:bg-[#1D1B19] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 text-left text-xs space-y-2">
+            <div className="bg-[#F0ECE4]/60 dark:bg-[#1D1B19] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 text-left text-xs space-y-3">
               <div className="flex items-center gap-2 font-semibold text-[#242321] dark:text-[#F5F5F4]">
                 <Mail className="h-4 w-4 text-[#C84B18]" />
-                <span>Password Generated & Dispatched</span>
+                <span>Generated Password & Credentials</span>
               </div>
               <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E] leading-relaxed">
                 A secure portal access password has been generated and sent to your email inbox (<b>{verifiedEmail}</b>).
               </p>
+
+              {generatedPassword && (
+                <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-lg p-3 space-y-1">
+                  <div className="text-[10px] uppercase font-bold text-[#716D67] dark:text-[#A8A29E] tracking-wider">Your Student Portal Password:</div>
+                  <div className="flex items-center justify-between font-mono text-sm font-bold text-[#047857] dark:text-emerald-400">
+                    <span>{generatedPassword}</span>
+                    <button
+                      onClick={copyPassword}
+                      className="text-xs px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition-all font-sans cursor-pointer"
+                    >
+                      {copiedPwd ? "Copied!" : "Copy Password"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-3 pt-2">
