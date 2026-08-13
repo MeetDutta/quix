@@ -30,6 +30,7 @@ export default function GuidePage() {
   const router = useRouter();
   const [activeWorkflow, setActiveWorkflow] = useState<"teacher" | "student" | "proctoring" | "analytics">("teacher");
   const [copiedCred, setCopiedCred] = useState<string | null>(null);
+  const [zoomImg, setZoomImg] = useState<string | null>(null);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -154,56 +155,116 @@ export default function GuidePage() {
 
         {/* ═══════ TAB 1: TEACHER WORKFLOW ═══════ */}
         {activeWorkflow === "teacher" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fadeIn">
-            <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 space-y-4 shadow-sm">
-              <div className="w-8 h-8 rounded-lg bg-[#C84B18]/10 text-[#C84B18] font-bold flex items-center justify-center text-xs">
-                01
+          <div className="space-y-8 animate-fadeIn">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 space-y-4 shadow-sm">
+                <div className="w-8 h-8 rounded-lg bg-[#C84B18]/10 text-[#C84B18] font-bold flex items-center justify-center text-xs">
+                  01
+                </div>
+                <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">Upload Course Documents to Vector KB</h3>
+                <p className="text-xs text-[#716D67] dark:text-[#A8A29E] leading-relaxed">
+                  Navigate to the <b>Knowledge Base</b> tab. Upload lecture slides, PDFs, or textbooks. The system automatically chunks the text and indexes vector embeddings using Gemini AI.
+                </p>
+                
+                {/* Real Screenshot Preview Frame */}
+                <div 
+                  onClick={() => setZoomImg("/guide/knowledge-base.png")}
+                  className="group relative rounded-xl border border-[#E5E0D8] dark:border-[#292524] overflow-hidden cursor-pointer shadow-xs hover:shadow-md transition-all"
+                >
+                  <div className="bg-[#EAE5DC] dark:bg-[#24211D] px-3 py-1.5 border-b border-[#E5E0D8] dark:border-[#292524] flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                    <span className="ml-2 text-[10px] font-mono text-[#716D67]">Knowledge Base Sources</span>
+                  </div>
+                  <img src="/guide/knowledge-base.png" alt="Knowledge Base Upload" className="w-full object-cover group-hover:scale-102 transition-transform duration-300" />
+                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-semibold transition-opacity">
+                    Click to Expand & Zoom 🔍
+                  </div>
+                </div>
               </div>
-              <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">Upload Course Documents to Vector KB</h3>
-              <p className="text-xs text-[#716D67] dark:text-[#A8A29E] leading-relaxed">
-                Navigate to the <b>Knowledge Base</b> tab. Upload lecture slides, PDFs, or textbooks. The system automatically chunks the text and indexes vector embeddings using Gemini AI.
-              </p>
-              <div className="p-3 bg-[#F7F4EF] dark:bg-[#141312] rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-[11px] text-[#716D67]">
-                💡 Supported formats: PDF, DOCX, TXT, PPTX (Max 25MB per document).
+
+              <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 space-y-4 shadow-sm">
+                <div className="w-8 h-8 rounded-lg bg-[#C84B18]/10 text-[#C84B18] font-bold flex items-center justify-center text-xs">
+                  02
+                </div>
+                <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">AI RAG Assessment Stepper</h3>
+                <p className="text-xs text-[#716D67] dark:text-[#A8A29E] leading-relaxed">
+                  Use the <b>Assessment Stepper Wizard</b> to specify knowledge sources, topic keywords, question counts, passing marks, and exam timing presets.
+                </p>
+
+                {/* Real Screenshot Preview Frame */}
+                <div 
+                  onClick={() => setZoomImg("/guide/assessment-stepper.png")}
+                  className="group relative rounded-xl border border-[#E5E0D8] dark:border-[#292524] overflow-hidden cursor-pointer shadow-xs hover:shadow-md transition-all"
+                >
+                  <div className="bg-[#EAE5DC] dark:bg-[#24211D] px-3 py-1.5 border-b border-[#E5E0D8] dark:border-[#292524] flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                    <span className="ml-2 text-[10px] font-mono text-[#716D67]">Assessment Stepper Wizard</span>
+                  </div>
+                  <img src="/guide/assessment-stepper.png" alt="Assessment Stepper" className="w-full object-cover group-hover:scale-102 transition-transform duration-300" />
+                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-semibold transition-opacity">
+                    Click to Expand & Zoom 🔍
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 space-y-4 shadow-sm">
-              <div className="w-8 h-8 rounded-lg bg-[#C84B18]/10 text-[#C84B18] font-bold flex items-center justify-center text-xs">
-                02
-              </div>
-              <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">AI RAG Assessment Generation</h3>
-              <p className="text-xs text-[#716D67] dark:text-[#A8A29E] leading-relaxed">
-                Use the <b>Assessment Wizard</b> to specify subject, topic, question count (MCQ/Subjective), difficulty, and time limits. Gemini AI generates rigorous questions grounded directly in your uploaded syllabus.
-              </p>
-              <div className="p-3 bg-[#F7F4EF] dark:bg-[#141312] rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-[11px] text-[#716D67]">
-                ✨ Review and refine questions in Question Studio before publishing.
-              </div>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 space-y-4 shadow-sm">
+                <div className="w-8 h-8 rounded-lg bg-[#C84B18]/10 text-[#C84B18] font-bold flex items-center justify-center text-xs">
+                  03
+                </div>
+                <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">Assessments Table & Live Proctor Hub</h3>
+                <p className="text-xs text-[#716D67] dark:text-[#A8A29E] leading-relaxed">
+                  Monitor active and scheduled exams from the high-density <b>Assessments Table</b>. Launch Live Proctoring streams or end exams early.
+                </p>
 
-            <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 space-y-4 shadow-sm">
-              <div className="w-8 h-8 rounded-lg bg-[#C84B18]/10 text-[#C84B18] font-bold flex items-center justify-center text-xs">
-                03
+                {/* Real Screenshot Preview Frame */}
+                <div 
+                  onClick={() => setZoomImg("/guide/assessments-table.png")}
+                  className="group relative rounded-xl border border-[#E5E0D8] dark:border-[#292524] overflow-hidden cursor-pointer shadow-xs hover:shadow-md transition-all"
+                >
+                  <div className="bg-[#EAE5DC] dark:bg-[#24211D] px-3 py-1.5 border-b border-[#E5E0D8] dark:border-[#292524] flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                    <span className="ml-2 text-[10px] font-mono text-[#716D67]">Assessments Table & Actions</span>
+                  </div>
+                  <img src="/guide/assessments-table.png" alt="Assessments Table" className="w-full object-cover group-hover:scale-102 transition-transform duration-300" />
+                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-semibold transition-opacity">
+                    Click to Expand & Zoom 🔍
+                  </div>
+                </div>
               </div>
-              <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">Generate Session Credentials</h3>
-              <p className="text-xs text-[#716D67] dark:text-[#A8A29E] leading-relaxed">
-                Click <b>Generate Candidate Credentials</b> on any exam card. The system generates unique, timed passcodes and dispatches automated authorization emails to enrolled students.
-              </p>
-              <div className="p-3 bg-[#F7F4EF] dark:bg-[#141312] rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-[11px] text-[#716D67]">
-                📧 Students receive email notification containing test link and passcode.
-              </div>
-            </div>
 
-            <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 space-y-4 shadow-sm">
-              <div className="w-8 h-8 rounded-lg bg-[#C84B18]/10 text-[#C84B18] font-bold flex items-center justify-center text-xs">
-                04
-              </div>
-              <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">Grade Release & Override Control</h3>
-              <p className="text-xs text-[#716D67] dark:text-[#A8A29E] leading-relaxed">
-                Student grades remain hidden until you click <b>Publish Results</b>. You can review AI subjective evaluations in the Candidate Response modal and override marks inline if needed.
-              </p>
-              <div className="p-3 bg-[#F7F4EF] dark:bg-[#141312] rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-[11px] text-[#716D67]">
-                🔒 Full teacher control over grade release and manual mark overrides.
+              <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 space-y-4 shadow-sm">
+                <div className="w-8 h-8 rounded-lg bg-[#C84B18]/10 text-[#C84B18] font-bold flex items-center justify-center text-xs">
+                  04
+                </div>
+                <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">Reusable Question Bank Studio</h3>
+                <p className="text-xs text-[#716D67] dark:text-[#A8A29E] leading-relaxed">
+                  Browse curated questions filtered by difficulty, topic, and subject in the <b>Question Bank Studio</b>.
+                </p>
+
+                {/* Real Screenshot Preview Frame */}
+                <div 
+                  onClick={() => setZoomImg("/guide/question-bank.png")}
+                  className="group relative rounded-xl border border-[#E5E0D8] dark:border-[#292524] overflow-hidden cursor-pointer shadow-xs hover:shadow-md transition-all"
+                >
+                  <div className="bg-[#EAE5DC] dark:bg-[#24211D] px-3 py-1.5 border-b border-[#E5E0D8] dark:border-[#292524] flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                    <span className="ml-2 text-[10px] font-mono text-[#716D67]">Question Bank Studio</span>
+                  </div>
+                  <img src="/guide/question-bank.png" alt="Question Bank Studio" className="w-full object-cover group-hover:scale-102 transition-transform duration-300" />
+                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-semibold transition-opacity">
+                    Click to Expand & Zoom 🔍
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -376,6 +437,24 @@ export default function GuidePage() {
           </div>
         </div>
       </section>
+
+      {/* ═══════ SCREENSHOT FULLSCREEN ZOOM MODAL ═══════ */}
+      {zoomImg && (
+        <div 
+          onClick={() => setZoomImg(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fadeIn cursor-pointer"
+        >
+          <div className="relative max-w-5xl w-full max-h-[90vh] flex flex-col items-center">
+            <button 
+              onClick={() => setZoomImg(null)}
+              className="absolute -top-10 right-0 text-white hover:text-amber-400 text-xs font-bold flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full border border-white/20"
+            >
+              <span>Close Preview ✕</span>
+            </button>
+            <img src={zoomImg} alt="Screenshot Preview" className="max-w-full max-h-[85vh] object-contain rounded-xl border border-white/20 shadow-2xl" />
+          </div>
+        </div>
+      )}
 
       {/* ═══════ FOOTER ═══════ */}
       <footer className="border-t border-[#E5E0D8] dark:border-[#292524] py-8 text-center text-xs text-[#716D67]">
