@@ -161,9 +161,8 @@ app = FastAPI(
 # Set up CORS middleware for dev & production client requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://.*",
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origin_regex=r".*",
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"]
