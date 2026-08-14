@@ -106,13 +106,22 @@ def create_student(
     )
     
     # Trigger automated authorization email with verification link and Google auth
-    background_tasks.add_task(
-        email_service.send_student_authorization_email,
-        student_name=user.full_name,
-        email=user.email,
-        verification_token=verification_token,
-        roll_number=student.roll_number
-    )
+    try:
+        email_service.send_student_authorization_email(
+            student_name=user.full_name,
+            email=user.email,
+            verification_token=verification_token,
+            roll_number=student.roll_number
+        )
+    except Exception as email_err:
+        print(f"⚠️ Direct email send notice: {email_err}")
+        background_tasks.add_task(
+            email_service.send_student_authorization_email,
+            student_name=user.full_name,
+            email=user.email,
+            verification_token=verification_token,
+            roll_number=student.roll_number
+        )
     
     dept = db.query(Department).filter(Department.id == student.department_id).first() if student.department_id else None
     return StudentResponse(
@@ -143,13 +152,22 @@ def resend_student_authorization(
         student.user.verification_token = str(uuid.uuid4())
         db.commit()
         
-    background_tasks.add_task(
-        email_service.send_student_authorization_email,
-        student_name=student.user.full_name,
-        email=student.user.email,
-        verification_token=student.user.verification_token,
-        roll_number=student.roll_number
-    )
+    try:
+        email_service.send_student_authorization_email(
+            student_name=student.user.full_name,
+            email=student.user.email,
+            verification_token=student.user.verification_token,
+            roll_number=student.roll_number
+        )
+    except Exception as email_err:
+        print(f"⚠️ Direct resend email notice: {email_err}")
+        background_tasks.add_task(
+            email_service.send_student_authorization_email,
+            student_name=student.user.full_name,
+            email=student.user.email,
+            verification_token=student.user.verification_token,
+            roll_number=student.roll_number
+        )
     return {"message": f"Authorization email re-sent to {student.user.email}"}
 
 @router.post("/import")
