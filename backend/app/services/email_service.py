@@ -23,11 +23,11 @@ class EmailService:
             # Primary Attempt (STARTTLS Port 587 or configured port)
             try:
                 if settings.SMTP_PORT == 465:
-                    with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+                    with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=3) as server:
                         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                         server.send_message(msg)
                 else:
-                    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+                    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=3) as server:
                         server.starttls()
                         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                         server.send_message(msg)
@@ -39,7 +39,7 @@ class EmailService:
                 print(f"⚠️ Primary SMTP attempt failed ({primary_err}), attempting SSL fallback port 465...")
                 try:
                     # Fallback to SSL Port 465
-                    with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=10) as server:
+                    with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=3) as server:
                         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                         server.send_message(msg)
                     logger.info(f"⚡ Fallback SSL SMTP email transmitted to {to_email}")
