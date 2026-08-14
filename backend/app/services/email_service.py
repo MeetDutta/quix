@@ -1,5 +1,6 @@
 import logging
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
@@ -20,34 +21,30 @@ class EmailService:
             msg["To"] = to_email
             msg.attach(MIMEText(html_content, "html"))
             
-            # Primary Attempt (STARTTLS Port 587 or configured port)
+            # Primary Attempt: SSL Port 465 (bypasses cloud Port 587 blocks on Render)
             try:
-                if settings.SMTP_PORT == 465:
-                    with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=3) as server:
-                        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                        server.send_message(msg)
-                else:
-                    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=3) as server:
+                context = ssl.create_default_context()
+                with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, context=context, timeout=5) as server:
+                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                    server.send_message(msg)
+                logger.info(f"⚡ Real SMTP SSL (Port 465) email transmitted to {to_email}")
+                print(f"⚡ Real SMTP SSL (Port 465) email transmitted to {to_email}")
+                return True
+            except Exception as primary_err:
+                logger.warning(f"⚠️ Primary SSL 465 failed ({primary_err}), attempting STARTTLS 587 fallback...")
+                print(f"⚠️ Primary SSL 465 failed ({primary_err}), attempting STARTTLS 587 fallback...")
+                try:
+                    # Fallback Attempt: STARTTLS Port 587
+                    with smtplib.SMTP(settings.SMTP_HOST, 587, timeout=5) as server:
                         server.starttls()
                         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                         server.send_message(msg)
-                logger.info(f"⚡ Real SMTP email transmitted to {to_email}")
-                print(f"⚡ Real SMTP email transmitted to {to_email}")
-                return True
-            except Exception as primary_err:
-                logger.warning(f"⚠️ Primary SMTP attempt failed ({primary_err}), attempting SSL fallback port 465...")
-                print(f"⚠️ Primary SMTP attempt failed ({primary_err}), attempting SSL fallback port 465...")
-                try:
-                    # Fallback to SSL Port 465
-                    with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=3) as server:
-                        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                        server.send_message(msg)
-                    logger.info(f"⚡ Fallback SSL SMTP email transmitted to {to_email}")
-                    print(f"⚡ Fallback SSL SMTP email transmitted to {to_email}")
+                    logger.info(f"⚡ Fallback STARTTLS (Port 587) email transmitted to {to_email}")
+                    print(f"⚡ Fallback STARTTLS (Port 587) email transmitted to {to_email}")
                     return True
                 except Exception as fallback_err:
-                    logger.error(f"❌ SMTP delivery failed for {to_email}: Primary={primary_err}, Fallback={fallback_err}")
-                    print(f"❌ SMTP delivery failed for {to_email}: Primary={primary_err}, Fallback={fallback_err}")
+                    logger.error(f"❌ SMTP delivery failed for {to_email}: SSL 465={primary_err}, STARTTLS 587={fallback_err}")
+                    print(f"❌ SMTP delivery failed for {to_email}: SSL 465={primary_err}, STARTTLS 587={fallback_err}")
                     return False
         else:
             logger.warning(f"⚠️ SMTP credentials not set on server. Missing SMTP_HOST ('{settings.SMTP_HOST}') or SMTP_USER ('{settings.SMTP_USER}').")

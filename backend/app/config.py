@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     
     # SMTP Email Configuration
     SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
+    SMTP_PORT: int = 465
     SMTP_USER: str = "aegeusexams@gmail.com"
     SMTP_PASSWORD: str = "bpofgsqqgmbectsb"
     EMAILS_FROM_EMAIL: str = "aegeusexams@gmail.com"
