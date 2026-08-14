@@ -12,28 +12,47 @@ class EmailService:
         self.enabled = True
 
     def _send_smtp_email(self, to_email: str, subject: str, html_content: str):
-        """Transmits raw HTML email via SMTP server if settings are configured in backend/.env."""
+        """Transmits raw HTML email via SMTP server if settings are configured in backend environment."""
         if settings.SMTP_HOST and settings.SMTP_USER:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>"
+            msg["To"] = to_email
+            msg.attach(MIMEText(html_content, "html"))
+            
+            # Primary Attempt (STARTTLS Port 587 or configured port)
             try:
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = subject
-                msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>"
-                msg["To"] = to_email
-                
-                msg.attach(MIMEText(html_content, "html"))
-                
-                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=5) as server:
-                    server.starttls()
-                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                    server.send_message(msg)
+                if settings.SMTP_PORT == 465:
+                    with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+                        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                        server.send_message(msg)
+                else:
+                    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+                        server.starttls()
+                        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                        server.send_message(msg)
                 logger.info(f"⚡ Real SMTP email transmitted to {to_email}")
                 print(f"⚡ Real SMTP email transmitted to {to_email}")
                 return True
-            except Exception as e:
-                logger.error(f"❌ SMTP delivery failed for {to_email}: {str(e)}")
-                print(f"❌ SMTP delivery failed for {to_email}: {str(e)}")
-                return False
-        return False
+            except Exception as primary_err:
+                logger.warning(f"⚠️ Primary SMTP attempt failed ({primary_err}), attempting SSL fallback port 465...")
+                print(f"⚠️ Primary SMTP attempt failed ({primary_err}), attempting SSL fallback port 465...")
+                try:
+                    # Fallback to SSL Port 465
+                    with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=10) as server:
+                        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                        server.send_message(msg)
+                    logger.info(f"⚡ Fallback SSL SMTP email transmitted to {to_email}")
+                    print(f"⚡ Fallback SSL SMTP email transmitted to {to_email}")
+                    return True
+                except Exception as fallback_err:
+                    logger.error(f"❌ SMTP delivery failed for {to_email}: Primary={primary_err}, Fallback={fallback_err}")
+                    print(f"❌ SMTP delivery failed for {to_email}: Primary={primary_err}, Fallback={fallback_err}")
+                    return False
+        else:
+            logger.warning(f"⚠️ SMTP credentials not set on server. Missing SMTP_HOST ('{settings.SMTP_HOST}') or SMTP_USER ('{settings.SMTP_USER}').")
+            print(f"⚠️ SMTP credentials not set on server. Missing SMTP_HOST ('{settings.SMTP_HOST}') or SMTP_USER ('{settings.SMTP_USER}').")
+            return False
 
     def send_student_authorization_email(self, student_name: str, email: str, verification_token: str, roll_number: Optional[str] = None):
         """Dispatches an authorization email requesting the student to verify their account or authorize with Google."""
