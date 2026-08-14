@@ -1,4 +1,4 @@
-const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "https://eduquizx.onrender.com";
 // Clean trailing slashes and redundant /api/v1 suffixes
 const baseHost = rawApiUrl.replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "");
 
@@ -9,7 +9,7 @@ export function getFrontendBaseUrl(): string {
   if (typeof window !== "undefined" && window.location.origin) {
     return window.location.origin;
   }
-  return "http://localhost:3000";
+  return "https://eduquizx-f.onrender.com";
 }
 
 export function getWebSocketUrl(path: string): string {
