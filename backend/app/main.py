@@ -155,7 +155,8 @@ seed_initial_data()
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Enterprise-grade AI-powered Examination & Student Management System",
-    version="1.0.0"
+    version="1.0.0",
+    redirect_slashes=False
 )
 
 # Set up CORS middleware for dev & production client requests

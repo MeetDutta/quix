@@ -60,6 +60,7 @@ def list_students(
         ))
     return resp
 
+@router.post("", response_model=StudentResponse)
 @router.post("/", response_model=StudentResponse)
 def create_student(
     student_in: StudentCreate,

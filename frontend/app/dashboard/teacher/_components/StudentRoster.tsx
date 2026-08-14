@@ -47,7 +47,7 @@ export default function StudentRoster({ students, token, onRefresh }: StudentRos
     e.preventDefault();
     setIsCreatingStudent(true);
     try {
-      const res = await apiFetch("/students/", {
+      const res = await apiFetch("/students", {
         token, method: "POST",
         body: JSON.stringify({ email: studentEmail, full_name: studentName, roll_number: studentRoll })
       });
