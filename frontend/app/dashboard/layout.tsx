@@ -3,7 +3,7 @@
 import { useAuthStore } from "../../store/authStore";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { apiFetch } from "../../lib/api";
+import { apiFetch, API_BASE } from "../../lib/api";
 import { 
   GraduationCap, 
   BookOpen, 
@@ -396,7 +396,7 @@ export default function DashboardLayout({
             {devToolsOpen && !sidebarCollapsed && (
               <div className="mt-1 space-y-0.5 pl-2 border-l border-[#E5E0D8] dark:border-[#292524]">
                 <a 
-                  href="http://localhost:8000/static/index.html" 
+                  href={`${API_BASE}/static/index.html`} 
                   target="_blank" 
                   rel="noreferrer"
                   className="flex items-center justify-between px-2 py-1 text-[11px] text-[#716D67] hover:text-[#C84B18]"
@@ -405,7 +405,7 @@ export default function DashboardLayout({
                   <ExternalLink className="h-3 w-3" />
                 </a>
                 <a 
-                  href="http://localhost:8000/static/exam.html" 
+                  href={`${API_BASE}/static/exam.html`} 
                   target="_blank" 
                   rel="noreferrer"
                   className="flex items-center justify-between px-2 py-1 text-[11px] text-[#716D67] hover:text-[#C84B18]"

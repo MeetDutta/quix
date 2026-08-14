@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "../../../store/authStore";
 import { useToast } from "../../../components/Toast";
-import { apiFetch } from "../../../lib/api";
+import { apiFetch, API_V1, getFrontendBaseUrl, getWebSocketUrl } from "../../../lib/api";
 import { 
   Upload, Plus, FileSpreadsheet, BookOpen, Cpu, Calendar, Lock, ChevronRight, 
   Clipboard, Check, Download, Users, LineChart, Eye, Trash2, AlertCircle,
@@ -522,7 +522,7 @@ export default function TeacherDashboard() {
   // Live WebSocket Proctoring Stream
   useEffect(() => {
     if (!liveProctorExam) return;
-    const wsUrl = `ws://localhost:8000/api/v1/attempts/ws/teacher/${liveProctorExam.id}`;
+    const wsUrl = getWebSocketUrl(`/attempts/ws/teacher/${liveProctorExam.id}`);
     let socket: WebSocket | null = null;
     try {
       socket = new WebSocket(wsUrl);
@@ -982,7 +982,7 @@ export default function TeacherDashboard() {
                             )}
 
                             <a
-                              href={`http://localhost:8000/api/v1/exams/${exam.id}/pdf/question-paper`}
+                              href={`${API_V1}/exams/${exam.id}/pdf/question-paper`}
                               target="_blank" rel="noreferrer"
                               className="p-1.5 rounded border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524]"
                               title="Print Question Paper PDF"
@@ -2027,7 +2027,7 @@ export default function TeacherDashboard() {
               </div>
               <div className="flex items-center gap-2">
                 <a
-                  href={`http://localhost:8000/api/v1/reports/submission-detail/${studentAnswerModal.submission_id}/printable`}
+                  href={`${API_V1}/reports/submission-detail/${studentAnswerModal.submission_id}/printable`}
                   target="_blank"
                   rel="noreferrer"
                   className="px-3 py-1.5 rounded-lg bg-[#C84B18]/10 text-[#C84B18] hover:bg-[#C84B18]/20 font-bold text-xs flex items-center gap-1.5 transition-all"
@@ -2089,7 +2089,7 @@ export default function TeacherDashboard() {
 
             <div className="pt-3 border-t border-[#E5E0D8] dark:border-[#292524] flex justify-between items-center shrink-0">
               <a
-                href={`http://localhost:8000/api/v1/reports/submission-detail/${studentAnswerModal.submission_id}/printable`}
+                href={`${API_V1}/reports/submission-detail/${studentAnswerModal.submission_id}/printable`}
                 target="_blank"
                 rel="noreferrer"
                 className="text-xs text-[#C84B18] font-bold hover:underline flex items-center gap-1"
@@ -2131,7 +2131,7 @@ export default function TeacherDashboard() {
             {/* High-Resolution QR Code */}
             <div className="bg-[#FBF9F5] border border-[#E7E0D3] rounded-2xl p-4 inline-block mx-auto shadow-inner">
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`http://localhost:3000/exam/${qrModalExam.exam_code}`)}`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`${getFrontendBaseUrl()}/exam/${qrModalExam.exam_code}`)}`}
                 alt={`QR Code for ${qrModalExam.name}`}
                 className="w-48 h-48 mx-auto rounded-lg"
               />
@@ -2140,11 +2140,11 @@ export default function TeacherDashboard() {
             <div className="space-y-2 text-xs">
               <div className="bg-[#FCEBE6] border border-[#F7D5CA] rounded-xl p-2.5 flex items-center justify-between gap-2">
                 <span className="font-mono font-bold text-[#9A3412] truncate">
-                  http://localhost:3000/exam/{qrModalExam.exam_code}
+                  {getFrontendBaseUrl()}/exam/{qrModalExam.exam_code}
                 </span>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`http://localhost:3000/exam/${qrModalExam.exam_code}`);
+                    navigator.clipboard.writeText(`${getFrontendBaseUrl()}/exam/${qrModalExam.exam_code}`);
                     showToast("Exam portal URL copied to clipboard!", "success");
                   }}
                   className="bg-white border border-[#E7E0D3] px-2 py-1 rounded-lg text-[#9A3412] font-bold hover:bg-[#F3EDE2] shrink-0"
@@ -2591,7 +2591,7 @@ export default function TeacherDashboard() {
             <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#E5E0D8] dark:border-[#292524] shrink-0">
               <div className="flex items-center gap-2">
                 <a
-                  href={`http://localhost:8000/api/v1/exams/${previewExam.id}/pdf/question-paper`}
+                  href={`${API_V1}/exams/${previewExam.id}/pdf/question-paper`}
                   target="_blank"
                   rel="noreferrer"
                   className="px-3 py-2 rounded-md border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] text-xs font-medium flex items-center gap-1.5 hover:bg-[#E5E0D8]/40"

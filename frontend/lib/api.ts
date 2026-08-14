@@ -5,6 +5,20 @@ const baseHost = rawApiUrl.replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "");
 export const API_BASE = baseHost;
 export const API_V1 = `${baseHost}/api/v1`;
 
+export function getFrontendBaseUrl(): string {
+  if (typeof window !== "undefined" && window.location.origin) {
+    return window.location.origin;
+  }
+  return "http://localhost:3000";
+}
+
+export function getWebSocketUrl(path: string): string {
+  const wsProtocol = API_BASE.startsWith("https") ? "wss" : "ws";
+  const host = API_BASE.replace(/^https?:\/\//, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${wsProtocol}://${host}${normalizedPath}`;
+}
+
 /**
  * Authenticated fetch wrapper. Automatically injects Bearer token and handles JSON.
  * Automatically handles 401 Unauthorized / expired token by clearing session.

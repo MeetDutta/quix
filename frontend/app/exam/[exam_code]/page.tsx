@@ -3,7 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import { useExamStore } from "../../../store/examStore";
-import { apiFetch } from "../../../lib/api";
+import { apiFetch, API_V1 } from "../../../lib/api";
 import { useToast } from "../../../components/Toast";
 import { AlertCircle, Lock, Timer, Flag, ChevronLeft, ChevronRight, CheckSquare, ShieldAlert, CheckCircle2, FileText, Clock, CalendarClock, Calculator } from "lucide-react";
 import MathText from "../../../components/MathText";
@@ -382,7 +382,7 @@ export default function ExamPortal() {
 
           <div className="space-y-3 pt-2">
             <a
-              href={`http://localhost:8000/api/v1/reports/submission-detail/${submittedResult.submission_id}/printable`}
+              href={`${API_V1}/reports/submission-detail/${submittedResult.submission_id}/printable`}
               target="_blank"
               rel="noreferrer"
               className="w-full bg-gradient-to-r from-[#9A3412] to-[#C2410C] text-white font-bold rounded-xl py-3 text-xs shadow-sm hover:from-[#7C2D12] hover:to-[#9A3412] transition-all flex items-center justify-center gap-2"

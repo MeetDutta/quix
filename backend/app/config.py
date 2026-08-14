@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     SUPABASE_SECRET_KEY: str = ""
     SUPABASE_JWKS_URL: str = ""
     
+    # Frontend Deployment URL for emails & links
+    FRONTEND_URL: str = "http://localhost:3000"
+    
     class Config:
         case_sensitive = True
         extra = "ignore"

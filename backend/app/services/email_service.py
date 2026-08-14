@@ -37,7 +37,7 @@ class EmailService:
 
     def send_student_authorization_email(self, student_name: str, email: str, verification_token: str, roll_number: Optional[str] = None):
         """Dispatches an authorization email requesting the student to verify their account or authorize with Google."""
-        verify_url = f"http://localhost:3000/verify-student?token={verification_token}"
+        verify_url = f"{settings.FRONTEND_URL}/verify-student?token={verification_token}"
         subject = "Action Required: Authorize Your EduQuizX Student Account"
         
         html_content = f"""
@@ -85,7 +85,7 @@ class EmailService:
 
     def send_student_credentials_email(self, student_name: str, email: str, password: str):
         """Dispatches generated student portal password after authorization is completed."""
-        portal_url = "http://localhost:3000"
+        portal_url = settings.FRONTEND_URL
         subject = "Your EduQuizX Student Portal Password & Credentials"
         
         html_content = f"""
@@ -125,7 +125,7 @@ class EmailService:
         self._send_smtp_email(email, subject, html_content)
     def send_password_reset_email(self, user_name: str, email: str, reset_token: str):
         """Dispatches a password reset recovery email containing a secure tokenized reset link."""
-        reset_url = f"http://localhost:3000/reset-password?token={reset_token}"
+        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
         subject = "EduQuizX — Password Reset Request"
         
         html_content = f"""
@@ -174,7 +174,7 @@ class EmailService:
         password: str
     ):
         """Dispatches an automated email to student containing test link, exam username, and passcode PIN."""
-        exam_link = f"http://localhost:3000/exam/{exam_code}"
+        exam_link = f"{settings.FRONTEND_URL}/exam/{exam_code}"
         subject = f"Exam Notification & Access Credentials — {exam_name}"
         
         html_content = f"""
@@ -217,7 +217,7 @@ class EmailService:
         start_time_str: str
     ):
         """Dispatches an automated 15-minute pre-exam schedule reminder email."""
-        exam_link = f"http://localhost:8000/static/exam.html?code={exam_code}"
+        exam_link = f"{settings.FRONTEND_URL}/exam/{exam_code}"
         subject = f"⏰ 15-Minute Exam Reminder — {exam_name}"
         
         html_content = f"""

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { apiFetch, API_V1 } from "../../../lib/api";
 import { useAuthStore } from "../../../store/authStore";
 import { 
   Award, Calendar, FileText, CheckCircle, TrendingUp, BookOpen, Download,
@@ -493,7 +494,7 @@ export default function StudentDashboard() {
                         </div>
                         <div className="flex items-center gap-2">
                           <a
-                            href={`http://localhost:8000/api/v1/reports/submission-detail/${sub.id}/printable`}
+                            href={`${API_V1}/reports/submission-detail/${sub.id}/printable`}
                             target="_blank"
                             rel="noreferrer"
                             onClick={(e) => e.stopPropagation()}
@@ -531,7 +532,7 @@ export default function StudentDashboard() {
                           Code: {selectedSubDetail.exam_code || "EXAM"}
                         </span>
                         <a
-                          href={`http://localhost:8000/api/v1/reports/submission-detail/${selectedSubDetail.submission_id}/printable`}
+                          href={`${API_V1}/reports/submission-detail/${selectedSubDetail.submission_id}/printable`}
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#C84B18]/10 text-[#C84B18] hover:bg-[#C84B18]/20 transition-all"
