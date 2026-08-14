@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Upload, Plus, FileSpreadsheet, Pencil, Trash2, Mail, RefreshCw } from "lucide-react";
-import { apiFetch } from "../../../../lib/api";
+import { Users, Upload, Plus, FileSpreadsheet, Pencil, Trash2, Mail, RefreshCw, Copy, Link, Send } from "lucide-react";
+import { apiFetch, getFrontendBaseUrl } from "../../../../lib/api";
 import { useToast } from "../../../../components/Toast";
 
 interface StudentRosterProps {
@@ -19,6 +19,29 @@ export default function StudentRoster({ students, token, onRefresh }: StudentRos
   const [isCreatingStudent, setIsCreatingStudent] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
+  const handleResendAuth = async (studentId: string) => {
+    setResendingId(studentId);
+    try {
+      const res = await apiFetch(`/students/${studentId}/resend-auth`, { token, method: "POST" });
+      if (res.ok) {
+        showToast("Authorization email re-dispatched to student inbox!", "success");
+      } else {
+        showToast("Failed to resend authorization email", "error");
+      }
+    } catch {
+      showToast("Network error resending email", "error");
+    } finally {
+      setResendingId(null);
+    }
+  };
+
+  const handleCopyAuthLink = (st: any) => {
+    const vUrl = st.verification_url || `${getFrontendBaseUrl()}/verify-student?token=${st.verification_token}`;
+    navigator.clipboard.writeText(vUrl);
+    showToast("Authorization link copied to clipboard!", "success");
+  };
 
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +52,7 @@ export default function StudentRoster({ students, token, onRefresh }: StudentRos
         body: JSON.stringify({ email: studentEmail, full_name: studentName, roll_number: studentRoll })
       });
       if (res.ok) {
-        showToast("Student profile created & authorization email queued.", "success");
+        showToast("Student profile created & authorization email dispatched!", "success");
         setStudentName(""); setStudentEmail(""); setStudentRoll("");
         onRefresh();
       } else {
@@ -124,14 +147,39 @@ export default function StudentRoster({ students, token, onRefresh }: StudentRos
               <div className="p-6 text-center text-xs text-[#716D67]">No candidate records created yet.</div>
             ) : (
               students.map((st) => (
-                <div key={st.id} className="p-3 flex items-center justify-between text-xs hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1C1A17]">
+                <div key={st.id} className="p-3 flex items-center justify-between text-xs hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1C1A17] transition-all">
                   <div>
-                    <div className="font-bold text-[#242321] dark:text-[#F5F5F4]">{st.full_name}</div>
+                    <div className="font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2">
+                      <span>{st.full_name}</span>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${st.is_verified ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                        {st.is_verified ? 'Verified' : 'Pending Auth'}
+                      </span>
+                    </div>
                     <div className="text-[11px] text-[#716D67]">{st.email} • Roll: {st.roll_number}</div>
                   </div>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    Active
-                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyAuthLink(st)}
+                      className="px-2 py-1 bg-[#E5E0D8]/60 dark:bg-[#292524] hover:bg-[#D8D2C7] text-[#242321] dark:text-[#F5F5F4] rounded text-[11px] font-semibold flex items-center gap-1 transition-all"
+                      title="Copy Authorization Verification URL"
+                    >
+                      <Copy className="h-3 w-3 text-[#C84B18]" />
+                      <span>Copy Link</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={resendingId === st.id}
+                      onClick={() => handleResendAuth(st.id)}
+                      className="px-2 py-1 bg-[#C84B18]/10 hover:bg-[#C84B18]/20 text-[#C84B18] rounded text-[11px] font-semibold flex items-center gap-1 transition-all disabled:opacity-50"
+                      title="Resend Authorization Email to Student Inbox"
+                    >
+                      <Send className={`h-3 w-3 ${resendingId === st.id ? 'animate-spin' : ''}`} />
+                      <span>{resendingId === st.id ? 'Sending...' : 'Resend Email'}</span>
+                    </button>
+                  </div>
                 </div>
               ))
             )}

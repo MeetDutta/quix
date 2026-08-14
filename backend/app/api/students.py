@@ -16,6 +16,7 @@ from app.schemas.student import StudentCreate, StudentResponse, InstitutionRespo
 from app.utils.security import get_password_hash, RoleChecker, get_current_user
 from app.services.email_service import email_service
 from app.services.notification_service import create_notification
+from app.config import settings
 
 router = APIRouter(prefix="/students", tags=["students"])
 teacher_or_admin_required = RoleChecker(["inst_admin", "teacher", "super_admin"])
@@ -42,6 +43,8 @@ def list_students(
     resp = []
     for s in students:
         dept = db.query(Department).filter(Department.id == s.department_id).first() if s.department_id else None
+        v_token = s.user.verification_token if (s.user and s.user.verification_token) else None
+        v_url = f"{settings.FRONTEND_URL}/verify-student?token={v_token}" if v_token else None
         resp.append(StudentResponse(
             id=s.id,
             email=s.user.email,
@@ -51,7 +54,9 @@ def list_students(
             division=s.division,
             batch=s.batch,
             status=s.status,
-            is_verified=s.user.is_verified if (s.user and s.user.is_verified is not None) else True
+            is_verified=s.user.is_verified if (s.user and s.user.is_verified is not None) else True,
+            verification_token=v_token,
+            verification_url=v_url
         ))
     return resp
 
@@ -130,7 +135,9 @@ def create_student(
         division=student.division,
         batch=student.batch,
         status=student.status,
-        is_verified=False
+        is_verified=False,
+        verification_token=verification_token,
+        verification_url=f"{settings.FRONTEND_URL}/verify-student?token={verification_token}"
     )
 
 @router.post("/{student_id}/resend-auth")

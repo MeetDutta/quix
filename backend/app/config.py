@@ -20,11 +20,11 @@ class Settings(BaseSettings):
     KB_UPLOADS_DIR: str = os.path.join(BASE_DIR, "uploads", "kb_documents")
     
     # SMTP Email Configuration
-    SMTP_HOST: str = ""
+    SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    EMAILS_FROM_EMAIL: str = "no-reply@aegeus.edu"
+    SMTP_USER: str = "aegeusexams@gmail.com"
+    SMTP_PASSWORD: str = "bpofgsqqgmbectsb"
+    EMAILS_FROM_EMAIL: str = "aegeusexams@gmail.com"
     EMAILS_FROM_NAME: str = "EduQuizX Examination System"
     
     # Supabase Configuration

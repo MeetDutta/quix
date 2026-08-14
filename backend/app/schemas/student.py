@@ -19,6 +19,8 @@ class StudentResponse(BaseModel):
     batch: Optional[str] = None
     status: str
     is_verified: bool = True
+    verification_token: Optional[str] = None
+    verification_url: Optional[str] = None
 
     class Config:
         from_attributes = True
