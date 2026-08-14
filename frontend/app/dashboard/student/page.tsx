@@ -11,7 +11,6 @@ import {
   Timer, ChevronRight, ExternalLink
 } from "lucide-react";
 import MathText from "../../../components/MathText";
-import { apiFetch } from "../../../lib/api";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, Radar } from "recharts";
 
 export default function StudentDashboard() {
