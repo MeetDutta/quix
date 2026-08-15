@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 from app.config import settings
 from app.database import engine, Base
-from app.api import auth, students, kb, exams, attempts, reports, notifications, institutions
+from app.api import auth, students, kb, exams, attempts, reports, notifications, institutions, academic, assessment_groups
 
 import app.models
 
@@ -53,6 +53,36 @@ try:
             except Exception:
                 try:
                     conn.execute(text(f"ALTER TABLE questions ADD COLUMN {col_name} {col_type}"))
+                    conn.commit()
+                except Exception:
+                    pass
+
+        # Ensure exam targeting columns exist
+        e_cols_to_add = [
+            ("subject_offering_id", "VARCHAR(36)"),
+            ("assessment_group_id", "VARCHAR(36)")
+        ]
+        for col_name, col_type in e_cols_to_add:
+            try:
+                conn.execute(text(f"SELECT {col_name} FROM exams LIMIT 1"))
+            except Exception:
+                try:
+                    conn.execute(text(f"ALTER TABLE exams ADD COLUMN {col_name} {col_type}"))
+                    conn.commit()
+                except Exception:
+                    pass
+
+        # Ensure student identity columns exist
+        s_cols_to_add = [
+            ("institution_id", "VARCHAR(36)"),
+            ("admission_year", "VARCHAR(10)")
+        ]
+        for col_name, col_type in s_cols_to_add:
+            try:
+                conn.execute(text(f"SELECT {col_name} FROM students LIMIT 1"))
+            except Exception:
+                try:
+                    conn.execute(text(f"ALTER TABLE students ADD COLUMN {col_name} {col_type}"))
                     conn.commit()
                 except Exception:
                     pass
@@ -117,6 +147,30 @@ def seed_initial_data():
             teacher.is_active = True
         db.commit()
 
+        # Seed Academic Session & Cohort
+        from app.models.academic import AcademicSession, Cohort, StudentCohortMembership
+        session = db.query(AcademicSession).first()
+        if not session:
+            session = AcademicSession(name="2026-27", institution_id=inst.id, is_active=True)
+            db.add(session)
+            db.commit()
+            db.refresh(session)
+
+        cohort = db.query(Cohort).first()
+        if not cohort:
+            cohort = Cohort(
+                name="CE-3-A",
+                course_id=course.id,
+                academic_session_id=session.id,
+                year_number=3,
+                semester_number=6,
+                division="A",
+                is_active=True
+            )
+            db.add(cohort)
+            db.commit()
+            db.refresh(cohort)
+
         # Seed Student User & Profile
         student_user = db.query(User).filter(User.email == "student@aegeus.edu").first()
         if not student_user:
@@ -134,12 +188,24 @@ def seed_initial_data():
 
             student_profile = Student(
                 user_id=student_user.id,
-                roll_number="CS-2024-001",
+                institution_id=inst.id,
+                roll_number="CS-2026-001",
                 department_id=dept.id,
                 division="A",
-                batch="2024-2028"
+                batch="2026-2027",
+                status="active"
             )
             db.add(student_profile)
+            db.commit()
+            db.refresh(student_profile)
+
+            # Link student to cohort
+            membership = StudentCohortMembership(
+                student_id=student_profile.id,
+                cohort_id=cohort.id,
+                is_current=True
+            )
+            db.add(membership)
             db.commit()
         else:
             student_user.hashed_password = get_password_hash("securepassword")
@@ -189,6 +255,8 @@ app.include_router(attempts.router, prefix=settings.API_V1_STR)
 app.include_router(reports.router, prefix=settings.API_V1_STR)
 app.include_router(notifications.router, prefix=settings.API_V1_STR)
 app.include_router(institutions.router, prefix=settings.API_V1_STR)
+app.include_router(academic.router, prefix=settings.API_V1_STR)
+app.include_router(assessment_groups.router, prefix=settings.API_V1_STR)
 
 # Serve static playground files
 static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")

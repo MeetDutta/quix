@@ -6,6 +6,8 @@ from app.models.document import Document, DocumentChunk
 from app.models.question import Question
 from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog, AuditLog
 from app.models.notification import Notification
+from app.models.academic import AcademicSession, Cohort, StudentCohortMembership, SubjectOffering, StudentSubjectEnrollment
+from app.models.assessment_group import AssessmentGroup, AssessmentGroupStudent, ExamTarget, ExamStudentOverride
 
 __all__ = [
     "Base",
@@ -27,5 +29,14 @@ __all__ = [
     "ExamSubmission",
     "ProctoringLog",
     "AuditLog",
-    "Notification"
+    "Notification",
+    "AcademicSession",
+    "Cohort",
+    "StudentCohortMembership",
+    "SubjectOffering",
+    "StudentSubjectEnrollment",
+    "AssessmentGroup",
+    "AssessmentGroupStudent",
+    "ExamTarget",
+    "ExamStudentOverride"
 ]

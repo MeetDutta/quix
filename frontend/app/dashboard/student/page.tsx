@@ -526,19 +526,34 @@ export default function StudentDashboard() {
                   {/* Quiz Header & Score Card */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E5E0D8] dark:border-[#292524]">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-[#716D67] dark:text-[#A8A29E]">
                           Code: {selectedSubDetail.exam_code || "EXAM"}
                         </span>
+                        
+                        {/* Certificate Button */}
                         <a
-                          href={`${API_V1}/reports/submission-detail/${selectedSubDetail.submission_id}/printable`}
+                          href={`${API_V1}/reports/submissions/${selectedSubDetail.submission_id}/certificate-html`}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#C84B18]/10 text-[#C84B18] hover:bg-[#C84B18]/20 transition-all"
-                          title="Open Official Student Response Sheet (PDF/Print)"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-all shadow-2xs"
+                          title="Generate & Download Official Certificate of Completion (PDF)"
                         >
-                          <FileText className="h-3 w-3" />
-                          <span>Official Response Booklet</span>
+                          <Trophy className="h-3 w-3 text-amber-600" />
+                          <span>Official Certificate</span>
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+
+                        {/* Report Card Button */}
+                        <a
+                          href={`${API_V1}/reports/submissions/${selectedSubDetail.submission_id}/report-card-html`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-500/15 text-blue-800 dark:text-blue-300 border border-blue-500/30 hover:bg-blue-500/25 transition-all shadow-2xs"
+                          title="Print Itemized Candidate Scorecard (PDF)"
+                        >
+                          <FileText className="h-3 w-3 text-blue-600" />
+                          <span>Diagnostic Scorecard</span>
                           <ExternalLink className="h-2.5 w-2.5" />
                         </a>
                       </div>

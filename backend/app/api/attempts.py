@@ -1,17 +1,21 @@
 import json
+from datetime import datetime, timedelta
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
-from datetime import datetime
-from typing import List, Optional, Dict, Any
+from jose import jwt
+
 from app.database import get_db, SessionLocal
 from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog
+from app.models.user import User, Student
 from app.schemas.exam import ExamLogin, SubmitExam, ProctorLogCreate
 from app.services.ai_service import AIService
 from app.services.notification_service import create_notification
-from jose import jwt
 from app.config import settings
+from app.utils.security import RoleChecker, get_current_user
 
 router = APIRouter(prefix="/attempts", tags=["attempts"])
+teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
 ai_service = AIService()
 
 class ConnectionManager:
@@ -47,17 +51,32 @@ def get_submission_by_token(token: str, db: Session) -> ExamSubmission:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         sub_id = payload.get("sub")
         token_type = payload.get("type")
-        if not sub_id or token_type != "exam_session":
+        if not sub_id or token_type not in ["exam_session", "teacher_simulation"]:
             raise HTTPException(status_code=401, detail="Invalid exam session")
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid exam session")
+        
+    if token_type == "teacher_simulation":
+        # Create virtual submission wrapper for simulation
+        exam_id = payload.get("exam_id")
+        exam = db.query(Exam).filter(Exam.id == exam_id).first()
+        if not exam:
+            raise HTTPException(status_code=404, detail="Exam not found for simulation")
+        virtual_sub = ExamSubmission(
+            id=sub_id,
+            exam_id=exam.id,
+            status="started",
+            answers_json="{}"
+        )
+        virtual_sub.exam = exam
+        return virtual_sub
         
     submission = db.query(ExamSubmission).filter(ExamSubmission.id == sub_id).first()
     if not submission:
         raise HTTPException(status_code=401, detail="Exam session not found")
         
     # Check if credentials expired
-    if datetime.utcnow() > submission.credential.expires_at:
+    if submission.credential and submission.credential.expires_at and datetime.utcnow() > submission.credential.expires_at:
         raise HTTPException(status_code=403, detail="Exam credentials expired")
         
     return submission
@@ -271,10 +290,21 @@ def process_exam_submission(sub: ExamSubmission, db: Session) -> dict:
     sub.percentage = (sub.score / float(exam.total_marks or 1.0)) * 100.0 if exam.total_marks else 0.0
     sub.status = "submitted"
     sub.submitted_at = datetime.utcnow()
-    
-    # Store evaluated results back in submission
     sub.answers_json = json.dumps(evaluated_responses)
     
+    # If simulation, return directly without DB writes
+    if str(sub.id).startswith("sim_"):
+        return {
+            "message": "Teacher Preview Simulation evaluated successfully.",
+            "submission_id": sub.id,
+            "score": round(sub.score, 2),
+            "total_marks": exam.total_marks,
+            "percentage": round(sub.percentage, 1),
+            "is_passed": sub.score >= float(exam.passing_marks or 0.0),
+            "is_simulation": True,
+            "evaluated_answers": evaluated_responses
+        }
+
     # Mark credential as used
     if sub.credential:
         sub.credential.is_used = True
@@ -295,6 +325,121 @@ def process_exam_submission(sub: ExamSubmission, db: Session) -> dict:
     
     return {
         "message": "Exam submitted successfully.",
+        "submission_id": sub.id,
+        "score": round(sub.score, 2),
+        "total_marks": exam.total_marks,
+        "percentage": round(sub.percentage, 1),
+        "is_passed": sub.score >= float(exam.passing_marks or 0.0),
+        "evaluated_answers": evaluated_responses
+    }
+
+@router.post("/teacher-preview")
+def create_teacher_preview_session(
+    exam_code: Optional[str] = None,
+    exam_id: Optional[str] = None,
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """
+    Creates a temporary Sandbox Simulation session token for an instructor
+    to test-run any assessment as a student without mutating real student stats.
+    """
+    query = db.query(Exam)
+    if exam_id:
+        exam = query.filter(Exam.id == exam_id).first()
+    elif exam_code:
+        exam = query.filter(Exam.exam_code == exam_code).first()
+    else:
+        raise HTTPException(status_code=400, detail="Must provide exam_id or exam_code")
+        
+    if not exam:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+        
+    token_expire = datetime.utcnow() + timedelta(hours=3)
+    payload = {
+        "sub": f"sim_{exam.id}",
+        "exam_id": exam.id,
+        "type": "teacher_simulation",
+        "exp": token_expire
+    }
+    sim_token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+    
+    questions = json.loads(exam.questions_json) if exam.questions_json else []
+    
+    return {
+        "session_token": sim_token,
+        "exam_name": exam.name,
+        "exam_code": exam.exam_code,
+        "duration_minutes": exam.duration_minutes,
+        "total_marks": exam.total_marks,
+        "passing_marks": exam.passing_marks,
+        "student_name": f"Simulator ({current_user.full_name})",
+        "is_simulation": True,
+        "questions": questions
+    }
+
+@router.post("/direct-start")
+def direct_start_for_student(
+    exam_code: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Allows an authenticated student to 1-click launch an assigned assessment
+    without manually typing in their PIN.
+    """
+    exam = db.query(Exam).filter(Exam.exam_code == exam_code, Exam.is_published == True).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Assessment not active or invalid code")
+        
+    student = db.query(Student).filter(Student.user_id == current_user.id, Student.is_deleted == False).first()
+    if not student:
+        raise HTTPException(status_code=403, detail="Student profile not found")
+        
+    cred = db.query(ExamCredential).filter(
+        ExamCredential.exam_id == exam.id,
+        ExamCredential.student_id == student.id
+    ).first()
+    
+    if not cred:
+        # Auto-provision on-the-fly credential for enrolled student
+        import secrets
+        cred = ExamCredential(
+            exam_id=exam.id,
+            student_id=student.id,
+            username=current_user.email,
+            password=str(secrets.randbelow(900000) + 100000),
+            expires_at=exam.end_time or (datetime.utcnow() + timedelta(days=7))
+        )
+        db.add(cred)
+        db.commit()
+        db.refresh(cred)
+        
+    sub = db.query(ExamSubmission).filter(ExamSubmission.credential_id == cred.id).first()
+    token_expire = exam.end_time or (datetime.utcnow() + timedelta(hours=3))
+    
+    if sub:
+        payload = {"sub": sub.id, "exp": token_expire, "type": "exam_session"}
+        token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+    else:
+        sub = ExamSubmission(
+            exam_id=exam.id,
+            credential_id=cred.id,
+            status="started"
+        )
+        db.add(sub)
+        db.commit()
+        db.refresh(sub)
+        payload = {"sub": sub.id, "exp": token_expire, "type": "exam_session"}
+        token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
+    is_completed = sub.status in ["submitted", "auto_submitted"]
+    
+    return {
+        "session_token": token,
+        "student_name": current_user.full_name,
+        "duration_minutes": exam.duration_minutes,
+        "is_completed": is_completed,
         "submission_id": sub.id,
         "score": sub.score,
         "percentage": sub.percentage

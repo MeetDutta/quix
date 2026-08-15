@@ -26,10 +26,15 @@ class Student(TimeStampedModel):
     __tablename__ = "students"
     
     user_id = Column(String(36), ForeignKey("users.id"), unique=True, nullable=False)
+    institution_id = Column(String(36), ForeignKey("institutions.id"), nullable=True)
     roll_number = Column(String(100), nullable=False)
     department_id = Column(String(36), ForeignKey("departments.id"), nullable=True)
     division = Column(String(50), nullable=True)
     batch = Column(String(100), nullable=True)
+    admission_year = Column(String(10), nullable=True)
     status = Column(String(50), default="active")  # "active", "inactive", "suspended"
     
     user = relationship("User", back_populates="student_profile")
+    institution = relationship("Institution")
+    cohort_memberships = relationship("StudentCohortMembership", back_populates="student", cascade="all, delete-orphan")
+    subject_enrollments = relationship("StudentSubjectEnrollment", back_populates="student", cascade="all, delete-orphan")

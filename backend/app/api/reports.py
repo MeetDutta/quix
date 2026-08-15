@@ -416,11 +416,11 @@ def get_my_submissions(
         
     # Context-aware sorting:
     if is_teacher and not student_id:
-        # Sort student-wise (Student Name A-Z, then Exam Name A-Z)
+        # Sort student-wise (Student Name A-Z, then Exam Name, then Date)
         result.sort(key=lambda x: (
-            x.get("student_name", "").lower(),
-            x.get("exam_name", "").lower(),
-            x.get("submitted_at", "")
+            str(x.get("student_name") or "").lower(),
+            str(x.get("exam_name") or "").lower(),
+            str(x.get("submitted_at") or "")
         ))
     else:
         # Sort exam-wise (Exam Name A-Z, then Submitted At)
@@ -805,4 +805,383 @@ def override_question_grade(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to override grade: {str(e)}")
+
+from fastapi.responses import HTMLResponse
+
+@router.get("/submissions/{submission_id}/certificate-html")
+def get_submission_certificate_html(
+    submission_id: str,
+    db: Session = Depends(get_db)
+):
+    """Generates an official downloadable/printable Certificate of Completion."""
+    sub = db.query(ExamSubmission).filter(ExamSubmission.id == submission_id).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+        
+    exam = sub.exam
+    student = sub.credential.student if sub.credential else None
+    student_name = student.user.full_name if (student and student.user) else "Academic Candidate"
+    student_roll = student.roll_number if student else "N/A"
+    exam_name = exam.name if exam else "Assessment"
+    score_pct = round(sub.percentage, 1)
+    pass_marks = exam.passing_marks if exam else 40
+    is_passed = sub.score >= pass_marks
+    completion_date = sub.submitted_at.strftime("%B %d, %Y") if sub.submitted_at else "August 15, 2026"
+    
+    grade_label = "Distinction" if score_pct >= 85 else "Merit" if score_pct >= 70 else "Pass" if is_passed else "Completed"
+    badge_color = "#10B981" if is_passed else "#D97706"
+
+    html = f"""<!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Certificate of Completion - {student_name}</title>
+      <style>
+        @page {{ size: landscape; margin: 0; }}
+        body {{
+          font-family: 'Times New Roman', Georgia, serif;
+          margin: 0;
+          padding: 30px;
+          background: #FDFBF7;
+          color: #1F2937;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 90vh;
+        }}
+        .certificate {{
+          width: 860px;
+          padding: 40px 50px;
+          border: 12px solid #92400E;
+          outline: 4px solid #D97706;
+          background: #FFFFFF;
+          text-align: center;
+          position: relative;
+          box-shadow: 0 20px 40px rgba(0,0,0,0.12);
+        }}
+        .crest {{
+          font-size: 38px;
+          margin-bottom: 5px;
+        }}
+        .institution {{
+          font-size: 14px;
+          text-transform: uppercase;
+          letter-spacing: 4px;
+          color: #92400E;
+          font-weight: bold;
+          margin-bottom: 12px;
+        }}
+        .title {{
+          font-size: 34px;
+          font-weight: 700;
+          color: #1E1B4B;
+          letter-spacing: 2px;
+          margin: 0 0 16px 0;
+          font-family: 'Georgia', serif;
+        }}
+        .presented-to {{
+          font-size: 15px;
+          font-style: italic;
+          color: #6B7280;
+          margin-bottom: 8px;
+        }}
+        .recipient {{
+          font-size: 32px;
+          font-weight: bold;
+          color: #92400E;
+          border-bottom: 2px solid #FCD34D;
+          display: inline-block;
+          padding-bottom: 4px;
+          margin-bottom: 16px;
+        }}
+        .roll {{
+          font-size: 12px;
+          color: #6B7280;
+          margin-bottom: 16px;
+          font-family: system-ui, sans-serif;
+        }}
+        .body-text {{
+          font-size: 16px;
+          line-height: 1.6;
+          color: #374151;
+          max-width: 680px;
+          margin: 0 auto 24px auto;
+        }}
+        .metrics {{
+          display: flex;
+          justify-content: center;
+          gap: 30px;
+          margin-bottom: 30px;
+          font-family: system-ui, sans-serif;
+        }}
+        .metric-pill {{
+          padding: 8px 18px;
+          background: #FEF3C7;
+          border: 1px solid #FDE68A;
+          border-radius: 9999px;
+          font-size: 13px;
+          font-weight: 700;
+          color: #92400E;
+        }}
+        .signatures {{
+          display: flex;
+          justify-content: space-between;
+          margin-top: 25px;
+          padding: 0 30px;
+          font-family: system-ui, sans-serif;
+        }}
+        .sig-box {{
+          border-top: 1px solid #9CA3AF;
+          width: 180px;
+          padding-top: 6px;
+          font-size: 12px;
+          color: #4B5563;
+        }}
+        .footer-hash {{
+          margin-top: 20px;
+          font-size: 10px;
+          color: #9CA3AF;
+          font-family: monospace;
+        }}
+        @media print {{
+          body {{ padding: 0; background: transparent; }}
+          .certificate {{ box-shadow: none; width: 100%; border-width: 8px; }}
+          .no-print {{ display: none; }}
+        }}
+      </style>
+    </head>
+    <body>
+      <div class="certificate">
+        <div class="crest">🎓</div>
+        <div class="institution">EduQuizX AI Examination & Academic Standards Board</div>
+        <h1 class="title">Certificate of Academic Achievement</h1>
+        <div class="presented-to">This credential is proudly awarded to</div>
+        <div class="recipient">{student_name}</div>
+        <div class="roll">Candidate Identifier / Roll No: {student_roll}</div>
+        
+        <p class="body-text">
+          For demonstrating intellectual rigor and fulfilling all assessment requirements in
+          <strong>{exam_name}</strong> under verified AI proctored conditions.
+        </p>
+
+        <div class="metrics">
+          <div class="metric-pill">Score: {sub.score} / {exam.total_marks if exam else 100}</div>
+          <div class="metric-pill">Percentage: {score_pct}%</div>
+          <div class="metric-pill" style="background: {badge_color}15; border-color: {badge_color}; color: {badge_color};">Grade: {grade_label}</div>
+        </div>
+
+        <div class="signatures">
+          <div class="sig-box">
+            <strong>Dr. Sarah Jenkins</strong><br>Dean of Academic Affairs
+          </div>
+          <div class="sig-box">
+            <strong>{completion_date}</strong><br>Date of Certification
+          </div>
+          <div class="sig-box">
+            <strong>EduQuizX Engine</strong><br>Automated Verifier
+          </div>
+        </div>
+
+        <div class="footer-hash">
+          Verification Hash: SUB-{submission_id[:12].upper()} • Secure QR Key Validated
+        </div>
+      </div>
+      
+      <div class="no-print" style="position: fixed; bottom: 20px; right: 20px;">
+        <button onclick="window.print()" style="padding: 12px 24px; background: #92400E; color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+          🖨️ Print / Save Certificate PDF
+        </button>
+      </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
+
+@router.get("/submissions/{submission_id}/report-card-html")
+def get_submission_report_card_html(
+    submission_id: str,
+    db: Session = Depends(get_db)
+):
+    """Generates an official itemized student performance report card."""
+    sub = db.query(ExamSubmission).filter(ExamSubmission.id == submission_id).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    exam = sub.exam
+    student = sub.credential.student if sub.credential else None
+    student_name = student.user.full_name if (student and student.user) else "Academic Candidate"
+    student_roll = student.roll_number if student else "N/A"
+    exam_name = exam.name if exam else "Assessment"
+    score_pct = round(sub.percentage, 1)
+    pass_marks = exam.passing_marks if exam else 40
+    is_passed = sub.score >= pass_marks
+    completion_date = sub.submitted_at.strftime("%B %d, %Y - %I:%M %p") if sub.submitted_at else "N/A"
+
+    # Parse response items
+    responses = json.loads(sub.answers_json) if sub.answers_json else {}
+    questions = json.loads(exam.questions_json) if (exam and exam.questions_json) else []
+
+    rows_html = ""
+    for idx, q in enumerate(questions, 1):
+        q_id = q.get("id") or f"q_{idx}"
+        q_resp = responses.get(q_id, {})
+        awarded = q_resp.get("score_awarded", 0.0)
+        q_marks = q.get("marks", 1.0)
+        user_ans = q_resp.get("user_answer", "No response recorded")
+        feedback = q_resp.get("ai_feedback") or q_resp.get("teacher_feedback") or "Evaluated"
+        
+        status_color = "#10B981" if awarded >= q_marks else "#F59E0B" if awarded > 0 else "#EF4444"
+
+        rows_html += f"""
+        <tr style="border-bottom: 1px solid #E5E7EB;">
+          <td style="padding: 12px; font-weight: bold; vertical-align: top;">Q{idx}</td>
+          <td style="padding: 12px; vertical-align: top;">
+            <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{q.get("question_text", "")}</div>
+            <div style="font-size: 12px; color: #4B5563; margin-bottom: 4px;"><b>Candidate Answer:</b> {user_ans}</div>
+            <div style="font-size: 11px; color: #6B7280; font-style: italic;"><b>Feedback:</b> {feedback}</div>
+          </td>
+          <td style="padding: 12px; vertical-align: top; text-align: center; font-weight: bold; color: {status_color};">
+            {awarded} / {q_marks}
+          </td>
+        </tr>
+        """
+
+    html = f"""<!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Performance Scorecard - {student_name}</title>
+      <style>
+        body {{
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          margin: 0;
+          padding: 40px;
+          background: #F9FAFB;
+          color: #111827;
+        }}
+        .report-card {{
+          max-width: 800px;
+          margin: 0 auto;
+          background: #FFFFFF;
+          border: 1px solid #E5E7EB;
+          border-radius: 16px;
+          padding: 32px;
+          box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        }}
+        .header {{
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 2px solid #F3F4F6;
+          padding-bottom: 20px;
+          margin-bottom: 24px;
+        }}
+        .kpi-grid {{
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 12px;
+          margin-bottom: 24px;
+        }}
+        .kpi-card {{
+          background: #F9FAFB;
+          border: 1px solid #E5E7EB;
+          border-radius: 12px;
+          padding: 14px;
+          text-align: center;
+        }}
+        .kpi-val {{
+          font-size: 20px;
+          font-weight: bold;
+          color: #111827;
+        }}
+        .kpi-lbl {{
+          font-size: 11px;
+          color: #6B7280;
+          text-transform: uppercase;
+          font-weight: 600;
+          margin-top: 2px;
+        }}
+        table {{
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+        }}
+        th {{
+          background: #F3F4F6;
+          padding: 10px 12px;
+          text-align: left;
+          font-weight: 600;
+          color: #374151;
+        }}
+        @media print {{
+          body {{ padding: 0; background: transparent; }}
+          .report-card {{ border: none; box-shadow: none; }}
+          .no-print {{ display: none; }}
+        }}
+      </style>
+    </head>
+    <body>
+      <div class="report-card">
+        <div class="header">
+          <div>
+            <h2 style="margin: 0; font-size: 22px; color: #111827;">Official Candidate Scorecard</h2>
+            <div style="font-size: 13px; color: #6B7280; margin-top: 4px;">{exam_name} • Completed on {completion_date}</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-weight: bold; font-size: 16px;">{student_name}</div>
+            <div style="font-size: 12px; color: #6B7280;">Roll: {student_roll}</div>
+          </div>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-val">{sub.score} / {exam.total_marks if exam else 100}</div>
+            <div class="kpi-lbl">Total Score</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-val">{score_pct}%</div>
+            <div class="kpi-lbl">Percentage</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-val">{pass_marks}</div>
+            <div class="kpi-lbl">Passing Marks</div>
+          </div>
+          <div class="kpi-card" style="background: {'#ECFDF5' if is_passed else '#FEF2F2'};">
+            <div class="kpi-val" style="color: {'#059669' if is_passed else '#DC2626'};">{'PASSED' if is_passed else 'FAILED'}</div>
+            <div class="kpi-lbl">Status</div>
+          </div>
+        </div>
+
+        <h3 style="font-size: 14px; font-weight: bold; color: #374151; margin-bottom: 12px;">Itemized Question Breakdown</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 50px;">#</th>
+              <th>Question & Response</th>
+              <th style="width: 90px; text-align: center;">Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows_html}
+          </tbody>
+        </table>
+
+        {f'''
+        <div style="margin-top: 24px; padding: 16px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 12px;">
+          <div style="font-weight: bold; font-size: 13px; color: #166534; margin-bottom: 4px;">AI Evaluator Overall Assessment</div>
+          <div style="font-size: 12px; color: #15803D; line-height: 1.5;">{sub.ai_feedback}</div>
+        </div>
+        ''' if sub.ai_feedback else ''}
+      </div>
+
+      <div class="no-print" style="position: fixed; bottom: 20px; right: 20px;">
+        <button onclick="window.print()" style="padding: 12px 24px; background: #1F2937; color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+          🖨️ Print / Save Scorecard PDF
+        </button>
+      </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
+
 

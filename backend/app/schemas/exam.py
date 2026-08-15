@@ -41,8 +41,10 @@ class ExamResponse(BaseModel):
 class CredentialResponse(BaseModel):
     username: str
     password: str
-    student_name: Optional[str]
-    roll_number: Optional[str]
+    student_id: Optional[str] = None
+    student_name: Optional[str] = None
+    email: Optional[str] = None
+    roll_number: Optional[str] = None
     expires_at: datetime
 
 class ExamLogin(BaseModel):

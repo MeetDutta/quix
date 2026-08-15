@@ -8,6 +8,8 @@ class Exam(TimeStampedModel):
     
     name = Column(String(255), nullable=False)
     subject_id = Column(String(36), ForeignKey("subjects.id"), nullable=False)
+    subject_offering_id = Column(String(36), ForeignKey("subject_offerings.id"), nullable=True)
+    assessment_group_id = Column(String(36), ForeignKey("assessment_groups.id"), nullable=True)
     duration_minutes = Column(Integer, nullable=False)
     total_marks = Column(Integer, nullable=False)
     negative_marking = Column(Float, default=0.0)
@@ -23,6 +25,10 @@ class Exam(TimeStampedModel):
     settings_json = Column(Text, nullable=True)  # JSON for fullscreen, shuffle, calculators, etc.
     
     subject = relationship("Subject", back_populates="exams")
+    subject_offering = relationship("SubjectOffering")
+    assessment_group = relationship("AssessmentGroup")
+    targets = relationship("ExamTarget", back_populates="exam", cascade="all, delete-orphan")
+    student_overrides = relationship("ExamStudentOverride", back_populates="exam", cascade="all, delete-orphan")
     credentials = relationship("ExamCredential", back_populates="exam", cascade="all, delete-orphan")
     submissions = relationship("ExamSubmission", back_populates="exam", cascade="all, delete-orphan")
 

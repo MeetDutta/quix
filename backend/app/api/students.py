@@ -2,8 +2,10 @@ import uuid
 import json
 import io
 import csv
+import secrets
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, BackgroundTasks
+from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -20,43 +22,84 @@ from app.config import settings
 router = APIRouter(prefix="/students", tags=["students"])
 teacher_or_admin_required = RoleChecker(["inst_admin", "teacher", "super_admin"])
 
-@router.get("/", response_model=List[StudentResponse])
+class BulkStudentActionRequest(BaseModel):
+    student_ids: List[str]
+
+from app.models.academic import StudentCohortMembership
+
+@router.get("/")
 def list_students(
     current_user: User = Depends(teacher_or_admin_required),
     db: Session = Depends(get_db),
     department_id: Optional[str] = None,
-    division: Optional[str] = None
+    division: Optional[str] = None,
+    cohort_id: Optional[str] = None,
+    search: Optional[str] = None,
+    page: Optional[int] = None,
+    page_size: int = Query(50, le=200)
 ):
-    """Lists all students matching current user's institution."""
+    """Lists all students with server-side search, filtering and pagination."""
     query = db.query(Student).join(User).filter(
-        User.is_deleted == False,
-        User.institution_id == current_user.institution_id
+        User.is_deleted == False
     )
+    if current_user.institution_id:
+        query = query.filter(User.institution_id == current_user.institution_id)
+        
     if department_id:
         query = query.filter(Student.department_id == department_id)
     if division:
         query = query.filter(Student.division == division)
-        
-    students = query.all()
-    
+    if cohort_id:
+        student_ids_subquery = db.query(StudentCohortMembership.student_id).filter(
+            StudentCohortMembership.cohort_id == cohort_id,
+            StudentCohortMembership.is_current == True
+        )
+        query = query.filter(Student.id.in_(student_ids_subquery))
+    if search:
+        s_term = f"%{search.strip()}%"
+        query = query.filter(
+            (User.full_name.ilike(s_term)) | 
+            (User.email.ilike(s_term)) | 
+            (Student.roll_number.ilike(s_term))
+        )
+
+    total_count = query.count()
+
+    if page is not None and page > 0:
+        offset = (page - 1) * page_size
+        students = query.order_by(Student.roll_number).offset(offset).limit(page_size).all()
+    else:
+        students = query.order_by(Student.roll_number).all()
+
     resp = []
     for s in students:
         dept = db.query(Department).filter(Department.id == s.department_id).first() if s.department_id else None
         v_token = s.user.verification_token if (s.user and s.user.verification_token) else None
         v_url = f"{settings.FRONTEND_URL}/verify-student?token={v_token}" if v_token else None
-        resp.append(StudentResponse(
-            id=s.id,
-            email=s.user.email,
-            full_name=s.user.full_name,
-            roll_number=s.roll_number,
-            department_name=dept.name if dept else None,
-            division=s.division,
-            batch=s.batch,
-            status=s.status,
-            is_verified=s.user.is_verified if (s.user and s.user.is_verified is not None) else True,
-            verification_token=v_token,
-            verification_url=v_url
-        ))
+        resp.append({
+            "id": s.id,
+            "email": s.user.email,
+            "full_name": s.user.full_name,
+            "roll_number": s.roll_number,
+            "department_name": dept.name if dept else None,
+            "division": s.division,
+            "batch": s.batch,
+            "status": s.status,
+            "is_verified": s.user.is_verified if (s.user and s.user.is_verified is not None) else True,
+            "verification_token": v_token,
+            "verification_url": v_url
+        })
+
+    if page is not None and page > 0:
+        import math
+        return {
+            "items": resp,
+            "page": page,
+            "page_size": page_size,
+            "total": total_count,
+            "total_pages": math.ceil(total_count / page_size) if page_size > 0 else 1
+        }
+
     return resp
 
 @router.post("", response_model=StudentResponse)
@@ -341,6 +384,19 @@ def get_student_assigned_exams(
     
     results = []
     for exam in exams:
+        # Check selective targeting
+        if student and exam.settings_json:
+            try:
+                s_cfg = json.loads(exam.settings_json)
+                target_dept_ids = s_cfg.get("target_department_ids") or []
+                target_divisions = s_cfg.get("target_divisions") or []
+                if target_dept_ids and student.department_id not in target_dept_ids:
+                    continue
+                if target_divisions and student.division not in target_divisions:
+                    continue
+            except Exception:
+                pass
+
         cred = None
         if student:
             cred = db.query(ExamCredential).filter(
@@ -395,3 +451,179 @@ def get_student_assigned_exams(
         })
         
     return results
+
+@router.get("/csv-template")
+def download_student_csv_template():
+    """Generates and returns a downloadable sample CSV template for bulk student import."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["full_name", "email", "roll_number", "division", "batch", "department_name"])
+    writer.writerow(["Alex Johnson", "alex.johnson@university.edu", "CS-2026-101", "A", "2026", "Computer Science"])
+    writer.writerow(["Samantha Miller", "samantha.m@university.edu", "CS-2026-102", "A", "2026", "Computer Science"])
+    writer.writerow(["David Chen", "david.chen@university.edu", "CS-2026-103", "B", "2026", "Computer Science"])
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=eduquizx_student_roster_template.csv"}
+    )
+
+@router.post("/{student_id}/instant-authorize")
+def instant_authorize_student(
+    student_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(teacher_or_admin_required),
+    db: Session = Depends(get_db)
+):
+    """
+    Directly activates a student account without waiting for email verification link,
+    generating a secure password immediately and emailing it to the student.
+    """
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+        
+    generated_pwd = f"std_{secrets.randbelow(900000) + 100000}"
+    student.user.hashed_password = get_password_hash(generated_pwd)
+    student.user.is_verified = True
+    student.user.verification_token = None
+    
+    db.commit()
+    db.refresh(student)
+    
+    # Send credentials email in background
+    if student.user.email:
+        background_tasks.add_task(
+            email_service.send_student_credentials_email,
+            student_name=student.user.full_name,
+            email=student.user.email,
+            password=generated_pwd
+        )
+        
+    return {
+        "status": "success",
+        "message": f"Student '{student.user.full_name}' authorized successfully!",
+        "generated_password": generated_pwd,
+        "email": student.user.email,
+        "student_id": student.id
+    }
+
+@router.post("/bulk-authorize")
+def bulk_authorize_students(
+    req: BulkStudentActionRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(teacher_or_admin_required),
+    db: Session = Depends(get_db)
+):
+    """Activates multiple selected student accounts simultaneously."""
+    students = db.query(Student).filter(Student.id.in_(req.student_ids)).all()
+    count = 0
+    
+    for s in students:
+        if s.user:
+            gen_pwd = f"std_{secrets.randbelow(900000) + 100000}"
+            s.user.hashed_password = get_password_hash(gen_pwd)
+            s.user.is_verified = True
+            s.user.verification_token = None
+            count += 1
+            
+            if s.user.email:
+                background_tasks.add_task(
+                    email_service.send_student_credentials_email,
+                    student_name=s.user.full_name,
+                    email=s.user.email,
+                    password=gen_pwd
+                )
+                
+    db.commit()
+    return {
+        "status": "success",
+        "message": f"Successfully authorized {count} student(s).",
+        "authorized_count": count
+    }
+
+@router.post("/bulk-delete")
+def bulk_delete_students(
+    req: BulkStudentActionRequest,
+    current_user: User = Depends(teacher_or_admin_required),
+    db: Session = Depends(get_db)
+):
+    """Soft deletes multiple selected students."""
+    students = db.query(Student).filter(Student.id.in_(req.student_ids)).all()
+    count = 0
+    for s in students:
+        s.delete()
+        if s.user:
+            s.user.delete()
+        count += 1
+    db.commit()
+    return {
+        "status": "success",
+        "message": f"Successfully deleted {count} student profile(s).",
+        "deleted_count": count
+    }
+
+@router.get("/{student_id}/overview")
+def get_student_overview(
+    student_id: str,
+    current_user: User = Depends(teacher_or_admin_required),
+    db: Session = Depends(get_db)
+):
+    """Returns comprehensive profile overview, past test submissions, and assigned assessments for an individual student."""
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+        
+    dept = db.query(Department).filter(Department.id == student.department_id).first() if student.department_id else None
+    
+    # Submissions
+    submissions = db.query(ExamSubmission).join(ExamCredential).filter(
+        ExamCredential.student_id == student.id,
+        ExamSubmission.is_deleted == False
+    ).order_by(ExamSubmission.submitted_at.desc()).all()
+    
+    sub_list = []
+    total_score_sum = 0
+    total_marks_sum = 0
+    
+    for sub in submissions:
+        exam = sub.exam
+        total_score_sum += (sub.score or 0)
+        total_marks_sum += (exam.total_marks if exam else 0)
+        sub_list.append({
+            "id": sub.id,
+            "exam_name": exam.name if exam else "Assessment",
+            "exam_code": exam.exam_code if exam else "",
+            "score": sub.score,
+            "total_marks": exam.total_marks if exam else 0,
+            "percentage": sub.percentage,
+            "status": sub.status,
+            "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
+            "passed": sub.score >= exam.passing_marks if (exam and sub.score is not None) else False
+        })
+        
+    avg_score = round((total_score_sum / total_marks_sum * 100), 1) if total_marks_sum > 0 else 0
+    
+    v_token = student.user.verification_token if (student.user and student.user.verification_token) else None
+    v_url = f"{settings.FRONTEND_URL}/verify-student?token={v_token}" if v_token else None
+    
+    return {
+        "student": {
+            "id": student.id,
+            "full_name": student.user.full_name if student.user else "Student",
+            "email": student.user.email if student.user else "",
+            "roll_number": student.roll_number,
+            "department_name": dept.name if dept else "General",
+            "division": student.division,
+            "batch": student.batch,
+            "is_verified": student.user.is_verified if student.user else True,
+            "verification_url": v_url,
+            "created_at": student.created_at.isoformat() if student.created_at else None
+        },
+        "stats": {
+            "total_submissions": len(submissions),
+            "average_percentage": avg_score,
+            "passed_count": sum(1 for s in sub_list if s["passed"]),
+        },
+        "submissions": sub_list
+    }

@@ -2,6 +2,7 @@ import os
 from pydantic_settings import BaseSettings
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT_DIR = os.path.dirname(BASE_DIR)
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "EduQuizX - AI Dynamic Examination & Student Management System"
@@ -9,8 +10,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "super-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
-    # Database
-    DATABASE_URL: str = f"sqlite:///{os.path.join(BASE_DIR, 'quiz.db')}"
+    # Database (workspace root quiz.db)
+    DATABASE_URL: str = f"sqlite:///{os.path.join(ROOT_DIR, 'quiz.db')}"
     
     # AI Engine
     GEMINI_API_KEY: str = ""
@@ -20,11 +21,11 @@ class Settings(BaseSettings):
     KB_UPLOADS_DIR: str = os.path.join(BASE_DIR, "uploads", "kb_documents")
     
     # SMTP Email Configuration
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 465
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    EMAILS_FROM_EMAIL: str = ""
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = "aegeusexams@gmail.com"
+    SMTP_PASSWORD: str = "bpofgsqqgmbectsb"
+    EMAILS_FROM_EMAIL: str = "aegeusexams@gmail.com"
     EMAILS_FROM_NAME: str = "EduQuizX Examination System"
     
     # Allowed CORS origins (comma-separated string or wildcard)
