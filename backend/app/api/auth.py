@@ -1,12 +1,19 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+import secrets
+import string
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from jose import jwt
 from app.database import get_db
 from app.models.user import User
 from app.models.institution import Institution
-from app.schemas.auth import UserLogin, UserCreate, Token, PasswordChange, UserProfile
+from app.schemas.auth import (
+    UserLogin, UserCreate, Token, PasswordChange, UserProfile,
+    GoogleAuthPayload, ForgotPasswordRequest, ResetPasswordRequest
+)
 from app.utils.security import (
     get_password_hash, 
     verify_password, 
@@ -15,6 +22,7 @@ from app.utils.security import (
     get_current_user
 )
 from app.config import settings
+from app.services.email_service import email_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -50,19 +58,6 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     return user
-
-import secrets
-import string
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from pydantic import BaseModel, EmailStr
-from app.services.email_service import email_service
-
-class GoogleAuthPayload(BaseModel):
-    email: EmailStr
-    name: Optional[str] = None
-    google_id: Optional[str] = None
-    token: Optional[str] = None
 
 @router.post("/login", response_model=Token)
 def login(login_in: UserLogin, db: Session = Depends(get_db)):
@@ -243,9 +238,6 @@ def change_password(pass_in: PasswordChange, current_user: User = Depends(get_cu
     db.commit()
     return {"message": "Password changed successfully"}
 
-class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
-
 @router.post("/forgot-password")
 def forgot_password(
     req: ForgotPasswordRequest,
@@ -272,10 +264,6 @@ def forgot_password(
     )
     
     return {"message": "A password reset link has been dispatched to your email address."}
-
-class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
 
 @router.post("/reset-password")
 def reset_password(

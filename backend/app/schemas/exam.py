@@ -86,3 +86,11 @@ class RegenerateQuestionRequest(BaseModel):
     question_type: Optional[str] = "mcq"
     custom_instruction: Optional[str] = None
 
+class AuditPaperRequest(BaseModel):
+    questions: List[Dict[str, Any]]
+
+class RerollPromptRequest(BaseModel):
+    original_question: Dict[str, Any]
+    prompt_feedback: str
+    subject_id: Optional[str] = None
+

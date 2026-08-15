@@ -1,5 +1,4 @@
 import uuid
-import threading
 import json
 import io
 import csv
@@ -112,24 +111,13 @@ def create_student(
         notification_type="system"
     )
     
-    # Capture primitive strings BEFORE thread start to prevent ORM detachment
-    s_full_name = str(user.full_name)
-    s_email = str(user.email)
-    s_token = str(verification_token)
-    s_roll = str(student.roll_number) if student.roll_number else None
-
-    def _dispatch_create_email():
-        try:
-            email_service.send_student_authorization_email(
-                student_name=s_full_name,
-                email=s_email,
-                verification_token=s_token,
-                roll_number=s_roll
-            )
-        except Exception as email_err:
-            print(f"⚠️ Async email dispatch notice: {email_err}")
-
-    threading.Thread(target=_dispatch_create_email, daemon=True).start()
+    background_tasks.add_task(
+        email_service.send_student_authorization_email,
+        student_name=str(user.full_name),
+        email=str(user.email),
+        verification_token=str(verification_token),
+        roll_number=str(student.roll_number) if student.roll_number else None
+    )
     
     dept = db.query(Department).filter(Department.id == student.department_id).first() if student.department_id else None
     return StudentResponse(
@@ -162,23 +150,13 @@ def resend_student_authorization(
         student.user.verification_token = str(uuid.uuid4())
         db.commit()
         
-    s_full_name = str(student.user.full_name)
-    s_email = str(student.user.email)
-    s_token = str(student.user.verification_token)
-    s_roll = str(student.roll_number) if student.roll_number else None
-
-    def _dispatch_resend_email():
-        try:
-            email_service.send_student_authorization_email(
-                student_name=s_full_name,
-                email=s_email,
-                verification_token=s_token,
-                roll_number=s_roll
-            )
-        except Exception as email_err:
-            print(f"⚠️ Async resend email notice: {email_err}")
-
-    threading.Thread(target=_dispatch_resend_email, daemon=True).start()
+    background_tasks.add_task(
+        email_service.send_student_authorization_email,
+        student_name=str(student.user.full_name),
+        email=str(student.user.email),
+        verification_token=str(student.user.verification_token),
+        roll_number=str(student.roll_number) if student.roll_number else None
+    )
     return {"message": f"Authorization email re-sent to {student.user.email}"}
 
 @router.post("/import")
@@ -242,24 +220,13 @@ def import_students_csv(
             db.add(student)
             imported_count += 1
 
-            # Dispatch authorization email for each CSV imported student in background thread
-            s_full_name = str(full_name)
-            s_email = str(email)
-            s_token = str(verification_token)
-            s_roll = str(roll_number) if roll_number else None
-
-            def _dispatch_csv_email(name_val=s_full_name, email_val=s_email, token_val=s_token, roll_val=s_roll):
-                try:
-                    email_service.send_student_authorization_email(
-                        student_name=name_val,
-                        email=email_val,
-                        verification_token=token_val,
-                        roll_number=roll_val
-                    )
-                except Exception as email_err:
-                    print(f"⚠️ CSV email dispatch error: {email_err}")
-
-            threading.Thread(target=_dispatch_csv_email, daemon=True).start()
+            background_tasks.add_task(
+                email_service.send_student_authorization_email,
+                student_name=str(full_name),
+                email=str(email),
+                verification_token=str(verification_token),
+                roll_number=str(roll_number) if roll_number else None
+            )
         except Exception as e:
             errors.append(f"Row {idx+1}: Error saving to DB ({str(e)})")
             

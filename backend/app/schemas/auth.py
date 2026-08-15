@@ -32,3 +32,16 @@ class UserProfile(BaseModel):
 
     class Config:
         from_attributes = True
+
+class GoogleAuthPayload(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+    google_id: Optional[str] = None
+    token: Optional[str] = None
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str

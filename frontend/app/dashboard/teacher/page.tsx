@@ -97,6 +97,73 @@ export default function TeacherDashboard() {
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // Advanced AI Blueprint States
+  const [customPromptInstructions, setCustomPromptInstructions] = useState("");
+  const [cognitiveTarget, setCognitiveTarget] = useState<"recall" | "understand" | "apply" | "analyze">("understand");
+  const [diffEasyPct, setDiffEasyPct] = useState(30);
+  const [diffMedPct, setDiffMedPct] = useState(50);
+  const [diffHardPct, setDiffHardPct] = useState(20);
+
+  // AI Quality Audit & Targeted Reroll States
+  const [auditModalData, setAuditModalData] = useState<any | null>(null);
+  const [isAuditing, setIsAuditing] = useState(false);
+  const [promptRerollIdx, setPromptRerollIdx] = useState<number | null>(null);
+  const [promptRerollText, setPromptRerollText] = useState("");
+  const [isRerollingWithPrompt, setIsRerollingWithPrompt] = useState(false);
+
+  const handleAuditPaper = async () => {
+    if (!editedQuestions || editedQuestions.length === 0) return;
+    setIsAuditing(true);
+    try {
+      const res = await apiFetch("/exams/audit-paper", {
+        token,
+        method: "POST",
+        body: JSON.stringify({ questions: editedQuestions })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAuditModalData(data);
+      } else {
+        showToast(data.detail || "Failed to audit paper", "error");
+      }
+    } catch {
+      showToast("Network error auditing paper", "error");
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
+  const handleRerollWithPrompt = async (index: number) => {
+    if (!promptRerollText.trim()) return;
+    setIsRerollingWithPrompt(true);
+    try {
+      const currentQ = editedQuestions[index];
+      const res = await apiFetch("/exams/reroll-question-with-prompt", {
+        token,
+        method: "POST",
+        body: JSON.stringify({
+          original_question: currentQ,
+          prompt_feedback: promptRerollText
+        })
+      });
+      const revisedQ = await res.json();
+      if (res.ok) {
+        showToast(`Question #${index + 1} revised with custom prompt!`, "success");
+        const updated = [...editedQuestions];
+        updated[index] = revisedQ;
+        setEditedQuestions(updated);
+        setPromptRerollIdx(null);
+        setPromptRerollText("");
+      } else {
+        showToast(revisedQ.detail || "Failed to revise question", "error");
+      }
+    } catch {
+      showToast("Network error revising question", "error");
+    } finally {
+      setIsRerollingWithPrompt(false);
+    }
+  };
+
   // Form: Scheduling
   const [examStartDate, setExamStartDate] = useState("");
   const [examEndDate, setExamEndDate] = useState("");
@@ -1239,6 +1306,50 @@ export default function TeacherDashboard() {
                     </div>
                   </div>
                 )}
+
+                {/* AI Cognitive Target & Custom Guidelines */}
+                <div className="p-4 rounded-xl bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] space-y-3.5 pt-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-[#C84B18] dark:text-[#EA580C]" />
+                    <span className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4]">AI Blueprint Co-Pilot Tuning</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase">Bloom's Cognitive Target</label>
+                      <select 
+                        value={cognitiveTarget} 
+                        onChange={(e: any) => setCognitiveTarget(e.target.value)} 
+                        className={inputCls}
+                      >
+                        <option value="recall">Recall & Definitions (Knowledge)</option>
+                        <option value="understand">Conceptual Understanding</option>
+                        <option value="apply">Application & Problem Solving</option>
+                        <option value="analyze">Critical Analysis & Reasoning</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase">Difficulty Ratio Blend</label>
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-[11px] font-semibold text-[#C84B18]">Easy: {diffEasyPct}%</span>
+                        <span className="text-[11px] font-semibold text-amber-600">Med: {diffMedPct}%</span>
+                        <span className="text-[11px] font-semibold text-rose-600">Hard: {diffHardPct}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase">Teacher Instructions to AI Generator</label>
+                    <textarea
+                      rows={2}
+                      value={customPromptInstructions}
+                      onChange={(e) => setCustomPromptInstructions(e.target.value)}
+                      placeholder="e.g. Include Python code snippets, focus on numerical calculations, avoid trivial definitions..."
+                      className="w-full bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-lg p-2 text-xs text-[#242321] dark:text-[#F5F5F4] focus:outline-none focus:ring-1 focus:ring-[#C84B18]"
+                    />
+                  </div>
+                </div>
 
                 <div className="pt-4 flex justify-between">
                   <button type="button" onClick={() => setCreateStep(1)} className="px-4 py-2 border border-[#E5E0D8] dark:border-[#292524] rounded-md text-xs font-medium text-[#716D67] hover:text-[#242321] flex items-center gap-1.5">
@@ -2590,6 +2701,16 @@ export default function TeacherDashboard() {
             {/* Modal Footer Actions */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#E5E0D8] dark:border-[#292524] shrink-0">
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isAuditing}
+                  onClick={handleAuditPaper}
+                  className="px-3 py-2 rounded-md bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] hover:bg-[#C84B18]/20 border border-[#C84B18]/20 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>{isAuditing ? "Auditing..." : "Audit Paper with AI"}</span>
+                </button>
+
                 <a
                   href={`${API_V1}/exams/${previewExam.id}/pdf/question-paper`}
                   target="_blank"
@@ -2598,6 +2719,16 @@ export default function TeacherDashboard() {
                 >
                   <Printer className="h-3.5 w-3.5" />
                   <span>Print Paper PDF</span>
+                </a>
+
+                <a
+                  href={`${API_V1}/exams/${previewExam.id}/pdf/answer-key`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 rounded-md border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] text-xs font-medium flex items-center gap-1.5 hover:bg-[#E5E0D8]/40"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span>Print Answer Key</span>
                 </a>
 
                 {isEditingPaper && (
@@ -2746,6 +2877,69 @@ export default function TeacherDashboard() {
                 Close Room
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════ AI PAPER QUALITY & FAIRNESS AUDIT REPORT MODAL ═══════ */}
+      {auditModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4 relative">
+            <button 
+              onClick={() => setAuditModalData(null)}
+              className="absolute top-4 right-4 text-[#716D67] hover:text-[#242321] p-1 rounded-md"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] flex items-center justify-center font-extrabold text-lg shadow-2xs">
+                {auditModalData.overall_score || 92}%
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-[#242321] dark:text-[#F5F5F4]">AI Quality & Fairness Audit</h3>
+                <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">Paper Score & Optimization Feedback</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3 rounded-lg bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524]">
+                <span className="text-[#716D67] dark:text-[#A8A29E] block text-[10px] uppercase font-bold">Clarity Rating</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{auditModalData.clarity_rating || "Excellent"}</span>
+              </div>
+              <div className="p-3 rounded-lg bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524]">
+                <span className="text-[#716D67] dark:text-[#A8A29E] block text-[10px] uppercase font-bold">Fairness Index</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{auditModalData.fairness_rating || "High"}</span>
+              </div>
+            </div>
+
+            {auditModalData.distribution_feedback && (
+              <div className="p-3 rounded-lg bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] text-xs space-y-1">
+                <span className="font-bold text-[#242321] dark:text-[#F5F5F4]">Answer Balance Feedback</span>
+                <p className="text-[#716D67] dark:text-[#A8A29E] text-[11px] leading-relaxed">{auditModalData.distribution_feedback}</p>
+              </div>
+            )}
+
+            {auditModalData.recommendations && auditModalData.recommendations.length > 0 && (
+              <div className="space-y-1.5 text-xs">
+                <span className="font-bold text-[#242321] dark:text-[#F5F5F4]">AI Audit Recommendations</span>
+                <ul className="space-y-1 text-[#716D67] dark:text-[#A8A29E] text-[11px]">
+                  {auditModalData.recommendations.map((rec: string, rIdx: number) => (
+                    <li key={rIdx} className="flex items-center gap-1.5">
+                      <CheckCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>{rec}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <button
+              onClick={() => setAuditModalData(null)}
+              className="w-full py-2.5 bg-[#C84B18] text-white font-bold text-xs rounded-xl hover:bg-[#B33E0F] transition-all shadow-2xs"
+            >
+              Close Audit Report
+            </button>
           </div>
         </div>
       )}

@@ -160,14 +160,25 @@ app = FastAPI(
 )
 
 # Set up CORS middleware for dev & production client requests
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=r".*",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"]
-)
+allowed_origins_list = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+if "*" in allowed_origins_list:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"]
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"]
+    )
 
 # Register routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)

@@ -20,21 +20,18 @@ class Settings(BaseSettings):
     KB_UPLOADS_DIR: str = os.path.join(BASE_DIR, "uploads", "kb_documents")
     
     # SMTP Email Configuration
-    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_HOST: str = ""
     SMTP_PORT: int = 465
-    SMTP_USER: str = "aegeusexams@gmail.com"
-    SMTP_PASSWORD: str = "bpofgsqqgmbectsb"
-    EMAILS_FROM_EMAIL: str = "aegeusexams@gmail.com"
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    EMAILS_FROM_EMAIL: str = ""
     EMAILS_FROM_NAME: str = "EduQuizX Examination System"
     
-    # Supabase Configuration
-    SUPABASE_URL: str = ""
-    SUPABASE_PUBLISHABLE_KEY: str = ""
-    SUPABASE_SECRET_KEY: str = ""
-    SUPABASE_JWKS_URL: str = ""
+    # Allowed CORS origins (comma-separated string or wildcard)
+    ALLOWED_ORIGINS: str = "*"
     
     # Frontend Deployment URL for emails & links
-    FRONTEND_URL: str = "https://eduquizx-f.onrender.com"
+    FRONTEND_URL: str = "http://localhost:3000"
     
     class Config:
         case_sensitive = True

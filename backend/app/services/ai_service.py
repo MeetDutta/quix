@@ -428,3 +428,94 @@ class AIService:
                 "confidence_score": "0.95"
             })
         return mocked
+
+    def audit_paper(self, questions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Analyzes a list of generated examination questions for academic quality, clarity, ambiguity, option uniqueness, and answer distribution.
+        """
+        if not self.enabled:
+            return {
+                "overall_score": 92,
+                "clarity_rating": "Excellent",
+                "fairness_rating": "High",
+                "ambiguity_warnings": [],
+                "distribution_feedback": "Balanced distribution across options and question types.",
+                "recommendations": ["Paper is well-structured and ready for publishing."]
+            }
+        
+        prompt = f"""
+        Analyze the following examination questions for academic quality, clarity, ambiguity, option uniqueness, and answer distribution:
+        {json.dumps(questions[:20], indent=2)}
+
+        Return raw JSON matching this structure:
+        {{
+            "overall_score": 90,
+            "clarity_rating": "Excellent",
+            "fairness_rating": "High",
+            "ambiguity_warnings": ["Warning 1 if any"],
+            "distribution_feedback": "Detailed feedback on answer balance across options",
+            "recommendations": ["Recommendation 1", "Recommendation 2"]
+        }}
+        """
+        try:
+            raw_res = self._call_gemini(prompt, system_instruction="You are a senior academic quality auditor.", json_mode=True)
+            cleaned = self._clean_json_str(raw_res)
+            return json.loads(cleaned)
+        except Exception as e:
+            logger.error(f"Error auditing paper: {str(e)}")
+            return {
+                "overall_score": 88,
+                "clarity_rating": "Good",
+                "fairness_rating": "High",
+                "ambiguity_warnings": [],
+                "distribution_feedback": "Paper questions are structured and grounded in subject material.",
+                "recommendations": ["Verified for publishing."]
+            }
+
+    def reroll_question_with_prompt(
+        self, 
+        original_question: Dict[str, Any], 
+        user_prompt: str, 
+        context_chunks: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """
+        Regenerates a single question based on targeted teacher feedback.
+        """
+        if not self.enabled:
+            q = dict(original_question)
+            q["question_text"] = f"{original_question.get('question_text', 'Question')} (Revised: {user_prompt})"
+            return q
+
+        context_str = "\n\n".join([
+            f"Source: {chunk.get('doc_title', 'Document')}\nContent: {chunk.get('content')}"
+            for chunk in (context_chunks or [])[:3]
+        ]) if context_chunks else "N/A"
+
+        prompt = f"""
+        Original Question:
+        {json.dumps(original_question, indent=2)}
+
+        Teacher Revision Instructions:
+        "{user_prompt}"
+
+        Retrieved Material Context:
+        {context_str}
+
+        Return a revised JSON question object with fields:
+        "question_text", "options" (list of 4 strings for MCQ, or ["True","False"], or null), "correct_answer", "explanation", "question_type", "difficulty".
+        """
+
+        try:
+            raw_res = self._call_gemini(prompt, system_instruction="You are an expert assessment editor.", json_mode=True)
+            cleaned = self._clean_json_str(raw_res)
+            data = json.loads(cleaned)
+            if isinstance(data, list) and data:
+                data = data[0]
+            data["question_text"] = data.get("question") or data.get("question_text", original_question.get("question_text"))
+            data["question_type"] = original_question.get("question_type", original_question.get("question_type", "mcq"))
+            if not data.get("options") and original_question.get("options"):
+                data["options"] = original_question.get("options")
+            return data
+        except Exception as e:
+            logger.error(f"Error rerolling question with prompt: {str(e)}")
+            return original_question

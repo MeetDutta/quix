@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "../../store/authStore";
 import { 
-  GraduationCap, 
   AlertCircle, 
   Eye, 
   EyeOff, 
@@ -28,8 +27,6 @@ import { apiFetch } from "../../lib/api";
 export default function LoginPage() {
   const router = useRouter();
   const setAuth = useAuthStore((state) => state.setAuth);
-  
-  const [role, setRole] = useState<"teacher" | "student">("teacher");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -63,18 +60,6 @@ export default function LoginPage() {
     }
   }, []);
 
-  const autofillTeacher = () => {
-    setRole("teacher");
-    setEmail("demo.teacher@eduquizx.com");
-    setPassword("demopassword123");
-  };
-
-  const autofillStudent = () => {
-    setRole("student");
-    setEmail("demo.student@eduquizx.com");
-    setPassword("demopassword123");
-  };
-
   const toggleTheme = () => {
     const next = theme === "light" ? "dark" : "light";
     setTheme(next);
@@ -107,12 +92,7 @@ export default function LoginPage() {
       }
 
       setAuth(data.access_token, data.role, data.full_name);
-      
-      if (data.role === "teacher" || data.role === "inst_admin" || data.role === "super_admin") {
-        router.push("/dashboard/teacher");
-      } else {
-        router.push("/dashboard/student");
-      }
+      router.push("/portal");
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -147,11 +127,7 @@ export default function LoginPage() {
       }
 
       setAuth(data.access_token, data.role, data.full_name);
-      if (data.role === "teacher" || data.role === "inst_admin" || data.role === "super_admin") {
-        router.push("/dashboard/teacher");
-      } else {
-        router.push("/dashboard/student");
-      }
+      router.push("/portal");
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -245,52 +221,6 @@ export default function LoginPage() {
             <p className="text-[#716D67] dark:text-[#A8A29E] text-xs mt-1">Sign in to access your assessment workspace and analytics.</p>
           </div>
 
-          {/* Preset Fill Shortcuts */}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={autofillTeacher}
-              className="flex-1 py-1.5 px-3 text-[11px] font-semibold rounded-lg bg-[#FFF8F5] dark:bg-[#292524] text-[#C84B18] dark:text-[#F5F5F4] border border-[#F7D5CA] dark:border-[#383330] hover:bg-[#FCEBE6] transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-            >
-              <KeyRound className="h-3 w-3" />
-              <span>Fill Creator Creds</span>
-            </button>
-            <button
-              type="button"
-              onClick={autofillStudent}
-              className="flex-1 py-1.5 px-3 text-[11px] font-semibold rounded-lg bg-[#F5F0E8] dark:bg-[#292524] text-[#57534E] dark:text-[#F5F5F4] border border-[#E5E0D8] dark:border-[#383330] hover:bg-[#EAE3D5] transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-            >
-              <GraduationCap className="h-3.5 w-3.5" />
-              <span>Fill Student Creds</span>
-            </button>
-          </div>
-          
-          {/* Role Switcher Switch */}
-          <div className="flex gap-2 p-1 bg-[#FBF9F5] dark:bg-[#1D1B19] rounded-xl border border-[#E5E0D8] dark:border-[#292524]">
-            <button
-              type="button"
-              onClick={() => setRole("teacher")}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-                role === "teacher"
-                  ? "bg-white dark:bg-[#292524] text-[#C84B18] dark:text-white shadow-xs border border-[#E5E0D8] dark:border-[#383330]"
-                  : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-white"
-              }`}
-            >
-              Quiz Creator
-            </button>
-            <button
-              type="button"
-              onClick={() => setRole("student")}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-                role === "student"
-                  ? "bg-white dark:bg-[#292524] text-[#C84B18] dark:text-white shadow-xs border border-[#E5E0D8] dark:border-[#383330]"
-                  : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-white"
-              }`}
-            >
-              Student Portal
-            </button>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="flex gap-2 items-center p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/50 text-rose-700 dark:text-rose-300 text-xs">
@@ -310,7 +240,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={role === "teacher" ? "teacher@aegeus.edu" : "student@aegeus.edu"}
+                  placeholder="user@aegeus.edu"
                   className="w-full bg-[#FBF9F5] dark:bg-[#1D1B19] border border-[#E5E0D8] dark:border-[#292524] rounded-xl pl-9.5 pr-3.5 py-2.5 text-sm text-[#242321] dark:text-[#F5F5F4] placeholder-[#A8A29E] focus:outline-none focus:ring-2 focus:ring-[#C84B18]/30 focus:border-[#C84B18] transition-all font-medium"
                 />
                 <Mail className="h-4 w-4 text-[#A8A29E] absolute left-3.5 top-1/2 -translate-y-1/2" />

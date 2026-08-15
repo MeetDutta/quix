@@ -4,13 +4,16 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from app.database import get_db
 from app.models.user import User
 from app.models.document import Document, DocumentChunk
 from app.models.question import Question
 from app.models.institution import Subject
-from app.schemas.kb import DocumentResponse, SearchQuery, SearchResultItem, QuestionResponse, AIQuestionGenConfig, QuestionCreate
+from app.schemas.kb import (
+    DocumentResponse, SearchQuery, SearchResultItem, QuestionResponse, 
+    AIQuestionGenConfig, QuestionCreate, BatchApproveRequest, RefineQuestionRequest
+)
 from app.services.rag_service import RAGService
 from app.services.ai_service import AIService
 from app.utils.security import RoleChecker, get_current_user
@@ -445,12 +448,6 @@ def delete_document(
     db.commit()
     return {"message": "Document deleted successfully."}
 
-from pydantic import BaseModel
-
-class BatchApproveRequest(BaseModel):
-    subject_id: Optional[str] = None
-    question_ids: Optional[List[str]] = None
-
 @router.post("/questions/batch-approve")
 def batch_approve_questions(
     req: BatchApproveRequest,
@@ -467,9 +464,6 @@ def batch_approve_questions(
     count = query.update({Question.is_approved: True}, synchronize_session=False)
     db.commit()
     return {"message": f"Approved {count} questions successfully.", "count": count}
-
-class RefineQuestionRequest(BaseModel):
-    instruction: Optional[str] = None
 
 @router.post("/questions/{question_id}/refine", response_model=QuestionResponse)
 def refine_question_with_ai(

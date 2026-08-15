@@ -1,8 +1,10 @@
 import json
 import uuid
 import random
+import secrets
 import csv
 import io
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -19,7 +21,7 @@ from app.models.question import Question
 from app.models.institution import Subject, Institution, Department, Course
 from app.schemas.exam import (
     ExamCreate, ExamResponse, CredentialResponse, ExamGenerateKBRequest,
-    UpdateQuestionsRequest, RegenerateQuestionRequest
+    UpdateQuestionsRequest, RegenerateQuestionRequest, AuditPaperRequest, RerollPromptRequest
 )
 from app.utils.security import RoleChecker, get_current_user
 from app.services.rag_service import RAGService
@@ -32,6 +34,14 @@ teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
 
 rag_service = RAGService()
 ai_service = AIService()
+
+def generate_unique_exam_code(db: Session, prefix: str = "quiz") -> str:
+    clean_prefix = "".join(c for c in prefix if c.isalnum()).lower()[:5] or "quiz"
+    for _ in range(50):
+        code = f"ex-{clean_prefix}-{random.randint(1000, 9999)}"
+        if not db.query(Exam).filter(Exam.exam_code == code).first():
+            return code
+    return f"ex-{clean_prefix}-{uuid.uuid4().hex[:6]}"
 
 @router.post("/generate-from-kb", response_model=ExamResponse)
 def generate_exam_from_kb(
@@ -201,7 +211,7 @@ def generate_exam_from_kb(
     from app.models.institution import get_or_create_subject
     get_or_create_subject(db, subj_id)
 
-    exam_code = f"ex-{(req.name[:3] if req.name else 'quiz').lower()}-{random.randint(1000, 9999)}"
+    exam_code = generate_unique_exam_code(db, req.name or "quiz")
     now = datetime.utcnow()
     dur = req.duration_minutes or 30
 
@@ -229,6 +239,29 @@ def generate_exam_from_kb(
     db.commit()
     db.refresh(exam)
     return exam
+
+@router.post("/audit-paper")
+def audit_exam_paper(
+    req: AuditPaperRequest,
+    current_user: User = Depends(teacher_required)
+):
+    """
+    Runs AI quality and fairness audit on a list of compiled exam questions.
+    """
+    return ai_service.audit_paper(req.questions)
+
+@router.post("/reroll-question-with-prompt")
+def reroll_question_with_prompt(
+    req: RerollPromptRequest,
+    current_user: User = Depends(teacher_required)
+):
+    """
+    Regenerates a single question based on targeted teacher feedback.
+    """
+    return ai_service.reroll_question_with_prompt(
+        original_question=req.original_question,
+        user_prompt=req.prompt_feedback
+    )
 
 
 @router.post("/", response_model=ExamResponse)
@@ -357,7 +390,7 @@ def create_exam(
                 })
                 
     # 3. Create Exam code
-    exam_code = f"ex-{subj.name[:3].lower()}-{random.randint(1000, 9999)}"
+    exam_code = generate_unique_exam_code(db, subj.name or "quiz")
     
     exam = Exam(
         name=exam_in.name,
@@ -397,7 +430,7 @@ def duplicate_exam(
     if not original:
         raise HTTPException(status_code=404, detail="Exam paper not found")
         
-    exam_code = f"ex-{(original.name[:3] if original.name else 'quiz').lower()}-{random.randint(1000, 9999)}"
+    exam_code = generate_unique_exam_code(db, original.name or "quiz")
     now = datetime.utcnow()
 
     new_exam = Exam(
@@ -531,7 +564,7 @@ def generate_credentials(
                 username = candidate_username
                 break
 
-        password = str(random.randint(100000, 999999))
+        password = str(secrets.randbelow(900000) + 100000)
         
         cred = ExamCredential(
             exam_id=exam_id,

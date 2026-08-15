@@ -75,19 +75,19 @@ def get_exam_status(exam_code: str, db: Session = Depends(get_db)):
     now = datetime.utcnow()
     
     if now < exam.start_time:
-        status = "not_started"
+        exam_status = "not_started"
         seconds_until_start = int((exam.start_time - now).total_seconds())
     elif now > exam.end_time:
-        status = "ended"
+        exam_status = "ended"
         seconds_until_start = 0
     else:
-        status = "active"
+        exam_status = "active"
         seconds_until_start = 0
     
     return {
         "exam_name": exam.name,
         "exam_code": exam.exam_code,
-        "status": status,
+        "status": exam_status,
         "start_time": exam.start_time.isoformat(),
         "end_time": exam.end_time.isoformat(),
         "duration_minutes": exam.duration_minutes,
@@ -201,49 +201,10 @@ def get_exam_info(token: str, db: Session = Depends(get_db)):
         "evaluated_answers": evaluated_answers
     }
 
-@router.post("/save-progress")
-def save_progress(token: str, progress: Dict[str, Any], db: Session = Depends(get_db)):
-    """Persists responses dynamically; auto-submits if schedule window has ended."""
-    sub = get_submission_by_token(token, db)
-    if sub.status in ["submitted", "auto_submitted"]:
-        raise HTTPException(status_code=400, detail="Cannot save progress on submitted exam")
-        
-    now = datetime.utcnow()
-    if sub.exam and sub.exam.end_time and now > sub.exam.end_time:
-        sub.answers_json = json.dumps(progress)
-        db.commit()
-        return submit_exam(token, db)
-
-    sub.answers_json = json.dumps(progress)
-    db.add(sub)
-    db.commit()
-    return {"message": "Progress auto-saved."}
-
-@router.post("/proctor-alert")
-def proctor_alert(token: str, alert: ProctorLogCreate, db: Session = Depends(get_db)):
-    """Logs proctoring incidents (tab switches, resizing, dev tools, copy/paste)."""
-    sub = get_submission_by_token(token, db)
-    log = ProctoringLog(
-        submission_id=sub.id,
-        event_type=alert.event_type,
-        event_details=alert.event_details
-    )
-    db.add(log)
-    db.commit()
-    return {"message": "Proctor event logged."}
-
-@router.post("/submit")
-def submit_exam(token: str, db: Session = Depends(get_db)):
-    """
-    Submits the exam, scores objective questions instantly,
-    runs Gemini AI Subjective evaluations against rubrics, and finalizes results.
-    """
-    sub = get_submission_by_token(token, db)
-    if sub.status in ["submitted", "auto_submitted"]:
-        raise HTTPException(status_code=400, detail="Exam already submitted")
-        
+def process_exam_submission(sub: ExamSubmission, db: Session) -> dict:
+    """Internal helper to process exam evaluation and submission."""
     exam = sub.exam
-    original_questions = json.loads(exam.questions_json)
+    original_questions = json.loads(exam.questions_json) if exam.questions_json else []
     student_responses = json.loads(sub.answers_json) if sub.answers_json else {}
     
     total_score = 0.0
@@ -315,7 +276,8 @@ def submit_exam(token: str, db: Session = Depends(get_db)):
     sub.answers_json = json.dumps(evaluated_responses)
     
     # Mark credential as used
-    sub.credential.is_used = True
+    if sub.credential:
+        sub.credential.is_used = True
     
     db.add(sub)
     db.commit()
@@ -337,6 +299,49 @@ def submit_exam(token: str, db: Session = Depends(get_db)):
         "score": sub.score,
         "percentage": sub.percentage
     }
+
+@router.post("/save-progress")
+def save_progress(token: str, progress: Dict[str, Any], db: Session = Depends(get_db)):
+    """Persists responses dynamically; auto-submits if schedule window has ended."""
+    sub = get_submission_by_token(token, db)
+    if sub.status in ["submitted", "auto_submitted"]:
+        raise HTTPException(status_code=400, detail="Cannot save progress on submitted exam")
+        
+    now = datetime.utcnow()
+    if sub.exam and sub.exam.end_time and now > sub.exam.end_time:
+        sub.answers_json = json.dumps(progress)
+        db.commit()
+        return process_exam_submission(sub, db)
+
+    sub.answers_json = json.dumps(progress)
+    db.add(sub)
+    db.commit()
+    return {"message": "Progress auto-saved."}
+
+@router.post("/proctor-alert")
+def proctor_alert(token: str, alert: ProctorLogCreate, db: Session = Depends(get_db)):
+    """Logs proctoring incidents (tab switches, resizing, dev tools, copy/paste)."""
+    sub = get_submission_by_token(token, db)
+    log = ProctoringLog(
+        submission_id=sub.id,
+        event_type=alert.event_type,
+        event_details=alert.event_details
+    )
+    db.add(log)
+    db.commit()
+    return {"message": "Proctor event logged."}
+
+@router.post("/submit")
+def submit_exam(token: str, db: Session = Depends(get_db)):
+    """
+    Submits the exam, scores objective questions instantly,
+    runs Gemini AI Subjective evaluations against rubrics, and finalizes results.
+    """
+    sub = get_submission_by_token(token, db)
+    if sub.status in ["submitted", "auto_submitted"]:
+        raise HTTPException(status_code=400, detail="Exam already submitted")
+        
+    return process_exam_submission(sub, db)
 
 @router.websocket("/ws/teacher/{exam_id}")
 async def websocket_teacher_endpoint(websocket: WebSocket, exam_id: str):

@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.109.0",
     "@tailwindcss/postcss": "^4.0.0",
     "@tanstack/react-query": "^5.28.4",
     "@types/katex": "^0.16.8",

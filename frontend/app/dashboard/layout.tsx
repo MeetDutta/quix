@@ -27,7 +27,8 @@ import {
   Sliders,
   ChevronDown,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  ArrowLeft
 } from "lucide-react";
 
 export default function DashboardLayout({
@@ -251,17 +252,17 @@ export default function DashboardLayout({
           <div>
             {!sidebarCollapsed && (
               <div className="text-[10px] font-semibold text-[#716D67] dark:text-[#A8A29E] px-2 mb-1.5 uppercase tracking-wider">
-                Workspace
+                {pathname === "/dashboard/teacher" ? "Creator Studio" : "Student Portal"}
               </div>
             )}
             <div className="space-y-0.5">
-              {isTeacher && (
+              {pathname === "/dashboard/teacher" ? (
                 <>
                   <button 
                     onClick={() => navToTab("exams")}
                     title="Assessments & Quizzes"
                     className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
-                      pathname === "/dashboard/teacher" && currentTab === "exams"
+                      currentTab === "exams"
                         ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
                         : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
                     }`}
@@ -274,7 +275,7 @@ export default function DashboardLayout({
                     onClick={() => navToTab("create")}
                     title="Create Assessment Wizard"
                     className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
-                      pathname === "/dashboard/teacher" && currentTab === "create"
+                      currentTab === "create"
                         ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
                         : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
                     }`}
@@ -287,7 +288,7 @@ export default function DashboardLayout({
                     onClick={() => navToTab("bank")}
                     title="Question Bank Library"
                     className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
-                      pathname === "/dashboard/teacher" && currentTab === "bank"
+                      currentTab === "bank"
                         ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
                         : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
                     }`}
@@ -300,7 +301,7 @@ export default function DashboardLayout({
                     onClick={() => navToTab("kb")}
                     title="Knowledge Base"
                     className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
-                      pathname === "/dashboard/teacher" && currentTab === "kb"
+                      currentTab === "kb"
                         ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
                         : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
                     }`}
@@ -313,7 +314,7 @@ export default function DashboardLayout({
                     onClick={() => navToTab("students")}
                     title="Student Directory"
                     className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
-                      pathname === "/dashboard/teacher" && currentTab === "students"
+                      currentTab === "students"
                         ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
                         : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
                     }`}
@@ -322,46 +323,44 @@ export default function DashboardLayout({
                     {!sidebarCollapsed && <span>Student Directory</span>}
                   </button>
                 </>
+              ) : (
+                <a
+                  href="/dashboard/student"
+                  onClick={closeSidebarMobile}
+                  title="Student Portal"
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60"
+                >
+                  <UserCheck className="h-4 w-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Student Exam Portal</span>}
+                </a>
               )}
-
-              <a 
-                href="/dashboard/student" 
-                onClick={closeSidebarMobile}
-                title="Student Portal"
-                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
-                  pathname === "/dashboard/student"
-                    ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
-                    : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
-                }`}
-              >
-                <UserCheck className="h-4 w-4 shrink-0" />
-                {!sidebarCollapsed && <span>Student Portal</span>}
-              </a>
             </div>
           </div>
 
-          {/* ANALYTICS */}
-          <div>
-            {!sidebarCollapsed && (
-              <div className="text-[10px] font-semibold text-[#716D67] dark:text-[#A8A29E] px-2 mb-1.5 uppercase tracking-wider">
-                Analytics
+          {/* ANALYTICS (Creator Mode Only) */}
+          {pathname === "/dashboard/teacher" && (
+            <div>
+              {!sidebarCollapsed && (
+                <div className="text-[10px] font-semibold text-[#716D67] dark:text-[#A8A29E] px-2 mb-1.5 uppercase tracking-wider">
+                  Analytics
+                </div>
+              )}
+              <div className="space-y-0.5">
+                <button 
+                  onClick={() => navToTab("reports")}
+                  title="Results & Reports"
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
+                    currentTab === "reports"
+                      ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
+                      : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
+                  }`}
+                >
+                  <BarChart2 className="h-4 w-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Results & Gradebook</span>}
+                </button>
               </div>
-            )}
-            <div className="space-y-0.5">
-              <button 
-                onClick={() => navToTab("reports")}
-                title="Results & Reports"
-                className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
-                  pathname === "/dashboard/teacher" && currentTab === "reports"
-                    ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
-                    : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
-                }`}
-              >
-                <BarChart2 className="h-4 w-4 shrink-0" />
-                {!sidebarCollapsed && <span>Results & Gradebook</span>}
-              </button>
             </div>
-          </div>
+          )}
 
           {/* SETTINGS */}
           <div>
@@ -455,12 +454,20 @@ export default function DashboardLayout({
               <Menu className="h-5 w-5" />
             </button>
 
-            <div className="flex items-center gap-1.5 text-xs text-[#716D67] dark:text-[#A8A29E]">
+            <div className="flex items-center gap-2 text-xs text-[#716D67] dark:text-[#A8A29E]">
               <span>EduQuizX</span>
               <span>/</span>
               <span className="font-semibold text-[#242321] dark:text-[#F5F5F4]">
                 {pathname === "/dashboard/teacher" ? "Quiz Creator" : "Student Portal"}
               </span>
+              <a 
+                href="/portal" 
+                className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] hover:bg-[#C84B18]/20 text-xs font-bold transition-all border border-[#C84B18]/20"
+                title="Switch Workspace Mode"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span>Switch Workspace</span>
+              </a>
             </div>
           </div>
 

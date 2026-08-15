@@ -66,3 +66,10 @@ class AIQuestionGenConfig(BaseModel):
     difficulty: str  # easy, medium, hard
     count: int = 5
     topic: Optional[str] = None
+
+class BatchApproveRequest(BaseModel):
+    subject_id: Optional[str] = None
+    question_ids: Optional[List[str]] = None
+
+class RefineQuestionRequest(BaseModel):
+    instruction: Optional[str] = None
