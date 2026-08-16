@@ -456,12 +456,24 @@ def duplicate_exam(
 
 @router.post("/{exam_id}/publish")
 def publish_exam(exam_id: str, current_user: User = Depends(teacher_required), db: Session = Depends(get_db)):
-    """Publishes the exam, making the URL active."""
+    """Publishes the exam, making the URL active immediately."""
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
+    
+    now = datetime.utcnow()
     exam.is_published = True
+    
+    # Ensure start_time is set so the exam is immediately accessible
+    if not exam.start_time or exam.start_time > now:
+        exam.start_time = now - timedelta(seconds=30)
+        
+    # Ensure end_time has at least 30 days open window if unset or expired
+    if not exam.end_time or exam.end_time <= now:
+        exam.end_time = now + timedelta(days=30)
+        
     db.commit()
+    db.refresh(exam)
     
     # Notify enrolled students
     creds = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).all()

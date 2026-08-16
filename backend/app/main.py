@@ -8,87 +8,6 @@ from app.api import auth, students, kb, exams, attempts, reports, notifications,
 
 import app.models
 
-# Automatically build database schema on startup for easy zero-setup local deployment!
-try:
-    Base.metadata.create_all(bind=engine)
-
-    # Run manual schema updates (zero-setup migration)
-    from sqlalchemy import text
-    with engine.connect() as conn:
-        try:
-            conn.execute(text("SELECT subject_id FROM documents LIMIT 1"))
-        except Exception:
-            try:
-                conn.execute(text("ALTER TABLE documents ADD COLUMN subject_id VARCHAR(36) REFERENCES subjects(id)"))
-                conn.commit()
-            except Exception:
-                pass
-
-        # Ensure user verification and Google Auth columns exist
-        cols_to_add = [
-            ("is_verified", "BOOLEAN DEFAULT 1"),
-            ("verification_token", "VARCHAR(255)"),
-            ("auth_provider", "VARCHAR(50) DEFAULT 'local'"),
-            ("google_id", "VARCHAR(255)")
-        ]
-        for col_name, col_type in cols_to_add:
-            try:
-                conn.execute(text(f"SELECT {col_name} FROM users LIMIT 1"))
-            except Exception:
-                try:
-                    conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
-                    conn.commit()
-                except Exception:
-                    pass
-                    
-        # Ensure question bank columns exist
-        q_cols_to_add = [
-            ("is_bank_question", "BOOLEAN DEFAULT 0"),
-            ("tags", "TEXT"),
-            ("exam_id", "VARCHAR(36)")
-        ]
-        for col_name, col_type in q_cols_to_add:
-            try:
-                conn.execute(text(f"SELECT {col_name} FROM questions LIMIT 1"))
-            except Exception:
-                try:
-                    conn.execute(text(f"ALTER TABLE questions ADD COLUMN {col_name} {col_type}"))
-                    conn.commit()
-                except Exception:
-                    pass
-
-        # Ensure exam targeting columns exist
-        e_cols_to_add = [
-            ("subject_offering_id", "VARCHAR(36)"),
-            ("assessment_group_id", "VARCHAR(36)")
-        ]
-        for col_name, col_type in e_cols_to_add:
-            try:
-                conn.execute(text(f"SELECT {col_name} FROM exams LIMIT 1"))
-            except Exception:
-                try:
-                    conn.execute(text(f"ALTER TABLE exams ADD COLUMN {col_name} {col_type}"))
-                    conn.commit()
-                except Exception:
-                    pass
-
-        # Ensure student identity columns exist
-        s_cols_to_add = [
-            ("institution_id", "VARCHAR(36)"),
-            ("admission_year", "VARCHAR(10)")
-        ]
-        for col_name, col_type in s_cols_to_add:
-            try:
-                conn.execute(text(f"SELECT {col_name} FROM students LIMIT 1"))
-            except Exception:
-                try:
-                    conn.execute(text(f"ALTER TABLE students ADD COLUMN {col_name} {col_type}"))
-                    conn.commit()
-                except Exception:
-                    pass
-except Exception as startup_db_err:
-    print(f"⚠️ Startup Database initialization notice: {startup_db_err}")
-
 # Seed default initial data for local development
 from app.database import SessionLocal
 from app.models.user import User, Student
@@ -216,14 +135,25 @@ def seed_initial_data():
     finally:
         db.close()
 
-seed_initial_data()
-
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Enterprise-grade AI-powered Examination & Student Management System",
     version="1.0.0",
     redirect_slashes=False
 )
+
+@app.on_event("startup")
+def on_startup():
+    """Automatically build database schema and seed initial demo data on background startup."""
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"Schema sync notice: {e}")
+
+    try:
+        seed_initial_data()
+    except Exception as e:
+        print(f"Seed notice: {e}")
 
 # Set up CORS middleware for dev & production client requests
 allowed_origins_list = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]

@@ -27,14 +27,16 @@ export default function KnowledgeBaseManager({ documents, token, onRefresh }: Kn
       formData.append("subject_id", kbSubjectId);
       const res = await apiFetch("/kb/upload", { token, method: "POST", body: formData });
       if (res.ok) {
-        showToast("Knowledge document vector indexed!", "success");
-        setKbFile(null); setKbSubjectId("");
+        showToast("Knowledge document vector indexed successfully!", "success");
+        setKbFile(null);
+        setKbSubjectId("");
         onRefresh();
       } else {
-        showToast("Document upload failed", "error");
+        const errData = await res.json().catch(() => ({}));
+        showToast(errData.detail || "Document upload failed. Please check file format.", "error");
       }
     } catch {
-      showToast("Upload network error", "error");
+      showToast("Upload network error. Please verify backend connection.", "error");
     } finally {
       setIsUploading(false);
     }

@@ -12,6 +12,7 @@ if db_url.startswith("sqlite"):
 else:
     engine = create_engine(
         db_url, 
+        connect_args={"connect_timeout": 5},
         pool_size=5, 
         max_overflow=10, 
         pool_recycle=300, 
