@@ -10,10 +10,17 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import jwt
 from app.config import settings
 from app.database import get_db
+
+def to_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 from app.models.user import User, Student
 from app.models.document import Document, DocumentChunk
 from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog
@@ -216,11 +223,10 @@ def generate_exam_from_kb(
     dur = req.duration_minutes or 30
 
     # Schedule bounds validation
-    exam_start = req.start_time if req.start_time else now
-    exam_end = req.end_time if req.end_time else (exam_start + timedelta(days=30))
-
-    if req.end_time and req.start_time and req.end_time < req.start_time + timedelta(minutes=dur):
-        raise HTTPException(status_code=400, detail=f"Schedule End Time must be at least {dur} minutes after Start Time.")
+    exam_start = to_naive_utc(req.start_time) if req.start_time else (now - timedelta(seconds=10))
+    exam_end = to_naive_utc(req.end_time) if req.end_time else (exam_start + timedelta(days=30))
+    if exam_end <= exam_start:
+        exam_end = exam_start + timedelta(days=30)
 
     exam = Exam(
         name=req.name,
@@ -392,6 +398,12 @@ def create_exam(
     # 3. Create Exam code
     exam_code = generate_unique_exam_code(db, subj.name or "quiz")
     
+    now = datetime.utcnow()
+    c_start = to_naive_utc(exam_in.start_time) if exam_in.start_time else (now - timedelta(seconds=10))
+    c_end = to_naive_utc(exam_in.end_time) if exam_in.end_time else (c_start + timedelta(days=30))
+    if c_end <= c_start:
+        c_end = c_start + timedelta(days=30)
+    
     exam = Exam(
         name=exam_in.name,
         subject_id=exam_in.subject_id,
@@ -399,8 +411,8 @@ def create_exam(
         total_marks=exam_in.total_marks,
         negative_marking=exam_in.negative_marking or 0.0,
         passing_marks=exam_in.passing_marks,
-        start_time=exam_in.start_time,
-        end_time=exam_in.end_time,
+        start_time=c_start,
+        end_time=c_end,
         exam_code=exam_code,
         blueprint_json=json.dumps([s.model_dump() for s in exam_in.blueprint]) if exam_in.blueprint else None,
         questions_json=json.dumps(compiled_questions),
@@ -464,13 +476,13 @@ def publish_exam(exam_id: str, current_user: User = Depends(teacher_required), d
     now = datetime.utcnow()
     exam.is_published = True
     
-    # Ensure start_time is set so the exam is immediately accessible
-    if not exam.start_time or exam.start_time > now:
+    # If start_time was never set, default to immediate active window
+    if not exam.start_time:
         exam.start_time = now - timedelta(seconds=30)
         
-    # Ensure end_time has at least 30 days open window if unset or expired
-    if not exam.end_time or exam.end_time <= now:
-        exam.end_time = now + timedelta(days=30)
+    # Ensure end_time is open and valid relative to start_time
+    if not exam.end_time or exam.end_time <= exam.start_time:
+        exam.end_time = exam.start_time + timedelta(days=30)
         
     db.commit()
     db.refresh(exam)

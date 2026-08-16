@@ -81,6 +81,14 @@ def get_submission_by_token(token: str, db: Session) -> ExamSubmission:
         
     return submission
 
+def to_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        from datetime import timezone
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
 @router.get("/exam-status")
 def get_exam_status(exam_code: str, db: Session = Depends(get_db)):
     """
@@ -92,11 +100,13 @@ def get_exam_status(exam_code: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Exam not found or not published")
     
     now = datetime.utcnow()
+    exam_start = to_naive_utc(exam.start_time) or (now - timedelta(seconds=10))
+    exam_end = to_naive_utc(exam.end_time) or (exam_start + timedelta(days=30))
     
-    if now < exam.start_time:
+    if now < exam_start:
         exam_status = "not_started"
-        seconds_until_start = int((exam.start_time - now).total_seconds())
-    elif now > exam.end_time:
+        seconds_until_start = int((exam_start - now).total_seconds())
+    elif now > exam_end:
         exam_status = "ended"
         seconds_until_start = 0
     else:
@@ -107,8 +117,8 @@ def get_exam_status(exam_code: str, db: Session = Depends(get_db)):
         "exam_name": exam.name,
         "exam_code": exam.exam_code,
         "status": exam_status,
-        "start_time": exam.start_time.isoformat(),
-        "end_time": exam.end_time.isoformat(),
+        "start_time": exam_start.isoformat(),
+        "end_time": exam_end.isoformat(),
         "duration_minutes": exam.duration_minutes,
         "server_time": now.isoformat(),
         "seconds_until_start": seconds_until_start
@@ -126,9 +136,12 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
         
     # Verify timeframe
     now = datetime.utcnow()
-    if now < exam.start_time:
-        raise HTTPException(status_code=400, detail=f"Exam has not started yet. Opens at {exam.start_time}")
-    if now > exam.end_time:
+    exam_start = to_naive_utc(exam.start_time) or (now - timedelta(seconds=10))
+    exam_end = to_naive_utc(exam.end_time) or (exam_start + timedelta(days=30))
+    
+    if now < exam_start:
+        raise HTTPException(status_code=400, detail=f"Exam has not started yet. Opens at {exam_start}")
+    if now > exam_end:
         raise HTTPException(status_code=400, detail="Exam has already ended")
         
     cred = db.query(ExamCredential).filter(

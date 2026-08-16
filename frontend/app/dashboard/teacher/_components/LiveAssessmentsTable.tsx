@@ -238,8 +238,8 @@ export default function LiveAssessmentsTable({
                     </td>
                     <td className="py-3.5 px-4 text-[11px] text-[#716D67] dark:text-[#A8A29E]">
                       {exam.start_time
-                        ? `${new Date(exam.start_time).toLocaleDateString()} - ${new Date(exam.end_time).toLocaleDateString()}`
-                        : "Immediate"}
+                        ? `${new Date(exam.start_time).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} – ${new Date(exam.end_time).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`
+                        : "Open Access"}
                     </td>
                     <td className="py-3.5 px-4 text-right relative">
                       <div className="flex items-center justify-end gap-1.5">

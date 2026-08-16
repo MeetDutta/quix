@@ -274,25 +274,43 @@ export default function TeacherDashboard() {
     }
   };
 
+  const formatLocalDateTime = (date: Date) => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   const setSchedulePreset = (preset: string) => {
     const now = new Date();
+    const durMins = parseInt(examDuration) || 30;
     if (preset === "now") {
-      setExamStartDate(now.toISOString().slice(0, 16));
-      const end = new Date(now.getTime() + (parseInt(examDuration) || 30) * 60000);
-      setExamEndDate(end.toISOString().slice(0, 16));
+      setExamStartDate(formatLocalDateTime(now));
+      const end = new Date(now.getTime() + durMins * 60000);
+      setExamEndDate(formatLocalDateTime(end));
     } else if (preset === "today4pm") {
       const start = new Date();
       start.setHours(16, 0, 0, 0);
-      setExamStartDate(start.toISOString().slice(0, 16));
-      const end = new Date(start.getTime() + (parseInt(examDuration) || 30) * 60000);
-      setExamEndDate(end.toISOString().slice(0, 16));
+      if (now > start) {
+        start.setDate(start.getDate() + 1);
+      }
+      setExamStartDate(formatLocalDateTime(start));
+      const end = new Date(start.getTime() + durMins * 60000);
+      setExamEndDate(formatLocalDateTime(end));
     } else if (preset === "tomorrow10am") {
       const start = new Date();
       start.setDate(start.getDate() + 1);
       start.setHours(10, 0, 0, 0);
-      setExamStartDate(start.toISOString().slice(0, 16));
-      const end = new Date(start.getTime() + (parseInt(examDuration) || 30) * 60000);
-      setExamEndDate(end.toISOString().slice(0, 16));
+      setExamStartDate(formatLocalDateTime(start));
+      const end = new Date(start.getTime() + durMins * 60000);
+      setExamEndDate(formatLocalDateTime(end));
+    } else if (preset === "open30days") {
+      setExamStartDate(formatLocalDateTime(now));
+      const end = new Date(now.getTime() + 30 * 24 * 60 * 60000);
+      setExamEndDate(formatLocalDateTime(end));
     }
   };
 
@@ -843,6 +861,13 @@ export default function TeacherDashboard() {
                         className="px-3 py-1.5 text-xs font-semibold border border-[#E5E0D8] dark:border-[#292524] rounded-lg bg-[#F7F4EF] dark:bg-[#141312] hover:border-[#C84B18]"
                       >
                         ⚡ Start Now
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSchedulePreset("open30days")}
+                        className="px-3 py-1.5 text-xs font-semibold border border-[#E5E0D8] dark:border-[#292524] rounded-lg bg-[#F7F4EF] dark:bg-[#141312] hover:border-[#C84B18]"
+                      >
+                        📅 30-Day Window
                       </button>
                       <button
                         type="button"
