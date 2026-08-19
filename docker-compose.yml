@@ -23,6 +23,8 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - EMAILS_FROM_EMAIL=${EMAILS_FROM_EMAIL:-no-reply@eduquizx.com}
       - EMAILS_FROM_NAME=${EMAILS_FROM_NAME:-EduQuizX Examination System}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
     volumes:
       - uploads_data:/app/uploads
       - db_data:/app/data
@@ -44,6 +46,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-716730043675-rq3tq97avgrrbtjoup3hjdhteg4k7pql.apps.googleusercontent.com}
     container_name: eduquizx-frontend
     restart: unless-stopped
     ports:
@@ -52,6 +55,7 @@ services:
       - PORT=3000
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-716730043675-rq3tq97avgrrbtjoup3hjdhteg4k7pql.apps.googleusercontent.com}
     depends_on:
       backend:
         condition: service_healthy

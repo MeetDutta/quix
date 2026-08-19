@@ -30,12 +30,12 @@ from app.services.workspace_service import bootstrap_personal_workspace
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-@router.post("/register", response_model=UserProfile)
+@router.post("/register", response_model=Token)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
     # Check if user exists
-    db_user = db.query(User).filter(User.email == user_in.email, User.is_deleted == False).first()
+    db_user = db.query(User).filter(User.email == user_in.email.strip().lower(), User.is_deleted == False).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="An account with this email address already exists. Please sign in.")
         
     # If institution id is provided, check if valid
     if user_in.institution_id:
@@ -46,22 +46,38 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     assigned_role = user_in.role if user_in.role in ["teacher", "student", "inst_admin"] else "teacher"
     hashed_pwd = get_password_hash(user_in.password)
     user = User(
-        email=user_in.email,
+        email=user_in.email.strip().lower(),
         hashed_password=hashed_pwd,
-        full_name=user_in.full_name,
+        full_name=user_in.full_name.strip(),
         role=assigned_role,
         institution_id=user_in.institution_id,
         is_verified=True,
-        is_active=True
+        is_active=True,
+        last_login_at=datetime.utcnow()
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    if assigned_role in ["teacher", "inst_admin"]:
-        bootstrap_personal_workspace(user, db)
+    ws_id = None
+    ws_name = None
+    if assigned_role in ["teacher", "inst_admin", "super_admin"]:
+        ws = bootstrap_personal_workspace(user, db)
+        ws_id = ws.id
+        ws_name = ws.name
 
-    return user
+    access = create_access_token(user.id)
+    refresh = create_refresh_token(user.id)
+
+    return {
+        "access_token": access,
+        "refresh_token": refresh,
+        "token_type": "bearer",
+        "role": user.role,
+        "full_name": user.full_name,
+        "workspace_id": ws_id,
+        "workspace_name": ws_name
+    }
 
 @router.post("/login", response_model=Token)
 def login(login_in: UserLogin, db: Session = Depends(get_db)):
@@ -213,13 +229,14 @@ def google_auth(
         user = db.query(User).filter(User.email == email, User.is_deleted == False).first()
     
     if not user:
-        # All new Google sign-ups are Teachers by default with auto-provisioned workspace
+        # Determine role for new Google user (default: teacher)
+        assigned_role = payload.role if (payload.role and payload.role in ["teacher", "student", "inst_admin"]) else "teacher"
         generated_pwd = f"GoogleAuth{secrets.token_hex(4)}!"
         user = User(
             email=email,
             full_name=full_name,
             hashed_password=get_password_hash(generated_pwd),
-            role="teacher",
+            role=assigned_role,
             is_verified=True,
             is_active=True,
             auth_provider="google",

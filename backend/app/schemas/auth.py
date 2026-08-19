@@ -36,10 +36,11 @@ class UserProfile(BaseModel):
 
 
 class GoogleAuthPayload(BaseModel):
-    email: EmailStr
+    email: Optional[EmailStr] = None
     name: Optional[str] = None
     google_id: Optional[str] = None
     token: Optional[str] = None
+    role: Optional[str] = "teacher"
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr

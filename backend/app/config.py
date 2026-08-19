@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     
     # Google OAuth / Identity Services
     GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
     
     # Uploads
     UPLOAD_DIR: str = os.path.join(BASE_DIR, "uploads")
