@@ -52,11 +52,6 @@ export default function LoginPage() {
   const [examCodeInput, setExamCodeInput] = useState("");
   const [showExamCodeGateway, setShowExamCodeGateway] = useState(false);
 
-  // Google SSO Modal State
-  const [googleModalOpen, setGoogleModalOpen] = useState(false);
-  const [googleInputEmail, setGoogleInputEmail] = useState("meetdutta001@gmail.com");
-  const [googleInputName, setGoogleInputName] = useState("Meet Dutta");
-
   // Forgot Password Modal State
   const [forgotModalOpen, setForgotModalOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
@@ -252,40 +247,6 @@ export default function LoginPage() {
       setError(err.message);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const executeGoogleAuth = async (targetEmail: string, targetName: string) => {
-    setError(null);
-    setLoading(true);
-    try {
-      const response = await apiFetch("/auth/google", {
-        method: "POST",
-        body: JSON.stringify({
-          email: targetEmail.trim().toLowerCase(),
-          name: targetName.trim() || targetEmail.split("@")[0].replace(".", " ").toUpperCase(),
-          google_id: `google_${Date.now()}`,
-          role: regRole,
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || "Google authentication failed");
-      }
-
-      if (data.workspace_id) {
-        localStorage.setItem("workspaceId", data.workspace_id);
-        localStorage.setItem("workspaceName", data.workspace_name || "Personal Workspace");
-      }
-
-      setAuth(data.access_token, data.role, data.full_name);
-      router.push(data.role === "teacher" ? "/dashboard/teacher" : "/portal");
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-      setGoogleModalOpen(false);
     }
   };
 
@@ -684,23 +645,9 @@ export default function LoginPage() {
             <div className="border-t border-[#E5E0D8] dark:border-[#292524] w-full" />
           </div>
 
-          {/* Google Identity Services Container & Quick Sign-In Button */}
-          <div className="space-y-2">
+          {/* Google Identity Services Container */}
+          <div className="w-full flex justify-center min-h-[44px]">
             <div id="google-signin-btn-container" className="w-full flex justify-center min-h-[44px]" />
-            <button
-              type="button"
-              onClick={() => setGoogleModalOpen(true)}
-              disabled={loading}
-              className="w-full py-2.5 px-4 bg-white dark:bg-[#1D1B19] border border-[#E5E0D8] dark:border-[#292524] rounded-xl text-xs font-bold text-[#242321] dark:text-[#F5F5F4] hover:bg-[#F0ECE4]/50 dark:hover:bg-[#292524] flex items-center justify-center gap-2.5 transition-all shadow-2xs cursor-pointer"
-            >
-              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-              </svg>
-              <span>{authMode === "signup" ? "Sign Up with Google Account" : "Continue with Google Account"}</span>
-            </button>
           </div>
 
           {/* Bottom Switcher: Sign In vs Create Account */}
@@ -869,83 +816,7 @@ export default function LoginPage() {
         </div>
       )}
 
-      {/* ═══════ GOOGLE SSO MODAL ═══════ */}
-      {googleModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-[#171615] rounded-2xl border border-[#E5E0D8] dark:border-[#292524] p-6 max-w-sm w-full shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-3">
-              <div className="flex items-center gap-2">
-                <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                </svg>
-                <h3 className="text-sm font-bold text-[#242321] dark:text-[#F5F5F4]">Google Teacher Sign-In</h3>
-              </div>
-              <button 
-                onClick={() => setGoogleModalOpen(false)}
-                className="text-[#716D67] hover:text-[#242321] dark:hover:text-white cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-[#716D67] dark:text-[#A8A29E] leading-relaxed">
-              Sign in with your Google account. Your account is automatically configured with a <b>Teacher Workspace</b> on EduQuizX.
-            </p>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                executeGoogleAuth(googleInputEmail, googleInputName);
-              }}
-              className="space-y-3"
-            >
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase">Google Account Email</label>
-                <input
-                  type="email"
-                  required
-                  value={googleInputEmail}
-                  onChange={(e) => setGoogleInputEmail(e.target.value)}
-                  placeholder="e.g. meetdutta001@gmail.com"
-                  className="w-full bg-[#FBF9F5] dark:bg-[#1D1B19] border border-[#E5E0D8] dark:border-[#292524] rounded-xl px-3 py-2 text-xs text-[#242321] dark:text-[#F5F5F4] focus:outline-none focus:ring-2 focus:ring-[#C84B18]/30"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase">Display Name</label>
-                <input
-                  type="text"
-                  required
-                  value={googleInputName}
-                  onChange={(e) => setGoogleInputName(e.target.value)}
-                  placeholder="e.g. Meet Dutta"
-                  className="w-full bg-[#FBF9F5] dark:bg-[#1D1B19] border border-[#E5E0D8] dark:border-[#292524] rounded-xl px-3 py-2 text-xs text-[#242321] dark:text-[#F5F5F4] focus:outline-none focus:ring-2 focus:ring-[#C84B18]/30"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setGoogleModalOpen(false)}
-                  className="flex-1 py-2 rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-xs font-semibold text-[#716D67] hover:bg-[#F0ECE4]/50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 py-2 bg-gradient-to-r from-[#C84B18] to-amber-600 hover:from-[#B33E0F] hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  {loading ? "Authenticating..." : "Authorize as Teacher"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* ═══════ FORGOT PASSWORD MODAL ═══════ */}
     </div>
   );
 }
