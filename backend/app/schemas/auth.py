@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional
 
 class UserLogin(BaseModel):
@@ -18,6 +18,8 @@ class Token(BaseModel):
     token_type: str
     role: str
     full_name: str
+    workspace_id: Optional[str] = None
+    workspace_name: Optional[str] = None
 
 class PasswordChange(BaseModel):
     old_password: str
@@ -30,8 +32,8 @@ class UserProfile(BaseModel):
     role: str
     institution_id: Optional[str]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class GoogleAuthPayload(BaseModel):
     email: EmailStr

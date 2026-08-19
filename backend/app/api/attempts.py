@@ -174,14 +174,31 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
 
     is_completed = sub.status in ["submitted", "auto_submitted"]
     
+    questions_list = json.loads(exam.questions_json) if exam.questions_json else []
+
+    # Candidate name resolution from ExamCandidate or Student User
+    cand_name = "Candidate"
+    if cred.student and cred.student.user:
+        cand_name = cred.student.user.full_name
+    else:
+        from app.models.candidate import ExamCandidate
+        candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam.id).all()
+        for c in candidates:
+            clean_name = "".join(ch for ch in c.name_snapshot.split()[0].lower() if ch.isalnum())
+            if clean_name in cred.username.lower() or (c.roll_number_snapshot and c.roll_number_snapshot.lower() in cred.username.lower()):
+                cand_name = c.name_snapshot
+                break
+        if cand_name == "Candidate" and candidates:
+            cand_name = candidates[0].name_snapshot
+
     return {
         "session_token": token,
-        "student_name": cred.student.user.full_name if (cred.student and cred.student.user) else "Guest Student",
+        "student_name": cand_name,
         "duration_minutes": exam.duration_minutes,
-        "is_completed": is_completed,
-        "submission_id": sub.id,
-        "score": sub.score,
-        "percentage": sub.percentage
+        "total_marks": exam.total_marks,
+        "passing_marks": exam.passing_marks,
+        "questions_count": len(questions_list),
+        "is_completed": is_completed
     }
 
 @router.get("/exam-info")

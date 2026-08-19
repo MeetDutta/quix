@@ -28,7 +28,10 @@ import {
   ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
-  ArrowLeft
+  ArrowLeft,
+  Sparkles,
+  ShieldAlert,
+  ChevronRight
 } from "lucide-react";
 
 export default function DashboardLayout({
@@ -83,6 +86,13 @@ export default function DashboardLayout({
   };
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      useAuthStore.getState().syncFromStorage();
+      const savedCollapsed = localStorage.getItem("sidebar_collapsed");
+      if (savedCollapsed !== null) {
+        setSidebarCollapsed(savedCollapsed === "true");
+      }
+    }
     setMounted(true);
     const saved = localStorage.getItem("theme_mode") as "light" | "dark" | "system" | null;
     const mode = saved || "light";
@@ -119,6 +129,14 @@ export default function DashboardLayout({
     applyTheme(nextMode);
   };
 
+  const toggleSidebarCollapsed = () => {
+    const nextState = !sidebarCollapsed;
+    setSidebarCollapsed(nextState);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sidebar_collapsed", String(nextState));
+    }
+  };
+
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const handleChange = () => {
@@ -131,8 +149,11 @@ export default function DashboardLayout({
   }, [themeMode]);
 
   useEffect(() => {
-    if (mounted && !token) {
-      router.replace("/");
+    if (mounted) {
+      const activeToken = token || (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+      if (!activeToken) {
+        router.replace("/login");
+      }
     }
   }, [mounted, token, router]);
 
@@ -167,6 +188,10 @@ export default function DashboardLayout({
     setCurrentTab(tab);
     if (pathname === "/dashboard/teacher") {
       window.location.hash = tab;
+      const el = document.getElementById(tab);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
       window.dispatchEvent(new CustomEvent("switch-tab", { detail: tab }));
     } else {
       router.push(`/dashboard/teacher#${tab}`);
@@ -176,240 +201,332 @@ export default function DashboardLayout({
   const isTeacher = role === "teacher" || role === "inst_admin" || role === "super_admin";
 
   const closeSidebarMobile = () => {
-    if (window.innerWidth < 768) {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
       setSidebarOpen(false);
     }
   };
 
-  if (!mounted) {
-    return (
-      <div className="flex h-screen bg-[#F7F4EF] dark:bg-[#0F0E0D] items-center justify-center text-[#716D67] text-sm">
-        <div className="flex items-center gap-3 bg-white dark:bg-[#171615] px-5 py-3.5 rounded-lg border border-[#E5E0D8] dark:border-[#292524]">
-          <div className="w-4 h-4 rounded-full border-2 border-[#C84B18] dark:border-[#EA580C] border-t-transparent animate-spin" />
-          <span className="font-medium text-[#242321] dark:text-[#F5F5F4]">Loading EduQuizX...</span>
-        </div>
-      </div>
-    );
-  }
 
-  if (!token) {
-    return null;
-  }
 
   return (
-    <div className="flex h-screen bg-[#F7F4EF] dark:bg-[#0F0E0D] overflow-hidden text-[#242321] dark:text-[#F5F5F4]">
+    <div className="flex h-screen bg-[#FAF8F5] dark:bg-[#0F0E0D] overflow-hidden text-[#242321] dark:text-[#F5F5F4]">
       
       {/* Mobile Backdrop Overlay */}
       {sidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar Navigation (Responsive Collapsible ~260px / 64px) */}
+      {/* ══════════════════════════════════════════════════════
+          SIDEBAR NAVIGATION (Expanded: 260px | Collapsed: 72px)
+         ══════════════════════════════════════════════════════ */}
       <aside 
-        className={`fixed md:static inset-y-0 left-0 z-50 bg-[#F0ECE4] dark:bg-[#171615] border-r border-[#E5E0D8] dark:border-[#292524] flex flex-col shrink-0 transform transition-all duration-200 ease-in-out ${
+        className={`fixed md:static inset-y-0 left-0 z-50 bg-[#FFFFFF] dark:bg-[#171615] border-r border-[#E5E0D8] dark:border-[#292524] flex flex-col shrink-0 transition-all duration-300 ease-in-out shadow-sm md:shadow-none ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-        } ${sidebarCollapsed ? "md:w-16 w-64" : "md:w-64 w-64"}`}
+        } ${sidebarCollapsed ? "w-[72px]" : "w-64"}`}
       >
         {/* Brand Header */}
-        <div className="h-14 px-3 border-b border-[#E5E0D8] dark:border-[#292524] flex items-center justify-between">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="p-1.5 rounded-md bg-[#C84B18] dark:bg-[#EA580C] text-white shrink-0">
-              <School className="h-4.5 w-4.5" />
+        <div className="h-16 px-4 border-b border-[#E5E0D8] dark:border-[#292524] flex items-center justify-between shrink-0 bg-[#FFFFFF] dark:bg-[#171615]">
+          <div className={`flex items-center gap-3 overflow-hidden ${sidebarCollapsed ? "justify-center w-full" : ""}`}>
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#C84B18] to-[#EA580C] text-white flex items-center justify-center shadow-md shadow-[#C84B18]/20 shrink-0">
+              <School className="h-5 w-5" />
             </div>
             {!sidebarCollapsed && (
               <div className="truncate">
-                <h1 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] leading-none truncate">EduQuizX</h1>
-                <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E] mt-0.5 truncate">Classroom Assessment</p>
+                <div className="flex items-center gap-1.5">
+                  <h1 className="font-extrabold text-sm text-[#242321] dark:text-[#F5F5F4] tracking-tight truncate">EduQuizX</h1>
+                  <span className="px-1.5 py-0.2 text-[9px] font-bold bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] rounded">PRO</span>
+                </div>
+                <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E] mt-0.5 font-medium truncate">Academic Studio</p>
               </div>
             )}
           </div>
           
-          <div className="flex items-center gap-1">
-            {/* Desktop Collapse Toggle */}
+          {!sidebarCollapsed && (
             <button 
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="hidden md:flex p-1.5 rounded text-[#716D67] hover:text-[#242321] hover:bg-[#E5E0D8]/60 dark:hover:bg-[#292524]"
-              title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              onClick={toggleSidebarCollapsed}
+              className="hidden md:flex p-1.5 rounded-lg text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A] transition-colors cursor-pointer"
+              title="Collapse Sidebar"
             >
-              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+              <PanelLeftClose className="h-4 w-4" />
             </button>
-            {/* Mobile Close Button */}
-            <button 
-              onClick={() => setSidebarOpen(false)}
-              className="md:hidden p-1 rounded text-[#716D67] hover:text-[#242321]"
+          )}
+
+          {/* Mobile Close Button */}
+          <button 
+            onClick={() => setSidebarOpen(false)}
+            className="md:hidden p-1.5 rounded-lg text-[#716D67] hover:text-[#242321] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A] cursor-pointer"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Collapsed Mode Expand Button */}
+        {sidebarCollapsed && (
+          <div className="hidden md:flex justify-center pt-2 pb-1 border-b border-[#E5E0D8] dark:border-[#292524]">
+            <button
+              onClick={toggleSidebarCollapsed}
+              className="p-1.5 rounded-lg text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A] transition-colors cursor-pointer"
+              title="Expand Sidebar"
             >
-              <X className="h-4.5 w-4.5" />
+              <PanelLeftOpen className="h-4 w-4" />
             </button>
           </div>
-        </div>
+        )}
         
-        {/* Nav Sections */}
-        <nav className="flex-1 px-2 py-4 space-y-5 overflow-y-auto">
-          {/* WORKSPACE */}
-          <div>
-            {!sidebarCollapsed && (
-              <div className="text-[10px] font-semibold text-[#716D67] dark:text-[#A8A29E] px-2 mb-1.5 uppercase tracking-wider">
+        {/* Navigation Links */}
+        <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto overflow-x-hidden">
+          {/* SECTION: CREATOR STUDIO OR STUDENT PORTAL */}
+          <div className="space-y-1.5">
+            {!sidebarCollapsed ? (
+              <div className="text-[10px] font-bold text-[#8C827A] dark:text-[#8C827A] px-3 mb-2 uppercase tracking-widest">
                 {pathname === "/dashboard/teacher" ? "Creator Studio" : "Student Portal"}
               </div>
+            ) : (
+              <div className="w-6 h-0.5 bg-[#E5E0D8] dark:bg-[#292524] mx-auto mb-2 rounded" />
             )}
-            <div className="space-y-0.5">
+
+            <div className="space-y-1">
               {pathname === "/dashboard/teacher" ? (
                 <>
+                  {/* Assessments Tab */}
                   <button 
                     onClick={() => navToTab("exams")}
-                    title="Assessments & Quizzes"
-                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
+                    className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      sidebarCollapsed ? "justify-center px-0" : ""
+                    } ${
                       currentTab === "exams"
-                        ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
-                        : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
+                        ? "bg-[#C84B18] text-white shadow-sm shadow-[#C84B18]/25"
+                        : "text-[#57534E] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A]"
                     }`}
                   >
-                    <GraduationCap className="h-4 w-4 shrink-0" />
+                    <GraduationCap className={`h-4.5 w-4.5 shrink-0 ${currentTab === "exams" ? "text-white" : "text-[#716D67] group-hover:text-[#C84B18]"}`} />
                     {!sidebarCollapsed && <span>Assessments</span>}
+                    {sidebarCollapsed && (
+                      <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                        Assessments
+                      </span>
+                    )}
                   </button>
 
+                  {/* Create Quiz Tab */}
                   <button 
                     onClick={() => navToTab("create")}
-                    title="Create Assessment Wizard"
-                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
+                    className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      sidebarCollapsed ? "justify-center px-0" : ""
+                    } ${
                       currentTab === "create"
-                        ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
-                        : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
+                        ? "bg-[#C84B18] text-white shadow-sm shadow-[#C84B18]/25"
+                        : "text-[#57534E] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A]"
                     }`}
                   >
-                    <FileText className="h-4 w-4 shrink-0" />
+                    <FileText className={`h-4.5 w-4.5 shrink-0 ${currentTab === "create" ? "text-white" : "text-[#716D67] group-hover:text-[#C84B18]"}`} />
                     {!sidebarCollapsed && <span>Create Quiz</span>}
+                    {sidebarCollapsed && (
+                      <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                        Create Quiz Wizard
+                      </span>
+                    )}
                   </button>
 
+                  {/* Question Bank Tab */}
                   <button 
                     onClick={() => navToTab("bank")}
-                    title="Question Bank Library"
-                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
+                    className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      sidebarCollapsed ? "justify-center px-0" : ""
+                    } ${
                       currentTab === "bank"
-                        ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
-                        : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
+                        ? "bg-[#C84B18] text-white shadow-sm shadow-[#C84B18]/25"
+                        : "text-[#57534E] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A]"
                     }`}
                   >
-                    <Layers className="h-4 w-4 shrink-0" />
+                    <Layers className={`h-4.5 w-4.5 shrink-0 ${currentTab === "bank" ? "text-white" : "text-[#716D67] group-hover:text-[#C84B18]"}`} />
                     {!sidebarCollapsed && <span>Question Bank</span>}
+                    {sidebarCollapsed && (
+                      <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                        Question Bank
+                      </span>
+                    )}
                   </button>
 
+                  {/* Knowledge Base Tab */}
                   <button 
                     onClick={() => navToTab("kb")}
-                    title="Knowledge Base"
-                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
+                    className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      sidebarCollapsed ? "justify-center px-0" : ""
+                    } ${
                       currentTab === "kb"
-                        ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
-                        : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
+                        ? "bg-[#C84B18] text-white shadow-sm shadow-[#C84B18]/25"
+                        : "text-[#57534E] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A]"
                     }`}
                   >
-                    <BookOpen className="h-4 w-4 shrink-0" />
+                    <BookOpen className={`h-4.5 w-4.5 shrink-0 ${currentTab === "kb" ? "text-white" : "text-[#716D67] group-hover:text-[#C84B18]"}`} />
                     {!sidebarCollapsed && <span>Knowledge Base</span>}
+                    {sidebarCollapsed && (
+                      <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                        Knowledge Base (RAG)
+                      </span>
+                    )}
                   </button>
 
+                  {/* Student Directory Tab */}
                   <button 
                     onClick={() => navToTab("students")}
-                    title="Student Directory"
-                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
+                    className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      sidebarCollapsed ? "justify-center px-0" : ""
+                    } ${
                       currentTab === "students"
-                        ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
-                        : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
+                        ? "bg-[#C84B18] text-white shadow-sm shadow-[#C84B18]/25"
+                        : "text-[#57534E] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A]"
                     }`}
                   >
-                    <Users className="h-4 w-4 shrink-0" />
+                    <Users className={`h-4.5 w-4.5 shrink-0 ${currentTab === "students" ? "text-white" : "text-[#716D67] group-hover:text-[#C84B18]"}`} />
                     {!sidebarCollapsed && <span>Student Directory</span>}
+                    {sidebarCollapsed && (
+                      <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                        Student Directories & Cohorts
+                      </span>
+                    )}
                   </button>
                 </>
               ) : (
                 <a
                   href="/dashboard/student"
                   onClick={closeSidebarMobile}
-                  title="Student Portal"
-                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60"
+                  className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20 transition-all ${
+                    sidebarCollapsed ? "justify-center px-0" : ""
+                  }`}
                 >
-                  <UserCheck className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Student Exam Portal</span>}
+                  <UserCheck className="h-4.5 w-4.5 shrink-0" />
+                  {!sidebarCollapsed && <span>Student Portal</span>}
+                  {sidebarCollapsed && (
+                    <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                      Student Exam Portal
+                    </span>
+                  )}
                 </a>
               )}
             </div>
           </div>
 
-          {/* ANALYTICS (Creator Mode Only) */}
+          {/* SECTION: ANALYTICS (Creator Mode Only) */}
           {pathname === "/dashboard/teacher" && (
-            <div>
-              {!sidebarCollapsed && (
-                <div className="text-[10px] font-semibold text-[#716D67] dark:text-[#A8A29E] px-2 mb-1.5 uppercase tracking-wider">
-                  Analytics
+            <div className="space-y-1.5">
+              {!sidebarCollapsed ? (
+                <div className="text-[10px] font-bold text-[#8C827A] dark:text-[#8C827A] px-3 mb-2 uppercase tracking-widest">
+                  Analytics & Reports
                 </div>
+              ) : (
+                <div className="w-6 h-0.5 bg-[#E5E0D8] dark:bg-[#292524] mx-auto mb-2 rounded" />
               )}
-              <div className="space-y-0.5">
+              
+              <div className="space-y-1">
                 <button 
                   onClick={() => navToTab("reports")}
-                  title="Results & Reports"
-                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all ${
+                  className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    sidebarCollapsed ? "justify-center px-0" : ""
+                  } ${
                     currentTab === "reports"
-                      ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
-                      : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50"
+                      ? "bg-[#C84B18] text-white shadow-sm shadow-[#C84B18]/25"
+                      : "text-[#57534E] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A]"
                   }`}
                 >
-                  <BarChart2 className="h-4 w-4 shrink-0" />
+                  <BarChart2 className={`h-4.5 w-4.5 shrink-0 ${currentTab === "reports" ? "text-white" : "text-[#716D67] group-hover:text-[#C84B18]"}`} />
                   {!sidebarCollapsed && <span>Results & Gradebook</span>}
+                  {sidebarCollapsed && (
+                    <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                      Results & Gradebook Analytics
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
           )}
 
-          {/* SETTINGS */}
-          <div>
-            {!sidebarCollapsed && (
-              <div className="text-[10px] font-semibold text-[#716D67] dark:text-[#A8A29E] px-2 mb-1.5 uppercase tracking-wider">
-                Settings
+          {/* SECTION: SYSTEM & PREFERENCES */}
+          <div className="space-y-1.5">
+            {!sidebarCollapsed ? (
+              <div className="text-[10px] font-bold text-[#8C827A] dark:text-[#8C827A] px-3 mb-2 uppercase tracking-widest">
+                Preferences
               </div>
+            ) : (
+              <div className="w-6 h-0.5 bg-[#E5E0D8] dark:bg-[#292524] mx-auto mb-2 rounded" />
             )}
-            <div className="space-y-0.5">
+
+            <div className="space-y-1">
               <button 
                 onClick={() => { closeSidebarMobile(); setSettingsModalOpen(true); }}
-                title="System Settings"
-                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524]/50 transition-all"
+                className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-[#57534E] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A] transition-all cursor-pointer ${
+                  sidebarCollapsed ? "justify-center px-0" : ""
+                }`}
               >
-                <Sliders className="h-4 w-4 shrink-0" />
-                {!sidebarCollapsed && <span>Settings</span>}
+                <Sliders className="h-4.5 w-4.5 shrink-0 text-[#716D67] group-hover:text-[#C84B18]" />
+                {!sidebarCollapsed && <span>Settings & Profile</span>}
+                {sidebarCollapsed && (
+                  <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                    System & Profile Settings
+                  </span>
+                )}
               </button>
             </div>
           </div>
 
-          {/* INTERNAL DEV TOOLS (Collapsible) */}
+          {/* SECTION: DEVELOPER TOOLS (Collapsible) */}
           <div className="pt-2 border-t border-[#E5E0D8] dark:border-[#292524]">
             <button 
               onClick={() => setDevToolsOpen(!devToolsOpen)} 
-              className="w-full flex items-center justify-between px-2.5 py-1.5 text-[11px] font-semibold text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321]"
+              className={`w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] rounded-lg hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A] transition-colors cursor-pointer ${
+                sidebarCollapsed ? "justify-center px-0" : ""
+              }`}
               title="Developer Tools"
             >
-              {!sidebarCollapsed ? <span>Developer Tools</span> : <Layers className="h-4 w-4 shrink-0" />}
-              {!sidebarCollapsed && <ChevronDown className={`h-3.5 w-3.5 transition-transform ${devToolsOpen ? "rotate-180" : ""}`} />}
+              {!sidebarCollapsed ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-3.5 w-3.5" />
+                    <span>Developer Sandbox</span>
+                  </div>
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${devToolsOpen ? "rotate-180" : ""}`} />
+                </>
+              ) : (
+                <div className="group relative">
+                  <Layers className="h-4 w-4" />
+                  <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                    Developer Tools
+                  </span>
+                </div>
+              )}
             </button>
 
             {devToolsOpen && !sidebarCollapsed && (
-              <div className="mt-1 space-y-0.5 pl-2 border-l border-[#E5E0D8] dark:border-[#292524]">
+              <div className="mt-1 space-y-1 pl-4 border-l border-[#E5E0D8] dark:border-[#292524] ml-3 text-[11px]">
                 <a 
                   href={`${API_BASE}/static/index.html`} 
                   target="_blank" 
                   rel="noreferrer"
-                  className="flex items-center justify-between px-2 py-1 text-[11px] text-[#716D67] hover:text-[#C84B18]"
+                  className="flex items-center justify-between px-2 py-1 text-[#716D67] dark:text-[#A8A29E] hover:text-[#C84B18] rounded transition-colors"
                 >
-                  <span>Static Creator HTML</span>
+                  <span>Static Creator UI</span>
                   <ExternalLink className="h-3 w-3" />
                 </a>
                 <a 
                   href={`${API_BASE}/static/exam.html`} 
                   target="_blank" 
                   rel="noreferrer"
-                  className="flex items-center justify-between px-2 py-1 text-[11px] text-[#716D67] hover:text-[#C84B18]"
+                  className="flex items-center justify-between px-2 py-1 text-[#716D67] dark:text-[#A8A29E] hover:text-[#C84B18] rounded transition-colors"
                 >
-                  <span>Student Exam Gateway</span>
+                  <span>Candidate Sandbox</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                <a 
+                  href={`${API_BASE}/docs`} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="flex items-center justify-between px-2 py-1 text-[#716D67] dark:text-[#A8A29E] hover:text-[#C84B18] rounded transition-colors"
+                >
+                  <span>FastAPI Swagger Docs</span>
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
@@ -417,53 +534,69 @@ export default function DashboardLayout({
           </div>
         </nav>
 
-        {/* Bottom Profile Card */}
-        <div className="p-3 border-t border-[#E5E0D8] dark:border-[#292524] bg-[#EAE5DC] dark:bg-[#1D1B19] flex items-center justify-between">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="h-8 w-8 rounded-md bg-[#C84B18] dark:bg-[#EA580C] text-white flex items-center justify-center font-bold text-xs shrink-0">
-              {fullName ? fullName[0] : "S"}
-            </div>
-            {!sidebarCollapsed && (
-              <div className="overflow-hidden">
-                <div className="text-xs font-medium text-[#242321] dark:text-[#F5F5F4] truncate">{fullName || "Dr. Sarah Jenkins"}</div>
-                <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E] capitalize">{role || "Teacher"}</div>
+        {/* ══════════════════════════════════════════════════════
+            BOTTOM PROFILE & LOGOUT CARD
+           ══════════════════════════════════════════════════════ */}
+        <div className="p-3 border-t border-[#E5E0D8] dark:border-[#292524] bg-[#FAF8F5] dark:bg-[#141312] shrink-0">
+          <div className={`flex items-center gap-3 ${sidebarCollapsed ? "flex-col justify-center" : "justify-between"}`}>
+            <div className={`flex items-center gap-2.5 overflow-hidden ${sidebarCollapsed ? "justify-center" : ""}`}>
+              <div 
+                className="h-9 w-9 rounded-xl bg-[#C84B18] dark:bg-[#EA580C] text-white flex items-center justify-center font-bold text-xs shadow-sm shrink-0 cursor-pointer"
+                title={fullName || "User Account"}
+              >
+                {fullName ? fullName.charAt(0).toUpperCase() : "T"}
               </div>
-            )}
+              {!sidebarCollapsed && (
+                <div className="overflow-hidden">
+                  <div className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] truncate">
+                    {fullName || "Dr. Sarah Jenkins"}
+                  </div>
+                  <div className="text-[10px] text-[#716D67] dark:text-[#A8A29E] font-medium capitalize truncate">
+                    {role || "Teacher"} · EduQuizX
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button 
+              onClick={() => { logout(); router.push("/login"); }}
+              className={`p-2 rounded-xl text-[#716D67] dark:text-[#A8A29E] hover:text-red-500 hover:bg-[#F0ECE4] dark:hover:bg-[#201D1A] transition-colors cursor-pointer ${
+                sidebarCollapsed ? "mt-1" : ""
+              }`}
+              title="Sign Out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
-          <button 
-            onClick={() => { logout(); router.push("/"); }}
-            className="p-1.5 rounded text-[#716D67] hover:text-[#C84B18] hover:bg-[#E5E0D8]/60 dark:hover:bg-[#292524]"
-            title="Log out"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* ══════════════════════════════════════════════════════
+          MAIN CONTENT AREA & TOPBAR
+         ══════════════════════════════════════════════════════ */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Top App Navigation Header */}
-        <header className="h-14 border-b border-[#E5E0D8] dark:border-[#292524] bg-[#F7F4EF] dark:bg-[#0F0E0D] px-4 md:px-6 flex items-center justify-between shrink-0">
+        <header className="h-16 border-b border-[#E5E0D8] dark:border-[#292524] bg-[#FFFFFF] dark:bg-[#171615] px-4 md:px-6 flex items-center justify-between shrink-0 shadow-xs">
           
           {/* Left Breadcrumb & Mobile Menu Toggle */}
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-1.5 rounded text-[#716D67] hover:text-[#242321]"
+              className="md:hidden p-2 rounded-xl text-[#716D67] hover:text-[#242321] hover:bg-[#FAF8F5] dark:hover:bg-[#201D1A] cursor-pointer"
             >
               <Menu className="h-5 w-5" />
             </button>
 
             <div className="flex items-center gap-2 text-xs text-[#716D67] dark:text-[#A8A29E]">
-              <span>EduQuizX</span>
+              <span className="font-medium">EduQuizX</span>
               <span>/</span>
-              <span className="font-semibold text-[#242321] dark:text-[#F5F5F4]">
-                {pathname === "/dashboard/teacher" ? "Quiz Creator" : "Student Portal"}
+              <span className="font-bold text-[#242321] dark:text-[#F5F5F4]">
+                {pathname === "/dashboard/teacher" ? "Quiz Creator Studio" : "Student Portal"}
               </span>
               <a 
                 href="/portal" 
-                className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] hover:bg-[#C84B18]/20 text-xs font-bold transition-all border border-[#C84B18]/20"
-                title="Switch Workspace Mode"
+                className="ml-2 hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] hover:bg-[#C84B18]/20 text-xs font-semibold transition-all border border-[#C84B18]/20"
+                title="Switch Workspace"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 <span>Switch Workspace</span>
@@ -472,69 +605,76 @@ export default function DashboardLayout({
           </div>
 
           {/* Center Search Input */}
-          <div className="hidden sm:flex items-center flex-1 max-w-md mx-6">
+          <div className="hidden md:flex items-center flex-1 max-w-md mx-6">
             <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#716D67] dark:text-[#A8A29E]" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#716D67] dark:text-[#A8A29E]" />
               <input 
                 type="text" 
-                placeholder="Search assessments, students, questions..." 
-                className="w-full bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-md pl-9 pr-3 py-1.5 text-xs text-[#242321] dark:text-[#F5F5F4] placeholder-[#716D67] dark:placeholder-[#A8A29E] focus:outline-none focus:border-[#C84B18] transition-all"
+                placeholder="Search assessments, candidate cohorts, questions..." 
+                className="w-full bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl pl-9 pr-4 py-2 text-xs text-[#242321] dark:text-[#F5F5F4] placeholder-[#716D67] dark:placeholder-[#A8A29E] focus:outline-none focus:ring-1 focus:ring-[#C84B18] transition-all"
               />
             </div>
           </div>
 
-          {/* Right Action Menu: Help, Notifications, Theme Toggle, Profile */}
-          <div className="flex items-center gap-2">
-            <button className="p-1.5 rounded text-[#716D67] hover:text-[#242321] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524]" title="Help & Documentation">
-              <HelpCircle className="h-4 w-4" />
-            </button>
+          {/* Right Action Menu: Help, Notifications, Theme Toggle */}
+          <div className="flex items-center gap-2.5">
+            <a 
+              href="/guide"
+              className="p-2 rounded-xl text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#FAF8F5] dark:hover:bg-[#201D1A] transition-colors"
+              title="Documentation Guide"
+            >
+              <HelpCircle className="h-4.5 w-4.5" />
+            </a>
+
+            {/* Notification Bell */}
             <div className="relative">
               <button 
                 onClick={() => setNotifOpen(!notifOpen)}
-                className="p-1.5 rounded text-[#716D67] hover:text-[#242321] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] relative" 
+                className="p-2 rounded-xl text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#FAF8F5] dark:hover:bg-[#201D1A] relative transition-colors cursor-pointer" 
                 title="Notifications"
               >
-                <Bell className="h-4 w-4" />
+                <Bell className="h-4.5 w-4.5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-[#C84B18] text-white text-[9px] font-bold flex items-center justify-center">
+                  <span className="absolute 1 top-1 right-1 h-4 w-4 rounded-full bg-[#C84B18] text-white text-[9px] font-bold flex items-center justify-center shadow-xs">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}
               </button>
 
-              {/* Notification Flyout Dropdown */}
+              {/* Notification Flyout */}
               {notifOpen && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524] rounded-xl shadow-2xl z-50 overflow-hidden">
-                  <div className="p-3 border-b border-[#E5E0D8] dark:border-[#292524] flex items-center justify-between bg-[#F7F4EF] dark:bg-[#141312]">
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in duration-200">
+                  <div className="p-3.5 border-b border-[#E5E0D8] dark:border-[#292524] flex items-center justify-between bg-[#FAF8F5] dark:bg-[#141312]">
                     <div className="flex items-center gap-2">
                       <Bell className="h-4 w-4 text-[#C84B18]" />
                       <span className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4]">Notifications</span>
                       {unreadCount > 0 && (
-                        <span className="text-[10px] bg-[#C84B18]/10 text-[#C84B18] px-1.5 py-0.5 rounded font-semibold">
-                          {unreadCount} unread
+                        <span className="text-[10px] bg-[#C84B18]/10 text-[#C84B18] px-2 py-0.5 rounded-full font-bold">
+                          {unreadCount} new
                         </span>
                       )}
                     </div>
                     {unreadCount > 0 && (
                       <button 
                         onClick={markAllRead}
-                        className="text-[11px] text-[#C84B18] hover:underline font-medium"
+                        className="text-[11px] text-[#C84B18] hover:underline font-semibold cursor-pointer"
                       >
-                        Mark all as read
+                        Mark all read
                       </button>
                     )}
                   </div>
 
-                  <div className="max-h-80 overflow-y-auto divide-y divide-[#E5E0D8]/50 dark:divide-[#292524]">
+                  <div className="max-h-80 overflow-y-auto divide-y divide-[#E5E0D8]/60 dark:divide-[#292524]">
                     {notifications.length === 0 ? (
-                      <div className="p-6 text-center text-xs text-[#716D67] dark:text-[#A8A29E]">
-                        No notifications yet.
+                      <div className="p-8 text-center text-xs text-[#716D67] dark:text-[#A8A29E]">
+                        <Bell className="h-6 w-6 mx-auto mb-2 opacity-30" />
+                        <span>No new notifications</span>
                       </div>
                     ) : (
                       notifications.map((n) => (
                         <div 
                           key={n.id} 
-                          className={`p-3 text-xs transition-all hover:bg-[#F7F4EF]/60 dark:hover:bg-[#24211D] flex items-start justify-between gap-2 ${
+                          className={`p-3.5 text-xs transition-all hover:bg-[#FAF8F5] dark:hover:bg-[#201D1A] flex items-start justify-between gap-2.5 ${
                             !n.is_read ? "bg-[#C84B18]/5 dark:bg-[#EA580C]/10 font-medium" : ""
                           }`}
                         >
@@ -559,7 +699,7 @@ export default function DashboardLayout({
                           {!n.is_read && (
                             <button 
                               onClick={() => markRead(n.id)}
-                              className="h-2 w-2 rounded-full bg-[#C84B18] hover:scale-125 transition-all shrink-0 mt-1"
+                              className="h-2 w-2 rounded-full bg-[#C84B18] hover:scale-125 transition-all shrink-0 mt-1.5 cursor-pointer"
                               title="Mark read"
                             />
                           )}
@@ -572,96 +712,98 @@ export default function DashboardLayout({
             </div>
 
             {/* Theme Toggle (Light / Dark / System) */}
-            <div className="flex items-center bg-[#E5E0D8]/60 dark:bg-[#292524] p-0.5 rounded-md text-[11px] font-medium border border-[#E5E0D8] dark:border-[#292524]">
+            <div className="flex items-center bg-[#FAF8F5] dark:bg-[#141312] p-1 rounded-xl text-[11px] font-semibold border border-[#E5E0D8] dark:border-[#292524]">
               <button 
                 type="button"
                 onClick={() => handleThemeChange("light")}
-                className={`px-2 py-1 rounded flex items-center gap-1 transition-all ${
+                className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
                   themeMode === "light" 
                     ? "bg-white text-[#242321] shadow-xs" 
                     : "text-[#716D67] hover:text-[#242321]"
                 }`}
                 title="Light Mode"
               >
-                <Sun className="h-3 w-3" />
-                <span className="hidden lg:inline">Light</span>
+                <Sun className="h-3.5 w-3.5 text-amber-500" />
+                <span className="hidden sm:inline">Light</span>
               </button>
               <button 
                 type="button"
                 onClick={() => handleThemeChange("dark")}
-                className={`px-2 py-1 rounded flex items-center gap-1 transition-all ${
+                className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
                   themeMode === "dark" 
-                    ? "bg-[#171615] text-[#F5F5F4] shadow-xs" 
+                    ? "bg-[#24211E] text-[#F5F5F4] shadow-xs" 
                     : "text-[#716D67] hover:text-[#F5F5F4]"
                 }`}
                 title="Dark Mode"
               >
-                <Moon className="h-3 w-3" />
-                <span className="hidden lg:inline">Dark</span>
+                <Moon className="h-3.5 w-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">Dark</span>
               </button>
               <button 
                 type="button"
                 onClick={() => handleThemeChange("system")}
-                className={`px-2 py-1 rounded flex items-center gap-1 transition-all ${
+                className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
                   themeMode === "system" 
-                    ? "bg-white dark:bg-[#171615] text-[#242321] dark:text-[#F5F5F4] shadow-xs" 
+                    ? "bg-white dark:bg-[#24211E] text-[#242321] dark:text-[#F5F5F4] shadow-xs" 
                     : "text-[#716D67] hover:text-[#242321]"
                 }`}
                 title="System Theme"
               >
-                <Laptop className="h-3 w-3" />
-                <span className="hidden lg:inline">System</span>
+                <Laptop className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">System</span>
               </button>
             </div>
           </div>
         </header>
 
         {/* Main Content Body */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#F7F4EF] dark:bg-[#0F0E0D]">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#FAF8F5] dark:bg-[#0F0E0D]">
           {children}
         </main>
       </div>
 
-      {/* ═══════ SETTINGS MODAL ═══════ */}
+      {/* ══════════════════════════════════════════════════════
+          SETTINGS MODAL
+         ══════════════════════════════════════════════════════ */}
       {settingsModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl max-w-md w-full p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] rounded-md">
-                  <Sliders className="h-4 w-4" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] rounded-xl border border-[#C84B18]/20">
+                  <Sliders className="h-4.5 w-4.5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4]">System & Profile Settings</h3>
+                  <h3 className="font-bold text-base text-[#242321] dark:text-[#F5F5F4]">System & Profile Settings</h3>
                   <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">Workspace and account preferences</p>
                 </div>
               </div>
               <button
                 onClick={() => setSettingsModalOpen(false)}
-                className="p-1.5 rounded-md text-[#716D67] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] transition-all"
+                className="p-1.5 rounded-lg text-[#716D67] hover:bg-[#F0ECE4] dark:hover:bg-[#201D1A] transition-colors cursor-pointer"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="space-y-4 text-xs">
-              <div className="space-y-1 p-3 rounded-lg bg-[#F0ECE4]/50 dark:bg-[#1D1B19]/50 border border-[#E5E0D8] dark:border-[#292524]">
-                <div className="font-semibold text-[#242321] dark:text-[#F5F5F4]">{fullName || "User"}</div>
-                <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E] font-mono">Role: {role?.toUpperCase() || "STAFF"}</div>
+              <div className="space-y-1.5 p-4 rounded-xl bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524]">
+                <div className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4]">{fullName || "Dr. Sarah Jenkins"}</div>
+                <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E] font-medium">Role: <span className="font-bold text-[#C84B18] uppercase">{role || "TEACHER"}</span></div>
                 <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">Institution: EduQuizX Academy</div>
               </div>
 
               <div className="space-y-2">
-                <label className="font-semibold text-[#242321] dark:text-[#F5F5F4]">Theme Mode</label>
+                <label className="font-bold text-[#242321] dark:text-[#F5F5F4] uppercase tracking-wider text-[10px]">Theme Mode</label>
                 <div className="grid grid-cols-3 gap-2">
                   {(["light", "dark", "system"] as const).map((mode) => (
                     <button
                       key={mode}
                       onClick={() => handleThemeChange(mode)}
-                      className={`p-2 rounded-md border text-center font-medium capitalize transition-all ${
+                      className={`p-2.5 rounded-xl border text-center font-semibold capitalize transition-all cursor-pointer ${
                         themeMode === mode
-                          ? "bg-[#C84B18]/10 border-[#C84B18] text-[#C84B18] dark:bg-[#EA580C]/15 dark:border-[#EA580C] dark:text-[#EA580C]"
-                          : "border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321]"
+                          ? "bg-[#C84B18]/10 border-[#C84B18] text-[#C84B18] dark:bg-[#EA580C]/15 dark:border-[#EA580C] dark:text-[#EA580C] shadow-xs"
+                          : "border-[#E5E0D8] dark:border-[#292524] bg-[#FAF8F5] dark:bg-[#141312] text-[#716D67] hover:text-[#242321]"
                       }`}
                     >
                       {mode}
@@ -672,14 +814,14 @@ export default function DashboardLayout({
 
               <div className="pt-3 border-t border-[#E5E0D8] dark:border-[#292524] flex justify-between items-center">
                 <button
-                  onClick={() => { logout(); router.push("/"); }}
-                  className="px-3 py-1.5 rounded-md text-rose-600 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-medium"
+                  onClick={() => { logout(); router.push("/login"); }}
+                  className="px-4 py-2 rounded-xl text-red-600 border border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/30 font-semibold cursor-pointer transition-colors"
                 >
                   Sign Out
                 </button>
                 <button
                   onClick={() => setSettingsModalOpen(false)}
-                  className="btn-primary"
+                  className="px-5 py-2 bg-[#C84B18] hover:bg-[#B33F12] text-white font-semibold rounded-xl shadow-sm cursor-pointer transition-colors"
                 >
                   Done
                 </button>

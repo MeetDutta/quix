@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 from app.config import settings
 from app.database import engine, Base
-from app.api import auth, students, kb, exams, attempts, reports, notifications, institutions, academic, assessment_groups
+from app.api import auth, students, kb, exams, attempts, reports, notifications, institutions, academic, assessment_groups, workspaces, student_directories
 
 import app.models
 
@@ -12,7 +12,12 @@ import app.models
 from app.database import SessionLocal
 from app.models.user import User, Student
 from app.models.institution import Institution, Department, Course, Subject
+from app.models.workspace import Workspace, WorkspaceMember
+from app.models.student_directory import StudentDirectory, DirectoryStudent
+from app.models.exam import Exam
+from app.models.document import Document
 from app.utils.security import get_password_hash
+from app.services.workspace_service import bootstrap_personal_workspace
 
 def seed_initial_data():
     db = SessionLocal()
@@ -61,12 +66,64 @@ def seed_initial_data():
                 is_active=True
             )
             db.add(teacher)
+            db.commit()
+            db.refresh(teacher)
         else:
             teacher.hashed_password = get_password_hash("securepassword")
             teacher.is_active = True
+            db.commit()
+
+        # Bootstrap Personal Workspace for Teacher
+        teacher_ws = bootstrap_personal_workspace(teacher, db)
+
+        # Backfill existing exams & documents to teacher workspace if unassigned
+        db.query(Exam).filter(Exam.workspace_id == None).update(
+            {"workspace_id": teacher_ws.id, "created_by": teacher.id},
+            synchronize_session=False
+        )
+        db.query(Document).filter(Document.workspace_id == None).update(
+            {"workspace_id": teacher_ws.id},
+            synchronize_session=False
+        )
         db.commit()
 
-        # Seed Academic Session & Cohort
+        # Seed Default Student Directory for Teacher
+        sample_dir = db.query(StudentDirectory).filter(
+            StudentDirectory.workspace_id == teacher_ws.id,
+            StudentDirectory.is_deleted == False
+        ).first()
+        if not sample_dir:
+            sample_dir = StudentDirectory(
+                workspace_id=teacher_ws.id,
+                name="CE 3rd Year - Morning Batch",
+                description="Computer Engineering Class of 2026",
+                created_by=teacher.id,
+                is_active=True
+            )
+            db.add(sample_dir)
+            db.flush()
+
+            # Add sample directory students
+            sample_students = [
+                ("Alex Johnson", "student@aegeus.edu", "CS-2026-001", "+1-555-0101"),
+                ("Priya Patel", "priya.patel@aegeus.edu", "CS-2026-002", "+1-555-0102"),
+                ("Rahul Sharma", "rahul.sharma@aegeus.edu", "CS-2026-003", "+1-555-0103"),
+                ("David Chen", "david.chen@aegeus.edu", "CS-2026-004", "+1-555-0104"),
+                ("Emma Watson", "emma.watson@aegeus.edu", "CS-2026-005", "+1-555-0105"),
+            ]
+            for name, email, roll, phone in sample_students:
+                s_obj = DirectoryStudent(
+                    directory_id=sample_dir.id,
+                    name=name,
+                    email=email,
+                    roll_number=roll,
+                    phone=phone,
+                    status="active"
+                )
+                db.add(s_obj)
+            db.commit()
+
+        # Seed Academic Session & Cohort (Legacy Compatibility)
         from app.models.academic import AcademicSession, Cohort, StudentCohortMembership
         session = db.query(AcademicSession).first()
         if not session:
@@ -118,7 +175,6 @@ def seed_initial_data():
             db.commit()
             db.refresh(student_profile)
 
-            # Link student to cohort
             membership = StudentCohortMembership(
                 student_id=student_profile.id,
                 cohort_id=cohort.id,
@@ -135,16 +191,36 @@ def seed_initial_data():
     finally:
         db.close()
 
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    description="Enterprise-grade AI-powered Examination & Student Management System",
-    version="1.0.0",
-    redirect_slashes=False
-)
+from contextlib import asynccontextmanager
+from sqlalchemy import text
 
-@app.on_event("startup")
-def on_startup():
-    """Automatically build database schema and seed initial demo data on background startup."""
+def run_db_migrations():
+    """Applies non-destructive schema migrations for new SaaS workspace and student directory fields."""
+    with engine.connect() as conn:
+        statements = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_subject VARCHAR(255);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP;",
+            "ALTER TABLE exams ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(36);",
+            "ALTER TABLE exams ADD COLUMN IF NOT EXISTS created_by VARCHAR(36);",
+            "ALTER TABLE exams ADD COLUMN IF NOT EXISTS student_directory_id VARCHAR(36);",
+            "ALTER TABLE documents ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(36);",
+        ]
+        for stmt in statements:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                pass
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Automatically build database schema and seed initial demo data on startup."""
+    try:
+        run_db_migrations()
+    except Exception as e:
+        print(f"Migration notice: {e}")
+
     try:
         Base.metadata.create_all(bind=engine)
     except Exception as e:
@@ -154,6 +230,16 @@ def on_startup():
         seed_initial_data()
     except Exception as e:
         print(f"Seed notice: {e}")
+    yield
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    description="Enterprise-grade AI-powered Examination & Student Management System",
+    version="1.0.0",
+    redirect_slashes=False,
+    lifespan=lifespan
+)
+
 
 # Set up CORS middleware for dev & production client requests
 allowed_origins_list = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
@@ -178,6 +264,8 @@ else:
 
 # Register routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)
+app.include_router(workspaces.router, prefix=settings.API_V1_STR)
+app.include_router(student_directories.router, prefix=settings.API_V1_STR)
 app.include_router(students.router, prefix=settings.API_V1_STR)
 app.include_router(kb.router, prefix=settings.API_V1_STR)
 app.include_router(exams.router, prefix=settings.API_V1_STR)

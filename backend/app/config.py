@@ -1,5 +1,5 @@
 import os
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOT_DIR = os.path.dirname(BASE_DIR)
@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     
     # AI Engine
     GEMINI_API_KEY: str = ""
+    
+    # Google OAuth / Identity Services
+    GOOGLE_CLIENT_ID: str = ""
     
     # Uploads
     UPLOAD_DIR: str = os.path.join(BASE_DIR, "uploads")
@@ -34,13 +37,15 @@ class Settings(BaseSettings):
     # Frontend Deployment URL for emails & links
     FRONTEND_URL: str = "http://localhost:3000"
     
-    class Config:
-        case_sensitive = True
-        extra = "ignore"
-        env_file = [os.path.join(BASE_DIR, "..", ".env"), ".env"]
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        extra="ignore",
+        env_file=[os.path.join(BASE_DIR, "..", ".env"), ".env"]
+    )
 
 settings = Settings()
 
 # Create upload directories if not exist
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 os.makedirs(settings.KB_UPLOADS_DIR, exist_ok=True)
+

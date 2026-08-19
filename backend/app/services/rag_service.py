@@ -218,15 +218,27 @@ class RAGService:
             clean_content = self._sanitize_unicode(c["content"])
             vector = self.compute_embedding(clean_content)
             self.vectors.append({
-                "chunk_id": f"{doc_id}_{c['chunk_index']}",
+                "chunk_id": f"{doc_id}_{c.get('chunk_index', 0)}",
                 "document_id": doc_id,
                 "subject_id": subject_id,
                 "doc_title": self._sanitize_unicode(doc_title),
                 "content": clean_content,
-                "page_number": c["page_number"],
+                "page_number": c.get("page_number", 1),
                 "embedding": vector
             })
         self._save_vectors()
+
+    def index_document(self, document_id: str = "", doc_title: str = "", chunks: Optional[List[Dict[str, Any]]] = None, subject_id: Optional[str] = None, **kwargs):
+        """
+        Backward-compatible alias for add_document_to_index supporting document_id or doc_id.
+        """
+        actual_doc_id = document_id or kwargs.get("doc_id", "")
+        return self.add_document_to_index(
+            doc_id=actual_doc_id,
+            doc_title=doc_title,
+            chunks=chunks or [],
+            subject_id=subject_id
+        )
 
     def remove_document_from_index(self, doc_id: str):
         """

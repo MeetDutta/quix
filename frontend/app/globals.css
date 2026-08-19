@@ -3,6 +3,7 @@
 
 @custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
 
+
 :root {
   --bg-main: #F7F4EF;
   --bg-card: #FFFFFF;

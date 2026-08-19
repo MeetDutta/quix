@@ -10,37 +10,48 @@ import {
   Sparkles, ArrowRight, ArrowLeft, Radio, FileSpreadsheet
 } from "lucide-react";
 
-import StudentRepository from "./_components/StudentRepository";
+import StudentDirectoryManager from "./_components/StudentDirectoryManager";
+import CreateDirectoryModal from "./_components/CreateDirectoryModal";
 import KnowledgeBaseManager from "./_components/KnowledgeBaseManager";
 import QuestionBankManager from "./_components/QuestionBankManager";
 import LiveAssessmentsTable from "./_components/LiveAssessmentsTable";
 import PaperStudioModal from "./_components/PaperStudioModal";
 import LiveProctoringModal from "./_components/LiveProctoringModal";
 import GradebookAnalytics from "./_components/GradebookAnalytics";
+import { fetchStudentDirectories } from "@/lib/api/studentDirectories";
+import { StudentDirectory } from "@/types/studentDirectory";
 
 export default function TeacherDashboard() {
   const { token, fullName } = useAuthStore();
   const { showToast } = useToast();
   
-  const [activeTab, setActiveTab] = useState<"exams" | "create" | "students" | "kb" | "reports" | "bank">("exams");
-  
+  const [activeSectionTab, setActiveSectionTab] = useState<string>("all");
+
+  const switchSectionTab = (tab: string) => {
+    setActiveSectionTab(tab);
+    if (typeof window !== "undefined") {
+      window.location.hash = tab === "all" ? "" : tab;
+    }
+    fetchData();
+  };
+
   useEffect(() => {
-    const syncTab = () => {
+    const handleHash = () => {
       const hash = window.location.hash.replace("#", "");
-      if (["exams", "create", "kb", "students", "reports", "bank"].includes(hash)) {
-        setActiveTab(hash as any);
+      if (hash) {
+        setActiveSectionTab(hash);
       }
     };
-    syncTab();
+    handleHash();
     const handleCustom = (e: any) => {
-      if (e.detail && ["exams", "create", "kb", "students", "reports", "bank"].includes(e.detail)) {
-        setActiveTab(e.detail);
+      if (e.detail) {
+        setActiveSectionTab(e.detail);
       }
     };
-    window.addEventListener("hashchange", syncTab);
+    window.addEventListener("hashchange", handleHash);
     window.addEventListener("switch-tab", handleCustom);
     return () => {
-      window.removeEventListener("hashchange", syncTab);
+      window.removeEventListener("hashchange", handleHash);
       window.removeEventListener("switch-tab", handleCustom);
     };
   }, []);
@@ -78,27 +89,65 @@ export default function TeacherDashboard() {
   const [examEndDate, setExamEndDate] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const [studentDirectories, setStudentDirectories] = useState<StudentDirectory[]>([]);
+  const [selectedDirectoryId, setSelectedDirectoryId] = useState<string>("");
+  const [isCreateDirModalOpen, setIsCreateDirModalOpen] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState<string>("");
+
   // Load initial data
   const fetchData = async () => {
     if (!token) return;
     try {
-      const [docsRes, examsRes, subjectsRes] = await Promise.all([
-        apiFetch("/kb/documents", { token }),
-        apiFetch("/exams/", { token }),
-        apiFetch("/kb/subjects", { token }),
+      if (typeof window !== "undefined") {
+        setWorkspaceName(localStorage.getItem("workspaceName") || "Teacher Workspace");
+      }
+      const [docsRes, examsRes, subjectsRes, dirsRes] = await Promise.all([
+        apiFetch("/kb/documents", { token }).catch(() => null),
+        apiFetch("/exams/", { token }).catch(() => null),
+        apiFetch("/kb/subjects", { token }).catch(() => null),
+        fetchStudentDirectories(token).catch(() => []),
       ]);
 
-      if (docsRes.ok) setDocuments(await docsRes.json());
-      if (examsRes.ok) setExams(await examsRes.json());
-      if (subjectsRes.ok) setKbSubjects(await subjectsRes.json());
-    } catch {
-      showToast("Network error while loading dashboard data", "error");
+      if (docsRes && docsRes.ok) setDocuments(await docsRes.json().catch(() => []));
+      if (examsRes && examsRes.ok) setExams(await examsRes.json().catch(() => []));
+      if (subjectsRes && subjectsRes.ok) setKbSubjects(await subjectsRes.json().catch(() => []));
+      if (Array.isArray(dirsRes)) {
+        setStudentDirectories(dirsRes);
+        if (dirsRes.length > 0 && !selectedDirectoryId) {
+          setSelectedDirectoryId(dirsRes[0].id);
+        }
+      }
+    } catch (e) {
+      console.warn("fetchData notice:", e);
     }
   };
 
   useEffect(() => {
     fetchData();
   }, [token]);
+
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.replace("#", "");
+      if (hash) {
+        const el = document.getElementById(hash);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    };
+    handleHash();
+    window.addEventListener("hashchange", handleHash);
+    const handleSwitch = (e: any) => {
+      const el = document.getElementById(e.detail);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    window.addEventListener("switch-tab", handleSwitch);
+    return () => {
+      window.removeEventListener("hashchange", handleHash);
+      window.removeEventListener("switch-tab", handleSwitch);
+    };
+  }, []);
 
   // WebSocket Live Proctoring alerts feed
   useEffect(() => {
@@ -246,6 +295,7 @@ export default function TeacherDashboard() {
         negative_marking: parseFloat(examNegative) || 0,
         start_time: examStartDate ? new Date(examStartDate).toISOString() : null,
         end_time: examEndDate ? new Date(examEndDate).toISOString() : null,
+        student_directory_id: selectedDirectoryId || null,
         blueprint: blueprint,
         enable_ai_paper: true,
       };
@@ -261,14 +311,17 @@ export default function TeacherDashboard() {
         showToast(`Assessment "${newExam.name}" successfully created!`, "success");
         setCreateStep(1);
         setExamName("");
-        setActiveTab("exams");
-        window.location.hash = "exams";
+        setActiveSectionTab("exams");
+        if (typeof window !== "undefined") {
+          window.location.hash = "exams";
+        }
         fetchData();
       } else {
-        showToast("Assessment generation failed. Please try again.", "error");
+        const errData = await res.json().catch(() => ({}));
+        showToast(errData.detail || "Assessment generation failed. Please try again.", "error");
       }
-    } catch {
-      showToast("Network error while generating assessment", "error");
+    } catch (err: any) {
+      showToast(err?.message || "Network error while generating assessment", "error");
     } finally {
       setIsGenerating(false);
     }
@@ -336,8 +389,8 @@ export default function TeacherDashboard() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
-              setActiveTab("create");
               window.location.hash = "create";
+              document.getElementById("create")?.scrollIntoView({ behavior: "smooth" });
             }}
             className="btn-primary flex items-center gap-2 text-xs py-2 px-4 shadow-sm"
           >
@@ -386,45 +439,100 @@ export default function TeacherDashboard() {
         </div>
       </div>
 
-      {/* Tabs Switcher Navigation */}
-      <div className="border-b border-[#E5E0D8] dark:border-[#292524] flex items-center space-x-6 text-xs font-semibold overflow-x-auto pb-0.5 scrollbar-none whitespace-nowrap">
-        {[
-          { id: "exams", label: "Assessments", icon: Calendar },
-          { id: "create", label: "Create Assessment", icon: Plus },
-          { id: "bank", label: "Question Bank", icon: BookOpen },
-          { id: "kb", label: "Knowledge Sources", icon: FileSpreadsheet },
-          { id: "students", label: "Student Directory", icon: Users },
-          { id: "reports", label: "Classroom Analytics", icon: BarChart3 },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isCurrent = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id as any);
-                window.location.hash = tab.id;
-              }}
-              className={`flex items-center gap-2 pb-3 border-b-2 transition-all cursor-pointer ${
-                isCurrent
-                  ? "border-[#C84B18] text-[#C84B18] dark:border-[#EA580C] dark:text-[#EA580C]"
-                  : "border-transparent text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+      {/* View Switcher Pill Bar */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-[#E5E0D8] dark:border-[#292524] no-scrollbar">
+        <button
+          onClick={() => switchSectionTab("all")}
+          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeSectionTab === "all"
+              ? "bg-[#C84B18] text-white shadow-xs"
+              : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
+          }`}
+        >
+          All Overview
+        </button>
+
+        <button
+          onClick={() => switchSectionTab("exams")}
+          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+            activeSectionTab === "exams"
+              ? "bg-[#C84B18] text-white shadow-xs"
+              : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
+          }`}
+        >
+          <GraduationCap className="h-3.5 w-3.5" />
+          <span>Assessments ({exams.length})</span>
+        </button>
+
+        <button
+          onClick={() => switchSectionTab("create")}
+          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+            activeSectionTab === "create"
+              ? "bg-[#C84B18] text-white shadow-xs"
+              : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
+          }`}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span>Create Quiz Wizard</span>
+        </button>
+
+        <button
+          onClick={() => switchSectionTab("bank")}
+          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+            activeSectionTab === "bank"
+              ? "bg-[#C84B18] text-white shadow-xs"
+              : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
+          }`}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          <span>Question Bank</span>
+        </button>
+
+        <button
+          onClick={() => switchSectionTab("kb")}
+          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+            activeSectionTab === "kb"
+              ? "bg-[#C84B18] text-white shadow-xs"
+              : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
+          }`}
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          <span>Knowledge Base ({documents.length})</span>
+        </button>
+
+        <button
+          onClick={() => switchSectionTab("students")}
+          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+            activeSectionTab === "students"
+              ? "bg-[#C84B18] text-white shadow-xs"
+              : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
+          }`}
+        >
+          <Users className="h-3.5 w-3.5" />
+          <span>Student Directory ({studentDirectories.length})</span>
+        </button>
+
+        <button
+          onClick={() => switchSectionTab("reports")}
+          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+            activeSectionTab === "reports"
+              ? "bg-[#C84B18] text-white shadow-xs"
+              : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
+          }`}
+        >
+          <BarChart3 className="h-3.5 w-3.5" />
+          <span>Gradebook Analytics</span>
+        </button>
       </div>
 
-      {/* ═══════ TAB 1: ASSESSMENTS TABLE ═══════ */}
-      {activeTab === "exams" && (
+      {/* ═══════ SECTION 1: ASSESSMENTS TABLE ═══════ */}
+      {(activeSectionTab === "all" || activeSectionTab === "exams") && (
+      <section id="exams" className="scroll-mt-16 space-y-4">
         <LiveAssessmentsTable
           exams={exams}
           onOpenCreate={() => {
-            setActiveTab("create");
-            window.location.hash = "create";
+            const el = document.getElementById("create");
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
           }}
           onPreviewExam={(exam) => setPreviewExam(exam)}
           onOpenLiveProctor={(exam) => {
@@ -437,15 +545,17 @@ export default function TeacherDashboard() {
           onGenerateCredentials={handleGenerateCredentials}
           onDownloadCredentialsCSV={handleDownloadCredentialsCSV}
         />
+      </section>
       )}
 
-      {/* ═══════ TAB 2: MULTI-STEP ASSESSMENT CREATION WORKFLOW WIZARD ═══════ */}
-      {activeTab === "create" && (
+      {/* ═══════ SECTION 2: CREATE ASSESSMENT WORKFLOW WIZARD ═══════ */}
+      {(activeSectionTab === "all" || activeSectionTab === "create") && (
+      <section id="create" className="scroll-mt-16 space-y-4">
         <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#E5E0D8] dark:border-[#292524]">
             <div>
               <h2 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">
-                Assessment Synthesis & Configuration
+                Create New Assessment
               </h2>
               <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">
                 Follow the 4 top-down steps below to synthesize and calibrate your examination paper.
@@ -959,8 +1069,58 @@ export default function TeacherDashboard() {
 
               {/* Step 4 Body */}
               {createStep === 4 && (
-                <div className="p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-4 max-w-xl animate-fadeIn">
-                  <div className="bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 space-y-2.5 text-xs mt-2">
+                <div className="p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-5 max-w-xl animate-fadeIn">
+                  {/* Student Directory Selector with + Create Directory button */}
+                  <div className="pt-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] uppercase tracking-wider flex items-center gap-1.5">
+                        <Users className="h-3.5 w-3.5 text-[#C84B18]" />
+                        <span>Target Student Directory</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsCreateDirModalOpen(true)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-[#C84B18] hover:text-[#A0360D] dark:text-[#EA580C] dark:hover:text-[#F97316] transition-colors cursor-pointer"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Create New Student Directory</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2">
+                      {studentDirectories.length > 0 ? (
+                        <select
+                          value={selectedDirectoryId}
+                          onChange={(e) => setSelectedDirectoryId(e.target.value)}
+                          className={inputCls}
+                        >
+                          <option value="">No Directory (Open Access)</option>
+                          {studentDirectories.map((dir) => (
+                            <option key={dir.id} value={dir.id}>
+                              {dir.name} ({dir.student_count} candidate{dir.student_count !== 1 ? 's' : ''})
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="p-3.5 border border-dashed border-[#E5E0D8] dark:border-[#292524] rounded-xl bg-[#F7F4EF]/50 dark:bg-[#141312]/50 text-center">
+                          <p className="text-xs text-[#716D67] mb-2">No student directory created yet.</p>
+                          <button
+                            type="button"
+                            onClick={() => setIsCreateDirModalOpen(true)}
+                            className="btn-primary py-1.5 px-3 text-xs font-bold inline-flex items-center gap-1.5 shadow-xs"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Create First Student Directory</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#716D67]">
+                      Eligible students in this directory will be snapped as immutable assessment candidates.
+                    </p>
+                  </div>
+
+                  <div className="bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 space-y-2.5 text-xs">
                     <h4 className="font-bold text-[#242321] dark:text-[#F5F5F4] text-xs uppercase tracking-wider">
                       Assessment Synthesis Summary
                     </h4>
@@ -970,7 +1130,7 @@ export default function TeacherDashboard() {
                       <div>Questions: <b className="text-[#242321] dark:text-[#F5F5F4]">{parseInt(numMcq) + parseInt(numSubjective)} Total ({numMcq} MCQ)</b></div>
                       <div>Duration: <b className="text-[#242321] dark:text-[#F5F5F4]">{examDuration} min</b></div>
                       <div>Marks: <b className="text-[#242321] dark:text-[#F5F5F4]">{examMarks} pts</b></div>
-                      <div>Difficulty: <b className="text-[#242321] dark:text-[#F5F5F4] uppercase">{difficulty}</b></div>
+                      <div>Directory: <b className="text-[#242321] dark:text-[#F5F5F4]">{studentDirectories.find(d => d.id === selectedDirectoryId)?.name || "Open / Unassigned"}</b></div>
                     </div>
                   </div>
 
@@ -1003,25 +1163,51 @@ export default function TeacherDashboard() {
 
           </form>
         </div>
+      </section>
       )}
 
-      {/* ═══════ TAB 3: QUESTION BANK STUDIO ═══════ */}
-      {activeTab === "bank" && <QuestionBankManager />}
+      {/* ═══════ SECTION 3: QUESTION BANK STUDIO ═══════ */}
+      {(activeSectionTab === "all" || activeSectionTab === "bank") && (
+      <section id="bank" className="scroll-mt-16 space-y-4">
+        <QuestionBankManager />
+      </section>
+      )}
 
-      {/* ═══════ TAB 4: KNOWLEDGE SOURCES (RAG VECTOR DB) ═══════ */}
-      {activeTab === "kb" && (
+      {/* ═══════ SECTION 4: KNOWLEDGE SOURCES (RAG VECTOR DB) ═══════ */}
+      {(activeSectionTab === "all" || activeSectionTab === "kb") && (
+      <section id="kb" className="scroll-mt-16 space-y-4">
         <KnowledgeBaseManager
           documents={documents}
           token={token}
           onRefresh={fetchData}
         />
+      </section>
       )}
 
-      {/* ═══════ TAB 5: STUDENT ROSTER & ACADEMIC REPOSITORY ═══════ */}
-      {activeTab === "students" && <StudentRepository />}
+      {/* ═══════ SECTION 5: STUDENT DIRECTORY MANAGER ═══════ */}
+      {(activeSectionTab === "all" || activeSectionTab === "students") && (
+      <section id="students" className="scroll-mt-16 space-y-4">
+        <StudentDirectoryManager />
+      </section>
+      )}
 
-      {/* ═══════ TAB 6: GENERALIZED CLASSROOM QUIZ ANALYTICS ═══════ */}
-      {activeTab === "reports" && <GradebookAnalytics exams={exams} />}
+      {/* Inline Create Directory Modal */}
+      <CreateDirectoryModal
+        isOpen={isCreateDirModalOpen}
+        onClose={() => setIsCreateDirModalOpen(false)}
+        onCreated={(newDir) => {
+          setStudentDirectories((prev) => [newDir, ...prev]);
+          setSelectedDirectoryId(newDir.id);
+          showToast(`Student Directory "${newDir.name}" created and selected!`, "success");
+        }}
+      />
+
+      {/* ═══════ SECTION 6: GENERALIZED CLASSROOM QUIZ ANALYTICS ═══════ */}
+      {(activeSectionTab === "all" || activeSectionTab === "reports") && (
+      <section id="reports" className="scroll-mt-16 space-y-4">
+        <GradebookAnalytics exams={exams} />
+      </section>
+      )}
 
       {/* ═══════ GLOBAL PAPER STUDIO PREVIEW MODAL ═══════ */}
       {previewExam && (

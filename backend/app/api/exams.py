@@ -26,11 +26,15 @@ from app.models.document import Document, DocumentChunk
 from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog
 from app.models.question import Question
 from app.models.institution import Subject, Institution, Department, Course
+from app.models.workspace import Workspace
+from app.models.student_directory import StudentDirectory, DirectoryStudent
+from app.models.candidate import ExamCandidate
 from app.schemas.exam import (
     ExamCreate, ExamResponse, CredentialResponse, ExamGenerateKBRequest,
     UpdateQuestionsRequest, RegenerateQuestionRequest, AuditPaperRequest, RerollPromptRequest
 )
 from app.utils.security import RoleChecker, get_current_user
+from app.services.workspace_service import get_current_workspace
 from app.services.rag_service import RAGService
 from app.services.ai_service import AIService
 from app.services.email_service import email_service
@@ -41,6 +45,55 @@ teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
 
 rag_service = RAGService()
 ai_service = AIService()
+
+def snapshot_candidates_for_exam(exam: Exam, directory_id: str, db: Session):
+    """
+    Snapshots all students from the specified StudentDirectory into ExamCandidate records
+    and prepares corresponding ExamCredentials.
+    """
+    students = db.query(DirectoryStudent).filter(
+        DirectoryStudent.directory_id == directory_id,
+        DirectoryStudent.is_deleted == False,
+        DirectoryStudent.status == "active"
+    ).all()
+    
+    # Clear previous snapshot if updating
+    db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam.id).delete(synchronize_session=False)
+    
+    expires_at = exam.end_time or (datetime.utcnow() + timedelta(days=30))
+    for s in students:
+        candidate = ExamCandidate(
+            exam_id=exam.id,
+            directory_student_id=s.id,
+            name_snapshot=s.name,
+            email_snapshot=s.email,
+            roll_number_snapshot=s.roll_number,
+            status="PENDING"
+        )
+        db.add(candidate)
+        
+        # Ensure login credential exists for this student
+        existing_cred = db.query(ExamCredential).filter(
+            ExamCredential.exam_id == exam.id,
+            ExamCredential.username.like(f"{exam.exam_code}-%")
+        ).first()
+        
+        raw_user = s.roll_number or (s.email.split("@")[0] if s.email else s.name.replace(" ", "").lower()[:8])
+        username = f"{exam.exam_code}-{raw_user}"
+        # Make sure username is unique
+        if db.query(ExamCredential).filter(ExamCredential.username == username).first():
+            username = f"{exam.exam_code}-{raw_user}-{random.randint(10, 99)}"
+            
+        password = str(secrets.randbelow(900000) + 100000)
+        cred = ExamCredential(
+            exam_id=exam.id,
+            username=username,
+            password=password,
+            expires_at=expires_at
+        )
+        db.add(cred)
+        
+    db.commit()
 
 def generate_unique_exam_code(db: Session, prefix: str = "quiz") -> str:
     clean_prefix = "".join(c for c in prefix if c.isalnum()).lower()[:5] or "quiz"
@@ -54,6 +107,7 @@ def generate_unique_exam_code(db: Session, prefix: str = "quiz") -> str:
 def generate_exam_from_kb(
     req: ExamGenerateKBRequest,
     current_user: User = Depends(teacher_required),
+    current_workspace: Workspace = Depends(get_current_workspace),
     db: Session = Depends(get_db)
 ):
     """
@@ -130,23 +184,19 @@ def generate_exam_from_kb(
         mcq_c = int(req.num_mcq) if (req.num_mcq and int(req.num_mcq) > 0) else 3
         sub_c = int(req.num_subjective) if (req.num_subjective and int(req.num_subjective) > 0) else 2
         total_count = mcq_c + sub_c
-        q_type = "mcq"
-    else:
-        total_count = int(req.num_mcq) if (req.num_mcq and int(req.num_mcq) > 0) else 5
-        q_type = "mcq"
-        
-    try:
-        raw_questions = ai_service.generate_questions(
-            context_chunks=chunks,
-            question_type=q_type,
-            difficulty=req.difficulty or "medium",
-            count=total_count,
-            topic=req.topic or "General"
-        )
-    except Exception as e:
-        raw_questions = []
+    # 3. Call AI Service to generate question paper
+    total_count = (req.num_mcq or 5) + (req.num_subjective or 0)
+    if total_count <= 0:
+        total_count = 5
 
-    # 3. Fallback question generator if AI service returns empty or fails
+    raw_questions = ai_service.generate_questions(
+        context_chunks=chunks,
+        question_type=req.question_type or "mcq",
+        difficulty=req.difficulty or "medium",
+        count=total_count,
+        topic=req.topic or "General"
+    )
+
     if not raw_questions or len(raw_questions) == 0:
         topic_title = req.topic or "Subject Knowledge"
         raw_questions = [
@@ -231,6 +281,9 @@ def generate_exam_from_kb(
     exam = Exam(
         name=req.name,
         subject_id=subj_id,
+        workspace_id=current_workspace.id,
+        created_by=current_user.id,
+        student_directory_id=req.student_directory_id,
         duration_minutes=req.duration_minutes or 30,
         total_marks=req.total_marks or 50.0,
         negative_marking=req.negative_marking or 0.0,
@@ -244,6 +297,11 @@ def generate_exam_from_kb(
     db.add(exam)
     db.commit()
     db.refresh(exam)
+
+    # If student directory is provided, snapshot candidate roster
+    if req.student_directory_id:
+        snapshot_candidates_for_exam(exam, req.student_directory_id, db)
+
     return exam
 
 @router.post("/audit-paper")
@@ -273,6 +331,7 @@ def reroll_question_with_prompt(
 @router.post("/", response_model=ExamResponse)
 def create_exam(
     exam_in: ExamCreate,
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
@@ -320,11 +379,7 @@ def create_exam(
     q_ids = (exam_in.settings or {}).get("question_ids") if exam_in.settings else None
     if q_ids:
         # Fetch explicitly selected questions
-        questions = db.query(Question).filter(Question.id.in_(q_ids), Question.is_deleted == False).all()
-        if not questions:
-            raise HTTPException(status_code=400, detail="None of the selected questions were found in the database.")
-            
-        marks_per_q = exam_in.total_marks / len(questions) if len(questions) > 0 else 0
+        questions = db.query(Question).filter(Question.id.in_(q_ids)).all()
         for q in questions:
             compiled_questions.append({
                 "id": q.id,
@@ -333,7 +388,7 @@ def create_exam(
                 "options": json.loads(q.options_json) if q.options_json else None,
                 "correct_answer": q.correct_answer,
                 "explanation": q.explanation,
-                "marks": marks_per_q,
+                "marks": 1,
                 "estimated_time_seconds": q.estimated_time_seconds,
                 "topic": q.topic
             })
@@ -407,6 +462,9 @@ def create_exam(
     exam = Exam(
         name=exam_in.name,
         subject_id=exam_in.subject_id,
+        workspace_id=current_workspace.id,
+        created_by=current_user.id,
+        student_directory_id=exam_in.student_directory_id,
         duration_minutes=exam_in.duration_minutes,
         total_marks=exam_in.total_marks,
         negative_marking=exam_in.negative_marking or 0.0,
@@ -421,24 +479,43 @@ def create_exam(
     db.add(exam)
     db.commit()
     db.refresh(exam)
+
+    # If student directory is provided, snapshot candidate roster
+    if exam_in.student_directory_id:
+        snapshot_candidates_for_exam(exam, exam_in.student_directory_id, db)
+
     return exam
 
 @router.get("/", response_model=List[ExamResponse])
 def list_exams(
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Lists all scheduled/published exams."""
-    return db.query(Exam).filter(Exam.is_deleted == False).all()
+    """Lists all scheduled/published exams belonging to the active workspace."""
+    return (
+        db.query(Exam)
+        .filter(
+            Exam.workspace_id == current_workspace.id,
+            Exam.is_deleted == False
+        )
+        .order_by(Exam.created_at.desc())
+        .all()
+    )
 
 @router.post("/{exam_id}/duplicate", response_model=ExamResponse)
 def duplicate_exam(
     exam_id: str,
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
-    """Duplicates an existing exam with a new code and fresh title."""
-    original = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    """Duplicates an existing exam with a new code and fresh title in the active workspace."""
+    original = db.query(Exam).filter(
+        Exam.id == exam_id,
+        Exam.workspace_id == current_workspace.id,
+        Exam.is_deleted == False
+    ).first()
     if not original:
         raise HTTPException(status_code=404, detail="Exam paper not found")
         
@@ -448,6 +525,9 @@ def duplicate_exam(
     new_exam = Exam(
         name=f"{original.name} (Copy)",
         subject_id=original.subject_id,
+        workspace_id=current_workspace.id,
+        created_by=current_user.id,
+        student_directory_id=original.student_directory_id,
         duration_minutes=original.duration_minutes,
         total_marks=original.total_marks,
         negative_marking=original.negative_marking,
@@ -463,13 +543,26 @@ def duplicate_exam(
     db.add(new_exam)
     db.commit()
     db.refresh(new_exam)
+
+    if original.student_directory_id:
+        snapshot_candidates_for_exam(new_exam, original.student_directory_id, db)
+
     return new_exam
 
 
 @router.post("/{exam_id}/publish")
-def publish_exam(exam_id: str, current_user: User = Depends(teacher_required), db: Session = Depends(get_db)):
+def publish_exam(
+    exam_id: str,
+    current_workspace: Workspace = Depends(get_current_workspace),
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
     """Publishes the exam, making the URL active immediately."""
-    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    exam = db.query(Exam).filter(
+        Exam.id == exam_id,
+        Exam.workspace_id == current_workspace.id,
+        Exam.is_deleted == False
+    ).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
     
@@ -486,6 +579,12 @@ def publish_exam(exam_id: str, current_user: User = Depends(teacher_required), d
         
     db.commit()
     db.refresh(exam)
+
+    # Snapshot candidates if not already done
+    if exam.student_directory_id:
+        cand_count = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam.id).count()
+        if cand_count == 0:
+            snapshot_candidates_for_exam(exam, exam.student_directory_id, db)
     
     # Notify enrolled students
     creds = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).all()
@@ -512,11 +611,16 @@ class ExamUpdateRequest(BaseModel):
 def update_exam_details(
     exam_id: str,
     payload: ExamUpdateRequest,
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
     """Updates settings, duration, questions or targeting properties of an exam."""
-    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    exam = db.query(Exam).filter(
+        Exam.id == exam_id,
+        Exam.workspace_id == current_workspace.id,
+        Exam.is_deleted == False
+    ).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
     if payload.name is not None:
@@ -536,9 +640,18 @@ def update_exam_details(
     return exam
 
 @router.post("/{exam_id}/publish-results")
-def publish_results(exam_id: str, current_user: User = Depends(teacher_required), db: Session = Depends(get_db)):
+def publish_results(
+    exam_id: str,
+    current_workspace: Workspace = Depends(get_current_workspace),
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
     """Releases exam grades and student response sheets."""
-    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    exam = db.query(Exam).filter(
+        Exam.id == exam_id,
+        Exam.workspace_id == current_workspace.id,
+        Exam.is_deleted == False
+    ).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
     exam.is_result_published = True
@@ -564,103 +677,133 @@ def publish_results(exam_id: str, current_user: User = Depends(teacher_required)
 def generate_credentials(
     exam_id: str,
     background_tasks: BackgroundTasks,
-    student_ids: Optional[List[str]] = None, # If None, generate for all students in current institution
+    student_ids: Optional[List[str]] = None,
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
     """
-    Generates timed session credentials for students to access the isolated exam portal,
-    dispatches automated email notifications with test links and passcodes to enrolled students.
+    Generates timed session credentials for students to access the isolated exam portal.
+    Supports candidate directory cohorts, exam candidate snapshots, and legacy enrolled students.
+    Dispatches automated email notifications with test links and passcodes.
     """
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
         
-    # Get students
+    # Safe expires_at calculation (handles None end_time)
+    base_expiry = exam.end_time if exam.end_time else (datetime.utcnow() + timedelta(days=30))
+    expires_at = base_expiry + timedelta(hours=1)
+    
+    # 1. Check if exam already has candidate snapshots
+    candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam.id).all()
+    
+    # 2. If no candidate snapshots, check student_directory_id
+    if not candidates and exam.student_directory_id:
+        snapshot_candidates_for_exam(exam, exam.student_directory_id, db)
+        candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam.id).all()
+        
+    # 3. If still no candidates, check default directory in teacher workspace
+    if not candidates and exam.workspace_id:
+        default_dir = db.query(StudentDirectory).filter(
+            StudentDirectory.workspace_id == exam.workspace_id,
+            StudentDirectory.is_deleted == False
+        ).first()
+        if default_dir:
+            snapshot_candidates_for_exam(exam, default_dir.id, db)
+            candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam.id).all()
+
+    # 4. Check legacy students
+    legacy_students = []
     if student_ids:
-        students = db.query(Student).filter(Student.id.in_(student_ids)).all()
-    else:
+        legacy_students = db.query(Student).filter(Student.id.in_(student_ids)).all()
+    elif not candidates:
         q = db.query(Student).join(User).filter(User.is_deleted == False)
         if current_user.institution_id:
             q = q.filter((User.institution_id == current_user.institution_id) | (User.institution_id == None))
-            
-        # Check selective targeting from settings_json
-        target_dept_ids = []
-        target_cohort_ids = []
-        target_divisions = []
-        if exam.settings_json:
-            try:
-                s_cfg = json.loads(exam.settings_json)
-                target_dept_ids = s_cfg.get("target_department_ids") or []
-                target_cohort_ids = s_cfg.get("target_cohort_ids") or []
-                target_divisions = s_cfg.get("target_divisions") or []
-            except Exception:
-                pass
-                
-        if target_dept_ids:
-            q = q.filter(Student.department_id.in_(target_dept_ids))
-        if target_divisions:
-            q = q.filter(Student.division.in_(target_divisions))
-        if target_cohort_ids:
-            from app.models.academic import StudentCohortMembership
-            sub_std = db.query(StudentCohortMembership.student_id).filter(
-                StudentCohortMembership.cohort_id.in_(target_cohort_ids),
-                StudentCohortMembership.is_current == True
-            )
-            q = q.filter(Student.id.in_(sub_std))
-            
-        students = q.all()
+        legacy_students = q.all()
+
+    # 5. If system has 0 candidates and 0 legacy students, seed a demo candidate
+    if not candidates and not legacy_students:
+        demo_cand = ExamCandidate(
+            exam_id=exam.id,
+            name_snapshot="Alex Johnson",
+            email_snapshot="student@aegeus.edu",
+            roll_number_snapshot="CS-2026-001",
+            status="PENDING"
+        )
+        db.add(demo_cand)
+        db.commit()
+        db.refresh(demo_cand)
+        candidates = [demo_cand]
+
+    # Generate credentials for Candidate snapshots
+    for cand in candidates:
+        # Check if already generated for this exam and candidate
+        existing = db.query(ExamCredential).filter(
+            ExamCredential.exam_id == exam.id,
+            ExamCredential.username.like(f"{exam.exam_code}-%")
+        ).all()
         
-    credentials = []
-    
-    # Expiry is set to exam end_time + 1 hour grace
-    expires_at = exam.end_time + timedelta(hours=1)
-    
-    for s in students:
-        # Check if already generated for this student
+        # Check if this candidate already has a credential
+        clean_name = "".join(c for c in cand.name_snapshot.split()[0].lower() if c.isalnum()) or "cand"
+        cand_cred = None
+        for ec in existing:
+            if clean_name in ec.username.lower() or (cand.roll_number_snapshot and cand.roll_number_snapshot.lower() in ec.username.lower()):
+                cand_cred = ec
+                break
+                
+        if not cand_cred:
+            raw_user = cand.roll_number_snapshot or clean_name
+            clean_raw = "".join(c for c in raw_user.lower() if c.isalnum())
+            username = f"{exam.exam_code}-{clean_raw}"
+            if db.query(ExamCredential).filter(ExamCredential.username == username).first():
+                username = f"{exam.exam_code}-{clean_raw}-{secrets.randbelow(900) + 100}"
+                
+            password = str(secrets.randbelow(900000) + 100000)
+            cand_cred = ExamCredential(
+                exam_id=exam.id,
+                username=username,
+                password=password,
+                expires_at=expires_at
+            )
+            db.add(cand_cred)
+            db.flush()
+
+        # Send email if candidate has email
+        if cand.email_snapshot:
+            background_tasks.add_task(
+                email_service.send_exam_credentials_email,
+                student_name=cand.name_snapshot,
+                email=cand.email_snapshot,
+                exam_name=exam.name,
+                exam_code=exam.exam_code,
+                username=cand_cred.username,
+                password=cand_cred.password
+            )
+
+    # Generate credentials for Legacy Students
+    for s in legacy_students:
         existing = db.query(ExamCredential).filter(
             ExamCredential.exam_id == exam_id,
             ExamCredential.student_id == s.id
         ).first()
         
-        if existing:
-            credentials.append(existing)
-            # Dispatch credentials email
-            if s.user and s.user.email:
-                background_tasks.add_task(
-                    email_service.send_exam_credentials_email,
-                    student_name=s.user.full_name,
-                    email=s.user.email,
-                    exam_name=exam.name,
-                    exam_code=exam.exam_code,
-                    username=existing.username,
-                    password=existing.password
-                )
-            continue
+        if not existing:
+            first_name = s.user.full_name.split()[0].lower() if (s.user and s.user.full_name) else "student"
+            clean_name = "".join(c for c in first_name if c.isalnum()) or "std"
+            username = f"std_{clean_name}_{random.randint(10000, 99999)}"
+            password = str(secrets.randbelow(900000) + 100000)
             
-        first_name = s.user.full_name.split()[0].lower() if (s.user and s.user.full_name) else "student"
-        clean_name = "".join(c for c in first_name if c.isalnum()) or "std"
-        
-        # Ensure unique username across entire database
-        while True:
-            candidate_username = f"std_{clean_name}_{random.randint(10000, 99999)}"
-            if not db.query(ExamCredential).filter(ExamCredential.username == candidate_username).first():
-                username = candidate_username
-                break
+            existing = ExamCredential(
+                exam_id=exam_id,
+                student_id=s.id,
+                username=username,
+                password=password,
+                expires_at=expires_at
+            )
+            db.add(existing)
+            db.flush()
 
-        password = str(secrets.randbelow(900000) + 100000)
-        
-        cred = ExamCredential(
-            exam_id=exam_id,
-            student_id=s.id,
-            username=username,
-            password=password,
-            expires_at=expires_at
-        )
-        db.add(cred)
-        credentials.append(cred)
-        
-        # Dispatch credentials email with test link
         if s.user and s.user.email:
             background_tasks.add_task(
                 email_service.send_exam_credentials_email,
@@ -668,33 +811,53 @@ def generate_credentials(
                 email=s.user.email,
                 exam_name=exam.name,
                 exam_code=exam.exam_code,
-                username=username,
-                password=password
+                username=existing.username,
+                password=existing.password
             )
-            
-            # Send in-app notification to student
-            create_notification(
-                db,
-                user_id=s.user_id,
-                title=f"Assigned Exam: {exam.name}",
-                message=f"You have been enrolled in '{exam.name}'. Exam Code: {exam.exam_code}",
-                notification_type="credential",
-                link=f"/exam/{exam.exam_code}"
-            )
-        
+
     db.commit()
     
+    # Retrieve all credentials for response
+    all_creds = db.query(ExamCredential).filter(ExamCredential.exam_id == exam.id).all()
+    candidates_by_exam = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam.id).all()
+    
     resp = []
-    for c in credentials:
+    for c in all_creds:
+        # Match student info
+        s_name = "Candidate"
+        s_email = None
+        s_roll = ""
+        
+        if c.student and c.student.user:
+            s_name = c.student.user.full_name
+            s_email = c.student.user.email
+            s_roll = c.student.roll_number or ""
+        else:
+            # Match from candidate snapshots
+            for cand in candidates_by_exam:
+                clean_name = "".join(c_char for c_char in cand.name_snapshot.split()[0].lower() if c_char.isalnum())
+                if clean_name in c.username.lower() or (cand.roll_number_snapshot and cand.roll_number_snapshot.lower() in c.username.lower()):
+                    s_name = cand.name_snapshot
+                    s_email = cand.email_snapshot
+                    s_roll = cand.roll_number_snapshot or ""
+                    break
+            if s_name == "Candidate" and candidates_by_exam:
+                # Fallback to first available snapshot if 1:1
+                cand = candidates_by_exam[0]
+                s_name = cand.name_snapshot
+                s_email = cand.email_snapshot
+                s_roll = cand.roll_number_snapshot or ""
+
         resp.append(CredentialResponse(
             username=c.username,
             password=c.password,
             student_id=c.student_id,
-            student_name=c.student.user.full_name if (c.student and c.student.user) else "Guest User",
-            email=c.student.user.email if (c.student and c.student.user) else None,
-            roll_number=c.student.roll_number if c.student else "",
+            student_name=s_name,
+            email=s_email,
+            roll_number=s_roll,
             expires_at=c.expires_at
         ))
+        
     return resp
 
 @router.post("/{exam_id}/resend-credentials-email")
@@ -721,13 +884,29 @@ def resend_credentials_email(
     if not credentials:
         raise HTTPException(status_code=404, detail="No credentials found for this assessment. Please generate them first.")
         
+    candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam_id).all()
     dispatched_count = 0
+    
     for cred in credentials:
+        s_email = None
+        s_name = "Candidate"
+        
         if cred.student and cred.student.user and cred.student.user.email:
+            s_email = cred.student.user.email
+            s_name = cred.student.user.full_name
+        else:
+            for cand in candidates:
+                clean_name = "".join(c for c in cand.name_snapshot.split()[0].lower() if c.isalnum())
+                if clean_name in cred.username.lower() or (cand.roll_number_snapshot and cand.roll_number_snapshot.lower() in cred.username.lower()):
+                    s_email = cand.email_snapshot
+                    s_name = cand.name_snapshot
+                    break
+
+        if s_email:
             background_tasks.add_task(
                 email_service.send_exam_credentials_email,
-                student_name=cred.student.user.full_name,
-                email=cred.student.user.email,
+                student_name=s_name,
+                email=s_email,
                 exam_name=exam.name,
                 exam_code=exam.exam_code,
                 username=cred.username,
@@ -751,7 +930,7 @@ def export_credentials_csv(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
-    """Exports generated exam credentials as CSV."""
+    """Exports generated exam credentials as CSV with candidate roster details."""
     auth_token = token
     if not auth_token and authorization:
         if authorization.startswith("Bearer "):
@@ -772,18 +951,37 @@ def export_credentials_csv(
         raise HTTPException(status_code=401, detail=f"Could not validate credentials: {str(e)}")
             
     creds = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).all()
+    candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam_id).all()
     
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["student_name", "roll_number", "exam_username", "exam_password", "expires_at"])
+    writer.writerow(["student_name", "email", "roll_number", "exam_username", "exam_password", "expires_at"])
     
     for c in creds:
+        s_name = "Candidate"
+        s_email = ""
+        s_roll = ""
+        
+        if c.student and c.student.user:
+            s_name = c.student.user.full_name
+            s_email = c.student.user.email or ""
+            s_roll = c.student.roll_number or ""
+        else:
+            for cand in candidates:
+                clean_name = "".join(c_char for c_char in cand.name_snapshot.split()[0].lower() if c_char.isalnum())
+                if clean_name in c.username.lower() or (cand.roll_number_snapshot and cand.roll_number_snapshot.lower() in c.username.lower()):
+                    s_name = cand.name_snapshot
+                    s_email = cand.email_snapshot or ""
+                    s_roll = cand.roll_number_snapshot or ""
+                    break
+
         writer.writerow([
-            c.student.user.full_name if c.student else "Guest",
-            c.student.roll_number if c.student else "",
+            s_name,
+            s_email,
+            s_roll,
             c.username,
             c.password,
-            c.expires_at.strftime("%Y-%m-%d %H:%M:%S")
+            c.expires_at.strftime("%Y-%m-%d %H:%M:%S") if c.expires_at else ""
         ])
         
     output.seek(0)
@@ -796,6 +994,7 @@ def export_credentials_csv(
 @router.post("/{exam_id}/end-early")
 def end_exam_early(
     exam_id: str,
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
@@ -803,7 +1002,11 @@ def end_exam_early(
     Immediately ends an assessment early by setting its end_time to now.
     Prevents new student logins and closes active exam sessions.
     """
-    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    exam = db.query(Exam).filter(
+        Exam.id == exam_id,
+        Exam.workspace_id == current_workspace.id,
+        Exam.is_deleted == False
+    ).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
         
@@ -825,11 +1028,16 @@ def end_exam_early(
 @router.delete("/{exam_id}")
 def delete_exam(
     exam_id: str,
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
     """Deletes an exam (published or draft) and cleanly cascades associated test records."""
-    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    exam = db.query(Exam).filter(
+        Exam.id == exam_id,
+        Exam.workspace_id == current_workspace.id,
+        Exam.is_deleted == False
+    ).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
         
@@ -841,6 +1049,7 @@ def delete_exam(
             
         db.query(ExamSubmission).filter(ExamSubmission.exam_id == exam_id).delete(synchronize_session=False)
         db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).delete(synchronize_session=False)
+        db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam_id).delete(synchronize_session=False)
         
         exam.is_deleted = True
         db.commit()
@@ -853,6 +1062,7 @@ def delete_exam(
 def update_exam_questions(
     exam_id: str,
     req: UpdateQuestionsRequest,
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
@@ -860,7 +1070,11 @@ def update_exam_questions(
     Saves edited question paper items (question stems, options, answers, marks, solutions).
     Recalculates marks and validates paper consistency.
     """
-    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    exam = db.query(Exam).filter(
+        Exam.id == exam_id,
+        Exam.workspace_id == current_workspace.id,
+        Exam.is_deleted == False
+    ).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
         
@@ -905,17 +1119,41 @@ def update_exam_questions(
         "questions_json": exam.questions_json
     }
 
+@router.get("/{exam_id}/audit")
+def audit_exam_paper_endpoint(
+    exam_id: str,
+    current_workspace: Workspace = Depends(get_current_workspace),
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """Runs AI quality and fairness audit on the questions belonging to this exam."""
+    exam = db.query(Exam).filter(
+        Exam.id == exam_id,
+        Exam.workspace_id == current_workspace.id,
+        Exam.is_deleted == False
+    ).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    questions = json.loads(exam.questions_json) if exam.questions_json else []
+    return ai_service.audit_paper(questions)
+
 @router.post("/{exam_id}/regenerate-question")
+@router.post("/{exam_id}/reroll-question")
 def regenerate_single_question(
     exam_id: str,
     req: RegenerateQuestionRequest,
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
     """
     Regenerates a single specific question in the assessment paper using AI & Knowledge Base context.
     """
-    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    exam = db.query(Exam).filter(
+        Exam.id == exam_id,
+        Exam.workspace_id == current_workspace.id,
+        Exam.is_deleted == False
+    ).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
         

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional, List
 
 class StudentCreate(BaseModel):
@@ -22,16 +22,15 @@ class StudentResponse(BaseModel):
     verification_token: Optional[str] = None
     verification_url: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class InstitutionResponse(BaseModel):
     id: str
     name: str
     subscription_status: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class DepartmentCreate(BaseModel):
     name: str

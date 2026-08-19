@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 from app.database import get_db
 from app.models.user import User, Student
 from app.models.exam import Exam, ExamSubmission, ExamCredential, ProctoringLog
+from app.models.candidate import ExamCandidate
 from app.models.institution import Department
 from app.utils.security import RoleChecker, get_current_user
 from app.services.ai_service import AIService
@@ -80,16 +81,16 @@ def get_exam_analytics(
             "submissions": []
         }
 
-    scores = [s.score for s in submissions]
-    percentages = [s.percentage for s in submissions]
-    avg_score = sum(scores) / len(scores)
-    avg_percentage = sum(percentages) / len(percentages)
-    highest = max(scores)
-    lowest = min(scores)
+    scores = [round(float(s.score or 0.0), 2) for s in submissions]
+    percentages = [round(float(s.percentage or 0.0), 2) for s in submissions]
+    avg_score = round(sum(scores) / len(scores), 2)
+    avg_percentage = round(sum(percentages) / len(percentages), 2)
+    highest = round(max(scores), 2)
+    lowest = round(min(scores), 2)
     
-    pass_count = sum(1 for s in submissions if s.score >= exam.passing_marks)
+    pass_count = sum(1 for s in submissions if (s.score or 0.0) >= exam.passing_marks)
     fail_count = attendance_count - pass_count
-    pass_rate = (pass_count / attendance_count) * 100.0
+    pass_rate = round((pass_count / attendance_count) * 100.0, 1)
 
     # Calculate score distribution brackets
     dist = { "0_40": 0, "40_60": 0, "60_80": 0, "80_100": 0 }
@@ -102,6 +103,8 @@ def get_exam_analytics(
             dist["60_80"] += 1
         else:
             dist["80_100"] += 1
+
+    exam_candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam_id).all()
 
     # Aggregate topic scores across all student submissions
     submissions_list = []
@@ -128,19 +131,47 @@ def get_exam_analytics(
             except Exception:
                 pass
 
-        score_val = float(s.score) if s.score is not None else 0.0
-        pct_val = float(s.percentage) if s.percentage is not None else 0.0
+        score_val = round(float(s.score), 2) if s.score is not None else 0.0
+        pct_val = round(float(s.percentage), 2) if s.percentage is not None else 0.0
         pass_marks = float(exam.passing_marks) if exam.passing_marks is not None else 0.0
+
+        # Resolve candidate name & email
+        cand_name = "Candidate"
+        cand_email = ""
+        cand_roll = "N/A"
+        cand_div = ""
+        cand_batch = ""
+
+        if student_obj and student_obj.user:
+            cand_name = student_obj.user.full_name
+            cand_email = student_obj.user.email or ""
+            cand_roll = student_obj.roll_number or "N/A"
+            cand_div = student_obj.division or ""
+            cand_batch = student_obj.batch or ""
+        elif s.credential:
+            # Match from exam_candidates snapshots
+            cand = None
+            for c in exam_candidates:
+                clean_name = "".join(ch for ch in c.name_snapshot.split()[0].lower() if ch.isalnum())
+                if clean_name in s.credential.username.lower() or (c.roll_number_snapshot and c.roll_number_snapshot.lower() in s.credential.username.lower()):
+                    cand = c
+                    break
+            if not cand and exam_candidates:
+                cand = exam_candidates[0]
+            if cand:
+                cand_name = cand.name_snapshot
+                cand_email = cand.email_snapshot or ""
+                cand_roll = cand.roll_number_snapshot or "N/A"
 
         submissions_list.append({
             "rank": rank_idx,
             "submission_id": s.id,
-            "student_id": student_obj.id if student_obj else None,
-            "student_name": student_obj.user.full_name if (student_obj and student_obj.user) else "Guest Candidate",
-            "email": student_obj.user.email if (student_obj and student_obj.user) else "",
-            "roll_number": student_obj.roll_number if student_obj else "N/A",
-            "division": student_obj.division if student_obj else "",
-            "batch": student_obj.batch if student_obj else "",
+            "student_id": student_obj.id if student_obj else (s.credential_id or None),
+            "student_name": cand_name,
+            "email": cand_email,
+            "roll_number": cand_roll,
+            "division": cand_div,
+            "batch": cand_batch,
             "score": score_val,
             "max_score": exam.total_marks,
             "percentage": pct_val,
@@ -149,8 +180,8 @@ def get_exam_analytics(
             "submitted_at": s.submitted_at.strftime("%Y-%m-%d %H:%M") if s.submitted_at else ""
         })
 
-    # Sort candidates list by student name
-    submissions_list.sort(key=lambda x: (x.get("student_name", "").lower(), x.get("roll_number", "")))
+    # Sort candidates list by rank
+    submissions_list.sort(key=lambda x: (x.get("rank", 999)))
 
     # Format topic analytics
     topic_analytics_list = []
@@ -176,13 +207,13 @@ def get_exam_analytics(
         "attended_count": attendance_count,
         "absent_count": absent_count,
         "attendance_rate": attendance_rate,
-        "average_score": round(avg_score, 2),
-        "average_percentage": round(avg_percentage, 1),
+        "average_score": avg_score,
+        "average_percentage": avg_percentage,
         "highest_score": highest,
         "lowest_score": lowest,
         "pass_count": pass_count,
         "fail_count": fail_count,
-        "pass_rate": round(pass_rate, 1),
+        "pass_rate": pass_rate,
         "distribution": dist,
         "topic_analytics": topic_analytics_list,
         "submissions": submissions_list
@@ -200,29 +231,57 @@ def export_exam_csv(
         raise HTTPException(status_code=404, detail="Exam not found")
         
     submissions = db.query(ExamSubmission).filter(
-        ExamSubmission.exam_id == exam_id,
+        ExamSubmission.exam_id == exam_id, 
         ExamSubmission.status == "submitted"
     ).order_by(ExamSubmission.score.desc()).all()
     
+    exam_candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam_id).all()
+    
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Rank", "Student Name", "Email", "Roll Number", "Division", "Score", "Max Marks", "Percentage", "Result", "Proctor Flags", "Submitted At"])
+    writer.writerow(["Rank", "Student Name", "Email", "Roll Number", "Score", "Max Marks", "Percentage", "Result", "Proctor Flags", "Submitted At"])
     
     for rank_idx, s in enumerate(submissions, 1):
         st = s.credential.student if s.credential else None
         alerts = db.query(ProctoringLog).filter(ProctoringLog.submission_id == s.id).count()
+        
+        cand_name = "Candidate"
+        cand_email = ""
+        cand_roll = "N/A"
+        
+        if st and st.user:
+            cand_name = st.user.full_name
+            cand_email = st.user.email or ""
+            cand_roll = st.roll_number or "N/A"
+        elif s.credential:
+            cand = None
+            for c in exam_candidates:
+                clean_name = "".join(ch for ch in c.name_snapshot.split()[0].lower() if ch.isalnum())
+                if clean_name in s.credential.username.lower() or (c.roll_number_snapshot and c.roll_number_snapshot.lower() in s.credential.username.lower()):
+                    cand = c
+                    break
+            if not cand and exam_candidates:
+                cand = exam_candidates[0]
+            if cand:
+                cand_name = cand.name_snapshot
+                cand_email = cand.email_snapshot or ""
+                cand_roll = cand.roll_number_snapshot or "N/A"
+                
+        score_val = round(float(s.score), 2) if s.score is not None else 0.0
+        pct_val = round(float(s.percentage), 2) if s.percentage is not None else 0.0
+        pass_marks = float(exam.passing_marks) if exam.passing_marks is not None else 0.0
+
         writer.writerow([
             rank_idx,
-            st.user.full_name if (st and st.user) else "Guest",
-            st.user.email if (st and st.user) else "",
-            st.roll_number if st else "",
-            st.division if st else "",
-            s.score,
+            cand_name,
+            cand_email,
+            cand_roll,
+            score_val,
             exam.total_marks,
-            f"{s.percentage}%",
-            "PASSED" if s.score >= exam.passing_marks else "FAILED",
+            f"{pct_val}%",
+            "PASSED" if score_val >= pass_marks else "FAILED",
             alerts,
-            s.submitted_at.isoformat() if s.submitted_at else ""
+            s.submitted_at.strftime("%Y-%m-%d %H:%M") if s.submitted_at else ""
         ])
         
     output.seek(0)

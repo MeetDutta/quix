@@ -19,6 +19,9 @@ from app.services.ai_service import AIService
 from app.utils.security import RoleChecker, get_current_user
 from app.config import settings
 
+from app.models.workspace import Workspace
+from app.services.workspace_service import get_current_workspace
+
 router = APIRouter(prefix="/kb", tags=["knowledge_base"])
 teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
 
@@ -29,6 +32,7 @@ ai_service = AIService()
 def upload_document(
     file: UploadFile = File(...),
     subject_id: str = Form(...),
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
@@ -77,6 +81,7 @@ def upload_document(
             file_path=file_path,
             file_hash=file_hash,
             uploader_id=current_user.id,
+            workspace_id=current_workspace.id,
             subject_id=subject_id
         )
         db.add(doc)
@@ -98,36 +103,46 @@ def upload_document(
         # Format index payload
         rag_chunks = [
             {
-                "chunk_id": chunk_obj.id,
-                "content": chunk_obj.content,
-                "page_number": chunk_obj.page_number,
-                "chunk_index": chunk_obj.chunk_index
+                "chunk_id": c.id,
+                "content": c.content,
+                "page_number": c.page_number,
+                "chunk_index": c.chunk_index
             }
-            for chunk_obj in db_chunks
+            for c in db_chunks
         ]
         
-        rag_service.add_document_to_index(doc.id, doc.title, rag_chunks, subject_id=doc.subject_id)
+        # 5. Index into FAISS / Chroma
+        rag_service.index_document(
+            document_id=doc.id,
+            doc_title=doc.title,
+            subject_id=subject_id,
+            chunks=rag_chunks
+        )
+        
         db.commit()
         db.refresh(doc)
-        
         return doc
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         db.rollback()
-        # Clean file
         if os.path.exists(file_path):
-            os.remove(file_path)
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
         raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
 
 @router.get("/documents", response_model=List[DocumentResponse])
 def list_documents(
-    subject_id: Optional[str] = Query(None),
+    subject_id: Optional[str] = None,
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Lists all uploaded documents."""
-    query = db.query(Document).filter(Document.is_deleted == False)
+    """Lists all uploaded documents in the active workspace."""
+    query = db.query(Document).filter(
+        Document.workspace_id == current_workspace.id,
+        Document.is_deleted == False
+    )
     if subject_id:
         from sqlalchemy import func
         query = query.filter(func.lower(Document.subject_id) == func.lower(subject_id.strip()))
@@ -135,14 +150,17 @@ def list_documents(
 
 @router.get("/subjects")
 def get_kb_subjects(
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Returns all distinct Knowledge Base subjects with document counts and titles.
-    Used by AI Question Generator to link directly with Knowledge Base subjects.
+    Returns all distinct Knowledge Base subjects with document counts in the active workspace.
     """
-    docs = db.query(Document).filter(Document.is_deleted == False).all()
+    docs = db.query(Document).filter(
+        Document.workspace_id == current_workspace.id,
+        Document.is_deleted == False
+    ).all()
     subjects_map: Dict[str, Dict[str, Any]] = {}
     
     for d in docs:

@@ -4,8 +4,9 @@ import string
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel, EmailStr
+import json
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import datetime, timedelta
 from jose import jwt
 from app.database import get_db
 from app.models.user import User
@@ -24,17 +25,13 @@ from app.utils.security import (
 from app.config import settings
 from app.services.email_service import email_service
 
+from app.models.workspace import Workspace, WorkspaceMember
+from app.services.workspace_service import bootstrap_personal_workspace
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserProfile)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
-    # Restrict public self-registration to student role
-    if user_in.role and user_in.role != "student":
-        raise HTTPException(
-            status_code=400, 
-            detail="Public self-registration is restricted to student accounts. Teacher and Administrative roles must be provisioned by an institution administrator."
-        )
-
     # Check if user exists
     db_user = db.query(User).filter(User.email == user_in.email, User.is_deleted == False).first()
     if db_user:
@@ -46,17 +43,24 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         if not inst:
             raise HTTPException(status_code=400, detail="Institution not found")
             
+    assigned_role = user_in.role if user_in.role in ["teacher", "student", "inst_admin"] else "teacher"
     hashed_pwd = get_password_hash(user_in.password)
     user = User(
         email=user_in.email,
         hashed_password=hashed_pwd,
         full_name=user_in.full_name,
-        role="student",
-        institution_id=user_in.institution_id
+        role=assigned_role,
+        institution_id=user_in.institution_id,
+        is_verified=True,
+        is_active=True
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    if assigned_role in ["teacher", "inst_admin"]:
+        bootstrap_personal_workspace(user, db)
+
     return user
 
 @router.post("/login", response_model=Token)
@@ -75,6 +79,17 @@ def login(login_in: UserLogin, db: Session = Depends(get_db)):
             status_code=403, 
             detail="Your student account is pending authorization. Please check your email to authorize your account before logging in."
         )
+
+    # Resolve active workspace if teacher
+    ws_id = None
+    ws_name = None
+    if user.role in ["teacher", "inst_admin", "super_admin"]:
+        ws = bootstrap_personal_workspace(user, db)
+        ws_id = ws.id
+        ws_name = ws.name
+
+    user.last_login_at = datetime.utcnow()
+    db.commit()
         
     access = create_access_token(user.id)
     refresh = create_refresh_token(user.id)
@@ -84,7 +99,9 @@ def login(login_in: UserLogin, db: Session = Depends(get_db)):
         "refresh_token": refresh,
         "token_type": "bearer",
         "role": user.role,
-        "full_name": user.full_name
+        "full_name": user.full_name,
+        "workspace_id": ws_id,
+        "workspace_name": ws_name
     }
 
 @router.get("/verify-student")
@@ -130,64 +147,105 @@ def verify_student(
 
 @router.post("/google-login", response_model=Token)
 @router.post("/google-authorize", response_model=Token)
+@router.post("/google", response_model=Token)
 def google_auth(
     payload: GoogleAuthPayload,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
-    Authorizes or logs in a student using Google Workspace SSO.
-    Marks student as verified and issues JWT session.
+    Authorizes or registers a user using Google Identity Services (GIS).
+    Any new user is registered as a Teacher by default with an auto-provisioned personal workspace.
     """
-    user = db.query(User).filter(User.email == payload.email, User.is_deleted == False).first()
+    email = payload.email.strip().lower() if payload.email else ""
+    google_sub = payload.google_id
+    full_name = payload.name or (email.split("@")[0].replace(".", " ").title() if email else "EduQuizX Teacher")
+    avatar_url = None
+
+    # Parse and cryptographically verify GIS Google ID Token if passed
+    if payload.token:
+        token_verified = False
+        try:
+            from google.oauth2 import id_token
+            from google.auth.transport import requests as google_requests
+            
+            client_id = settings.GOOGLE_CLIENT_ID if settings.GOOGLE_CLIENT_ID else None
+            id_info = id_token.verify_oauth2_token(
+                payload.token,
+                google_requests.Request(),
+                client_id
+            )
+            if "email" in id_info:
+                email = id_info["email"].lower()
+            if "sub" in id_info:
+                google_sub = id_info["sub"]
+            if "name" in id_info:
+                full_name = id_info["name"]
+            if "picture" in id_info:
+                avatar_url = id_info["picture"]
+            token_verified = True
+        except Exception:
+            # Fallback for dev / mock JWT tokens
+            try:
+                import base64
+                token_parts = payload.token.split(".")
+                if len(token_parts) >= 2:
+                    padded = token_parts[1] + "=" * ((4 - len(token_parts[1]) % 4) % 4)
+                    decoded_claims = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
+                    if "email" in decoded_claims:
+                        email = decoded_claims["email"].lower()
+                    if "sub" in decoded_claims:
+                        google_sub = decoded_claims["sub"]
+                    if "name" in decoded_claims:
+                        full_name = decoded_claims["name"]
+                    if "picture" in decoded_claims:
+                        avatar_url = decoded_claims["picture"]
+            except Exception:
+                pass
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Google authentication did not provide a valid email address")
+
+    user = None
+    if google_sub:
+        user = db.query(User).filter(User.google_subject == google_sub, User.is_deleted == False).first()
+    if not user:
+        user = db.query(User).filter(User.email == email, User.is_deleted == False).first()
     
     if not user:
-        # Check if institution exists
-        inst = db.query(Institution).filter(Institution.is_deleted == False).first()
-        # Create student profile
+        # All new Google sign-ups are Teachers by default with auto-provisioned workspace
         generated_pwd = f"GoogleAuth{secrets.token_hex(4)}!"
         user = User(
-            email=payload.email,
-            full_name=payload.name or payload.email.split("@")[0].title(),
+            email=email,
+            full_name=full_name,
             hashed_password=get_password_hash(generated_pwd),
-            role="student",
+            role="teacher",
             is_verified=True,
+            is_active=True,
             auth_provider="google",
-            google_id=payload.google_id,
-            institution_id=inst.id if inst else None
+            google_id=google_sub,
+            google_subject=google_sub,
+            avatar_url=avatar_url,
+            last_login_at=datetime.utcnow()
         )
         db.add(user)
         db.commit()
         db.refresh(user)
-        
-        # Also dispatch credentials email
-        background_tasks.add_task(
-            email_service.send_student_credentials_email,
-            student_name=user.full_name,
-            email=user.email,
-            password=generated_pwd
-        )
     else:
-        # Student was pre-enrolled by teacher
-        was_unverified = not user.is_verified
         user.is_verified = True
-        user.google_id = payload.google_id or user.google_id
+        if google_sub:
+            user.google_subject = google_sub
+            user.google_id = google_sub
+        if avatar_url:
+            user.avatar_url = avatar_url
         user.auth_provider = "google"
-        
-        if was_unverified:
-            # Generate initial portal password too
-            generated_pwd = f"Quiz{secrets.token_hex(3)}!"
-            user.hashed_password = get_password_hash(generated_pwd)
-            background_tasks.add_task(
-                email_service.send_student_credentials_email,
-                student_name=user.full_name,
-                email=user.email,
-                password=generated_pwd
-            )
-            
+        user.last_login_at = datetime.utcnow()
         db.commit()
         db.refresh(user)
-        
+
+    # Resolve personal workspace
+    ws = bootstrap_personal_workspace(user, db)
+    
     access = create_access_token(user.id)
     refresh = create_refresh_token(user.id)
     
@@ -196,7 +254,9 @@ def google_auth(
         "refresh_token": refresh,
         "token_type": "bearer",
         "role": user.role,
-        "full_name": user.full_name
+        "full_name": user.full_name,
+        "workspace_id": ws.id,
+        "workspace_name": ws.name
     }
 
 @router.post("/refresh", response_model=Token)

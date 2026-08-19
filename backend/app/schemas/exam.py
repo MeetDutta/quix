@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -18,6 +18,7 @@ class ExamCreate(BaseModel):
     passing_marks: int
     start_time: datetime
     end_time: datetime
+    student_directory_id: Optional[str] = None
     blueprint: Optional[List[BlueprintSection]] = None
     settings: Optional[Dict[str, Any]] = None # Fullscreen, shuffle, proctor limits
 
@@ -25,6 +26,9 @@ class ExamResponse(BaseModel):
     id: str
     name: str
     subject_id: str
+    workspace_id: Optional[str] = None
+    created_by: Optional[str] = None
+    student_directory_id: Optional[str] = None
     duration_minutes: int
     total_marks: float
     negative_marking: Optional[float] = 0.0
@@ -35,8 +39,8 @@ class ExamResponse(BaseModel):
     is_published: Optional[bool] = False
     questions_json: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class CredentialResponse(BaseModel):
     username: str
@@ -66,6 +70,7 @@ class ExamGenerateKBRequest(BaseModel):
     name: str
     subject_id: Optional[str] = "general_101"
     document_id: Optional[str] = None
+    student_directory_id: Optional[str] = None
     topic: Optional[str] = "General"
     duration_minutes: Optional[int] = 30
     total_marks: Optional[float] = 50.0

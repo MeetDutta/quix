@@ -1,0 +1,231 @@
+'use client';
+
+import React, { useState, useRef } from 'react';
+import { X, FolderPlus, UploadCloud, FileText, CheckCircle, AlertCircle, Users } from 'lucide-react';
+import { createStudentDirectory, importStudentsCSV } from '@/lib/api/studentDirectories';
+import { StudentDirectory } from '@/types/studentDirectory';
+
+interface CreateDirectoryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onCreated: (newDir: StudentDirectory) => void;
+}
+
+export default function CreateDirectoryModal({
+  isOpen,
+  onClose,
+  onCreated
+}: CreateDirectoryModalProps) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  if (!isOpen) return null;
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.name.endsWith('.csv') || file.type === 'text/csv') {
+        setCsvFile(file);
+        setError(null);
+      } else {
+        setError('Please drop a valid .csv file');
+      }
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setCsvFile(e.target.files[0]);
+      setError(null);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError('Please provide a name for this Student Directory.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const token = localStorage.getItem('token') || '';
+
+    try {
+      // 1. Create the directory
+      const newDir = await createStudentDirectory(
+        {
+          name: name.trim(),
+          description: description.trim() || undefined
+        },
+        token
+      );
+
+      // 2. If CSV file attached, upload and populate students
+      if (csvFile) {
+        try {
+          const importResult = await importStudentsCSV(newDir.id, csvFile, token);
+          newDir.student_count = importResult.imported_count;
+        } catch (err: any) {
+          console.error('CSV import warning:', err);
+          // Directory is still created
+        }
+      }
+
+      onCreated(newDir);
+      setName('');
+      setDescription('');
+      setCsvFile(null);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to create student directory');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-lg overflow-hidden bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E0D8] dark:border-[#292524] bg-[#FAF8F5] dark:bg-[#141312]">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20">
+              <FolderPlus className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-[#242321] dark:text-[#F5F5F4]">Create Student Directory</h3>
+              <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">Add a cohort or class roster for assessments</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-white rounded-lg hover:bg-[#F0ECE4] dark:hover:bg-[#292524] transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="p-3 text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-[#57534E] dark:text-[#A8A29E] mb-1.5">
+              Directory Name <span className="text-[#C84B18]">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. CS 301 - Algorithm Design (Fall 2026)"
+              className="w-full px-4 py-2.5 bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl text-sm text-[#242321] dark:text-[#F5F5F4] placeholder-[#716D67] dark:placeholder-[#A8A29E] focus:outline-none focus:ring-1 focus:ring-[#C84B18] transition-all"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-[#57534E] dark:text-[#A8A29E] mb-1.5">
+              Description <span className="text-[#716D67] dark:text-[#A8A29E] font-normal">(Optional)</span>
+            </label>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="e.g. Section B morning laboratory batch"
+              className="w-full px-4 py-2.5 bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl text-sm text-[#242321] dark:text-[#F5F5F4] placeholder-[#716D67] dark:placeholder-[#A8A29E] focus:outline-none focus:ring-1 focus:ring-[#C84B18] transition-all"
+            />
+          </div>
+
+          {/* Optional CSV Upload Dropzone */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-[#57534E] dark:text-[#A8A29E] mb-1.5">
+              Initial Student Roster <span className="text-[#716D67] dark:text-[#A8A29E] font-normal">(Optional CSV)</span>
+            </label>
+            
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".csv"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+
+            {!csvFile ? (
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleFileDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-[#E5E0D8] dark:border-[#292524] hover:border-[#C84B18]/50 bg-[#F7F4EF] dark:bg-[#141312] hover:bg-[#F0ECE4] dark:hover:bg-[#1C1A17] rounded-xl p-5 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2"
+              >
+                <div className="p-2.5 rounded-full bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]">
+                  <UploadCloud className="w-5 h-5" />
+                </div>
+                <div className="text-xs text-[#242321] dark:text-[#F5F5F4]">
+                  <span className="text-[#C84B18] font-medium hover:underline">Click to upload CSV</span> or drag and drop
+                </div>
+                <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">Headers: name, email, roll_number, phone</p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-3.5 bg-[#C84B18]/10 border border-[#C84B18]/20 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <FileText className="w-5 h-5 text-[#C84B18]" />
+                  <div>
+                    <p className="text-xs font-medium text-[#242321] dark:text-[#F5F5F4] truncate max-w-[240px]">{csvFile.name}</p>
+                    <p className="text-[10px] text-[#716D67] dark:text-[#A8A29E]">{(csvFile.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCsvFile(null)}
+                  className="p-1 text-[#716D67] hover:text-red-500 rounded transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Footer Actions */}
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E5E0D8] dark:border-[#292524]">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-medium text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-white transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !name.trim()}
+              className="px-5 py-2.5 text-xs font-semibold text-white bg-[#C84B18] hover:bg-[#B33F12] rounded-xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 cursor-pointer"
+            >
+              {loading ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  <span>Creating Directory...</span>
+                </>
+              ) : (
+                <>
+                  <FolderPlus className="w-4 h-4" />
+                  <span>Create & Select Directory</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { BookOpen, Plus, RefreshCw, X } from "lucide-react";
+import { BookOpen, Plus, RefreshCw, X, ChevronDown, Layers } from "lucide-react";
 import { apiFetch } from "../../../../lib/api";
 import { useAuthStore } from "../../../../store/authStore";
 import { useToast } from "../../../../components/Toast";
@@ -11,6 +11,7 @@ export default function QuestionBankManager() {
   const { token } = useAuthStore();
   const { showToast } = useToast();
 
+  const [isExpanded, setIsExpanded] = useState(false);
   const [bankQuestions, setBankQuestions] = useState<any[]>([]);
   const [loadingBank, setLoadingBank] = useState(false);
   const [bankSearch, setBankSearch] = useState("");
@@ -24,7 +25,8 @@ export default function QuestionBankManager() {
   const [newBankOptions, setNewBankOptions] = useState(["", "", "", ""]);
   const [newBankCorrect, setNewBankCorrect] = useState("");
 
-  const fetchBankQuestions = async () => {
+  const fetchBankQuestions = async (isManual = false) => {
+    if (!token) return;
     setLoadingBank(true);
     try {
       let url = "/kb/questions/bank";
@@ -36,17 +38,29 @@ export default function QuestionBankManager() {
       const res = await apiFetch(url, { token });
       if (res.ok) {
         const data = await res.json();
-        setBankQuestions(data || []);
+        setBankQuestions(Array.isArray(data) ? data : []);
+        if (isManual) {
+          showToast("Question Bank refreshed", "success");
+        }
+      } else {
+        if (isManual) {
+          showToast("Could not refresh question bank", "error");
+        }
       }
-    } catch {
-      showToast("Failed to fetch Question Bank", "error");
+    } catch (err) {
+      console.warn("Question bank fetch notice:", err);
+      if (isManual) {
+        showToast("Network error while fetching question bank", "error");
+      }
     } finally {
       setLoadingBank(false);
     }
   };
 
   useEffect(() => {
-    if (token) fetchBankQuestions();
+    if (token) {
+      fetchBankQuestions();
+    }
   }, [token]);
 
   const handleCreateBankQuestion = async (e: React.FormEvent) => {
@@ -84,124 +98,152 @@ export default function QuestionBankManager() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-5 space-y-4 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl shadow-sm transition-all overflow-hidden">
+      
+      {/* ─── DROPDOWN ACCORDION HEADER ─── */}
+      <div 
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1C1A17]/50 transition-colors select-none"
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] rounded-xl border border-[#C84B18]/20 shrink-0">
+            <BookOpen className="h-5 w-5" />
+          </div>
           <div>
-            <h2 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-[#C84B18]" />
-              <span>Question Bank Studio</span>
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">
+                Question Bank Studio
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]">
+                {bankQuestions.length} Questions
+              </span>
+            </div>
             <p className="text-xs text-[#716D67] dark:text-[#A8A29E] mt-0.5">
-              Browse, filter, and manage reusable questions across subjects and topics.
+              Browse, filter, and manage reusable questions across curriculum topics.
             </p>
           </div>
+        </div>
 
+        <div className="flex items-center gap-2 self-end sm:self-auto">
           <button
-            onClick={() => setShowAddBankModal(true)}
-            className="btn-primary flex items-center gap-2 text-xs py-2 px-4 shrink-0"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowAddBankModal(true);
+            }}
+            className="btn-primary flex items-center gap-1.5 text-xs py-2 px-3.5 shrink-0 shadow-xs cursor-pointer"
           >
             <Plus className="h-4 w-4" />
-            <span>Add Question to Bank</span>
+            <span>Add Question</span>
           </button>
-        </div>
 
-        {/* Filter Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-          <input
-            type="text"
-            value={bankSearch}
-            onChange={(e) => setBankSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && fetchBankQuestions()}
-            placeholder="Search question text..."
-            className="w-full bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-lg px-3 py-2 text-xs text-[#242321] dark:text-[#F5F5F4]"
-          />
-
-          <select
-            value={bankDifficulty}
-            onChange={(e) => {
-              setBankDifficulty(e.target.value);
-              fetchBankQuestions();
-            }}
-            className="w-full bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-lg px-3 py-2 text-xs text-[#242321] dark:text-[#F5F5F4]"
-          >
-            <option value="">All Difficulties</option>
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-
-          <button
-            onClick={fetchBankQuestions}
-            className="px-4 py-2 bg-[#E5E0D8] dark:bg-[#292524] hover:bg-[#D8D2C7] text-[#242321] dark:text-[#F5F5F4] rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loadingBank ? "animate-spin" : ""}`} />
-            <span>Filter Question Bank</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Question List Cards */}
-      <div className="space-y-3">
-        {bankQuestions.length === 0 ? (
-          <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-8 text-center text-xs text-[#716D67] dark:text-[#A8A29E]">
-            No questions found in bank. Add questions or save exam-generated questions.
+          <div className={`p-2 rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E] transition-transform duration-200 ${isExpanded ? "rotate-180 bg-[#F0ECE4]/60 dark:bg-[#292524]" : ""}`}>
+            <ChevronDown className="h-4 w-4" />
           </div>
-        ) : (
-          bankQuestions.map((q, idx) => {
-            let optionsList: string[] = [];
-            try {
-              optionsList = q.options_json ? JSON.parse(q.options_json) : [];
-            } catch {}
-
-            return (
-              <div
-                key={q.id || idx}
-                className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 space-y-3 shadow-xs"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap text-[10px] font-semibold uppercase tracking-wider">
-                      <span className="px-2 py-0.5 rounded bg-[#C84B18]/10 text-[#C84B18]">
-                        {q.subject_name || "General"}
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
-                        {q.difficulty || "medium"}
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400">
-                        {q.question_type}
-                      </span>
-                      {q.topic && <span className="text-[#716D67] font-normal">Topic: {q.topic}</span>}
-                    </div>
-                    <h3 className="text-sm font-semibold text-[#242321] dark:text-[#F5F5F4] pt-1">
-                      <MathText text={`${idx + 1}. ${q.question_text}`} />
-                    </h3>
-                  </div>
-                </div>
-
-                {/* Options list if MCQ */}
-                {optionsList.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                    {optionsList.map((opt, oIdx) => (
-                      <div
-                        key={oIdx}
-                        className={`px-3 py-1.5 rounded-lg text-xs border ${
-                          opt === q.correct_answer || String.fromCharCode(65 + oIdx) === q.correct_answer
-                            ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-semibold"
-                            : "bg-[#F7F4EF] dark:bg-[#141312] border-[#E5E0D8] dark:border-[#292524] text-[#242321] dark:text-[#F5F5F4]"
-                        }`}
-                      >
-                        <span className="font-bold mr-2">{String.fromCharCode(65 + oIdx)}.</span>
-                        <MathText text={opt} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
+        </div>
       </div>
+
+      {/* ─── DROPDOWN BODY CONTENT ─── */}
+      {isExpanded && (
+        <div className="p-5 pt-0 space-y-5 border-t border-[#E5E0D8] dark:border-[#292524] animate-in fade-in slide-in-from-top-2 duration-200">
+          
+          {/* Filter Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
+            <input
+              type="text"
+              value={bankSearch}
+              onChange={(e) => setBankSearch(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && fetchBankQuestions()}
+              placeholder="Search question text..."
+              className="w-full bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl px-3 py-2 text-xs text-[#242321] dark:text-[#F5F5F4] focus:outline-none focus:ring-1 focus:ring-[#C84B18]"
+            />
+
+            <select
+              value={bankDifficulty}
+              onChange={(e) => {
+                setBankDifficulty(e.target.value);
+                fetchBankQuestions();
+              }}
+              className="w-full bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl px-3 py-2 text-xs text-[#242321] dark:text-[#F5F5F4] focus:outline-none focus:ring-1 focus:ring-[#C84B18]"
+            >
+              <option value="">All Difficulties</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+
+            <button
+              onClick={() => fetchBankQuestions(true)}
+              className="px-4 py-2 bg-[#E5E0D8] dark:bg-[#292524] hover:bg-[#D8D2C7] text-[#242321] dark:text-[#F5F5F4] rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingBank ? "animate-spin" : ""}`} />
+              <span>Filter Library</span>
+            </button>
+          </div>
+
+          {/* Question List Cards */}
+          <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+            {bankQuestions.length === 0 ? (
+              <div className="bg-[#F7F4EF]/50 dark:bg-[#141312]/50 border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-8 text-center text-xs text-[#716D67] dark:text-[#A8A29E]">
+                No questions found in bank matching your filters. Add questions using the button above.
+              </div>
+            ) : (
+              bankQuestions.map((q, idx) => {
+                let optionsList: string[] = [];
+                try {
+                  optionsList = q.options_json ? JSON.parse(q.options_json) : [];
+                } catch {}
+
+                return (
+                  <div
+                    key={q.id || idx}
+                    className="bg-[#FBF9F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 space-y-3 shadow-2xs"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap text-[10px] font-semibold uppercase tracking-wider">
+                          <span className="px-2 py-0.5 rounded bg-[#C84B18]/10 text-[#C84B18]">
+                            {q.subject_name || "General"}
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+                            {q.difficulty || "medium"}
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400">
+                            {q.question_type}
+                          </span>
+                          {q.topic && <span className="text-[#716D67] font-normal">Topic: {q.topic}</span>}
+                        </div>
+                        <h3 className="text-sm font-semibold text-[#242321] dark:text-[#F5F5F4] pt-1">
+                          <MathText text={`${idx + 1}. ${q.question_text}`} />
+                        </h3>
+                      </div>
+                    </div>
+
+                    {/* Options list if MCQ */}
+                    {optionsList.length > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        {optionsList.map((opt, oIdx) => (
+                          <div
+                            key={oIdx}
+                            className={`px-3 py-1.5 rounded-lg text-xs border ${
+                              opt === q.correct_answer || String.fromCharCode(65 + oIdx) === q.correct_answer
+                                ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-semibold"
+                                : "bg-white dark:bg-[#1C1A17] border-[#E5E0D8] dark:border-[#292524] text-[#242321] dark:text-[#F5F5F4]"
+                            }`}
+                          >
+                            <span className="font-bold mr-2">{String.fromCharCode(65 + oIdx)}.</span>
+                            <MathText text={opt} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Add Bank Question Modal */}
       {showAddBankModal && (

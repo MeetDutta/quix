@@ -1,4 +1,4 @@
-const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "https://eduquizx.onrender.com";
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 // Clean trailing slashes and redundant /api/v1 suffixes
 const baseHost = rawApiUrl.replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "");
 
@@ -30,6 +30,12 @@ export async function apiFetch(
   const { token, headers, ...rest } = options;
   const h: Record<string, string> = { ...(headers as Record<string, string>) };
   if (token) h["Authorization"] = `Bearer ${token}`;
+  if (typeof window !== "undefined") {
+    const wsId = localStorage.getItem("workspaceId");
+    if (wsId && !h["X-Workspace-Id"]) {
+      h["X-Workspace-Id"] = wsId;
+    }
+  }
   if (!h["Content-Type"] && !(rest.body instanceof FormData)) {
     h["Content-Type"] = "application/json";
   }

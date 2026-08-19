@@ -8,6 +8,9 @@ class Exam(TimeStampedModel):
     
     name = Column(String(255), nullable=False)
     subject_id = Column(String(36), ForeignKey("subjects.id"), nullable=False)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id"), index=True, nullable=True)
+    created_by = Column(String(36), ForeignKey("users.id"), nullable=True)
+    student_directory_id = Column(String(36), ForeignKey("student_directories.id"), nullable=True)
     subject_offering_id = Column(String(36), ForeignKey("subject_offerings.id"), nullable=True)
     assessment_group_id = Column(String(36), ForeignKey("assessment_groups.id"), nullable=True)
     duration_minutes = Column(Integer, nullable=False)
@@ -25,6 +28,10 @@ class Exam(TimeStampedModel):
     settings_json = Column(Text, nullable=True)  # JSON for fullscreen, shuffle, calculators, etc.
     
     subject = relationship("Subject", back_populates="exams")
+    workspace = relationship("Workspace", back_populates="exams")
+    creator = relationship("User", foreign_keys=[created_by])
+    student_directory = relationship("StudentDirectory", back_populates="exams")
+    candidates = relationship("ExamCandidate", back_populates="exam", cascade="all, delete-orphan")
     subject_offering = relationship("SubjectOffering")
     assessment_group = relationship("AssessmentGroup")
     targets = relationship("ExamTarget", back_populates="exam", cascade="all, delete-orphan")

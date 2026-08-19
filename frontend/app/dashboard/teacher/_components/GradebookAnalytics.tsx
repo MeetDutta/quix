@@ -78,6 +78,12 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
     }
   }, [exams]);
 
+  const formatNum = (val: any, decimals = 1) => {
+    if (val === undefined || val === null || isNaN(Number(val))) return "0";
+    const num = Number(val);
+    return Number.isInteger(num) ? String(num) : Number(num.toFixed(decimals)).toString();
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Bar: Quiz Selector & 1-Click CSV Export */}
@@ -149,7 +155,7 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
                 {reportAnalytics.attended_count}{" "}
                 <span className="text-xs text-[#716D67] font-normal">/ {reportAnalytics.total_enrolled}</span>
               </div>
-              <div className="text-[10px] text-[#716D67] mt-0.5">{reportAnalytics.attendance_rate}% Participation</div>
+              <div className="text-[10px] text-[#716D67] mt-0.5">{formatNum(reportAnalytics.attendance_rate)}% Participation</div>
             </div>
 
             <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 shadow-xs">
@@ -157,10 +163,10 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
                 Class Average
               </div>
               <div className="text-2xl font-bold text-[#C84B18] dark:text-[#EA580C] mt-1">
-                {reportAnalytics.average_score}{" "}
-                <span className="text-xs text-[#716D67] font-normal">/ {reportAnalytics.total_marks}</span>
+                {formatNum(reportAnalytics.average_score)}{" "}
+                <span className="text-xs text-[#716D67] font-normal">/ {formatNum(reportAnalytics.total_marks)}</span>
               </div>
-              <div className="text-[10px] text-[#716D67] mt-0.5">{reportAnalytics.average_percentage}% Average</div>
+              <div className="text-[10px] text-[#716D67] mt-0.5">{formatNum(reportAnalytics.average_percentage)}% Average</div>
             </div>
 
             <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 shadow-xs">
@@ -168,7 +174,7 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
                 Pass Rate
               </div>
               <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-                {reportAnalytics.pass_rate}%
+                {formatNum(reportAnalytics.pass_rate)}%
               </div>
               <div className="text-[10px] text-[#716D67] mt-0.5">
                 {reportAnalytics.pass_count} Passed · {reportAnalytics.fail_count} Failed
@@ -179,8 +185,8 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
               <div className="text-[11px] font-medium text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider">
                 Highest Score
               </div>
-              <div className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">
-                {reportAnalytics.highest_score}
+              <div className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1 truncate">
+                {formatNum(reportAnalytics.highest_score)}
               </div>
               <div className="text-[10px] text-[#716D67] mt-0.5">Top candidate score</div>
             </div>
@@ -189,10 +195,10 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
               <div className="text-[11px] font-medium text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider">
                 Lowest Score
               </div>
-              <div className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
-                {reportAnalytics.lowest_score}
+              <div className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1 truncate">
+                {formatNum(reportAnalytics.lowest_score)}
               </div>
-              <div className="text-[10px] text-[#716D67] mt-0.5">Passing: {reportAnalytics.passing_marks} Marks</div>
+              <div className="text-[10px] text-[#716D67] mt-0.5">Passing: {formatNum(reportAnalytics.passing_marks)} Marks</div>
             </div>
           </div>
 
@@ -346,9 +352,9 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
                         </td>
                         <td className="py-3 px-3 font-mono text-[#716D67]">{sub.roll_number || "N/A"}</td>
                         <td className="py-3 px-3 font-bold text-[#242321] dark:text-[#F5F5F4]">
-                          {sub.score} / {sub.max_score}
+                          {formatNum(sub.score)} / {formatNum(sub.max_score)}
                         </td>
-                        <td className="py-3 px-3 font-bold text-[#C84B18] dark:text-[#EA580C]">{sub.percentage}%</td>
+                        <td className="py-3 px-3 font-bold text-[#C84B18] dark:text-[#EA580C]">{formatNum(sub.percentage)}%</td>
                         <td className="py-3 px-3">
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-bold ${

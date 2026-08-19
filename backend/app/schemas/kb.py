@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -11,8 +11,7 @@ class DocumentResponse(BaseModel):
     created_at: datetime
     subject_id: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class SearchQuery(BaseModel):
     query: str
@@ -56,8 +55,8 @@ class QuestionResponse(BaseModel):
     version: int
     confidence_score: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class AIQuestionGenConfig(BaseModel):
     subject_id: str

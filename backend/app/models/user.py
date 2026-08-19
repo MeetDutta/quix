@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, ForeignKey, Boolean
+from sqlalchemy import Column, String, ForeignKey, Boolean, DateTime
 from sqlalchemy.orm import relationship
 from app.models.base import TimeStampedModel
 
@@ -15,12 +15,17 @@ class User(TimeStampedModel):
     verification_token = Column(String(255), nullable=True)
     auth_provider = Column(String(50), default="local") # "local", "google"
     google_id = Column(String(255), nullable=True)
+    google_subject = Column(String(255), unique=True, index=True, nullable=True)
+    avatar_url = Column(String(500), nullable=True)
+    last_login_at = Column(DateTime, nullable=True)
     reset_token = Column(String(255), nullable=True)
     
     institution = relationship("Institution", back_populates="users")
     student_profile = relationship("Student", back_populates="user", uselist=False, cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="uploader")
     audit_logs = relationship("AuditLog", back_populates="user")
+    owned_workspaces = relationship("Workspace", back_populates="owner", foreign_keys="Workspace.owner_id")
+    workspace_memberships = relationship("WorkspaceMember", back_populates="user", cascade="all, delete-orphan")
 
 class Student(TimeStampedModel):
     __tablename__ = "students"
