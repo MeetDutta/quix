@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from jose import jwt
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, Student
 from app.models.institution import Institution
 from app.schemas.auth import (
     UserLogin, UserCreate, Token, PasswordChange, UserProfile,
@@ -27,6 +27,22 @@ from app.services.email_service import email_service
 
 from app.models.workspace import Workspace, WorkspaceMember
 from app.services.workspace_service import bootstrap_personal_workspace
+
+def ensure_student_profile(user: User, db: Session) -> Student:
+    student = db.query(Student).filter(Student.user_id == user.id, Student.is_deleted == False).first()
+    if not student:
+        prefix = "".join(c for c in user.email.split("@")[0].upper() if c.isalnum())[:8] or "STU"
+        roll = f"STU-{prefix}-{secrets.token_hex(2).upper()}"
+        student = Student(
+            user_id=user.id,
+            institution_id=user.institution_id,
+            roll_number=roll,
+            status="active"
+        )
+        db.add(student)
+        db.commit()
+        db.refresh(student)
+    return student
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -65,6 +81,8 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         ws = bootstrap_personal_workspace(user, db)
         ws_id = ws.id
         ws_name = ws.name
+    elif assigned_role == "student":
+        ensure_student_profile(user, db)
 
     access = create_access_token(user.id)
     refresh = create_refresh_token(user.id)
@@ -260,8 +278,15 @@ def google_auth(
         db.commit()
         db.refresh(user)
 
-    # Resolve personal workspace
-    ws = bootstrap_personal_workspace(user, db)
+    # Resolve workspace or student profile
+    ws_id = None
+    ws_name = None
+    if user.role in ["teacher", "inst_admin", "super_admin"]:
+        ws = bootstrap_personal_workspace(user, db)
+        ws_id = ws.id
+        ws_name = ws.name
+    elif user.role == "student":
+        ensure_student_profile(user, db)
     
     access = create_access_token(user.id)
     refresh = create_refresh_token(user.id)
@@ -272,8 +297,8 @@ def google_auth(
         "token_type": "bearer",
         "role": user.role,
         "full_name": user.full_name,
-        "workspace_id": ws.id,
-        "workspace_name": ws.name
+        "workspace_id": ws_id,
+        "workspace_name": ws_name
     }
 
 @router.post("/refresh", response_model=Token)

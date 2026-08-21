@@ -52,6 +52,9 @@ export default function LoginPage() {
   const [examCodeInput, setExamCodeInput] = useState("");
   const [showExamCodeGateway, setShowExamCodeGateway] = useState(false);
 
+  // Target destination query parameter
+  const [targetDestination, setTargetDestination] = useState<string | null>(null);
+
   // Forgot Password Modal State
   const [forgotModalOpen, setForgotModalOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
@@ -59,12 +62,32 @@ export default function LoginPage() {
   const [forgotMessage, setForgotMessage] = useState<string | null>(null);
   const [forgotError, setForgotError] = useState<string | null>(null);
 
+  const resolveDestination = (userRole: string) => {
+    if (targetDestination) {
+      if (targetDestination === "teacher_dashboard") return "/dashboard/teacher";
+      if (targetDestination === "student_dashboard") return "/dashboard/student";
+      if (targetDestination.startsWith("/")) return targetDestination;
+    }
+    if (userRole === "student") return "/dashboard/student";
+    return "/dashboard/teacher";
+  };
+
   useEffect(() => {
-    // Check URL query parameters for initial mode
+    // Check URL query parameters for initial mode, role, and target
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.get("mode") === "signup" || window.location.pathname === "/register") {
         setAuthMode("signup");
+      }
+      const roleParam = params.get("role");
+      if (roleParam === "student") {
+        setRegRole("student");
+      } else if (roleParam === "teacher") {
+        setRegRole("teacher");
+      }
+      const targetParam = params.get("target");
+      if (targetParam) {
+        setTargetDestination(targetParam);
       }
     }
 
@@ -104,7 +127,7 @@ export default function LoginPage() {
       }
 
       setAuth(data.access_token, data.role, data.full_name);
-      router.push(data.role === "teacher" ? "/dashboard/teacher" : "/portal");
+      router.push(resolveDestination(data.role));
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -190,7 +213,7 @@ export default function LoginPage() {
       }
 
       setAuth(data.access_token, data.role, data.full_name);
-      router.push(data.role === "teacher" ? "/dashboard/teacher" : "/portal");
+      router.push(resolveDestination(data.role));
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -242,7 +265,7 @@ export default function LoginPage() {
       }
 
       setAuth(data.access_token, data.role, data.full_name);
-      router.push(data.role === "teacher" ? "/dashboard/teacher" : "/portal");
+      router.push(resolveDestination(data.role));
     } catch (err: any) {
       setError(err.message);
     } finally {

@@ -371,16 +371,37 @@ def get_student_assigned_exams(
     """
     now = datetime.utcnow()
     
-    # Fetch all published exams
-    exams = db.query(Exam).filter(
-        Exam.is_published == True,
-        Exam.is_deleted == False
-    ).order_by(Exam.start_time.desc()).all()
+    is_teacher = current_user.role in ["teacher", "inst_admin", "super_admin"]
+    
+    # Fetch all published exams (or teacher's exams if teacher previewing)
+    if is_teacher:
+        exams = db.query(Exam).filter(
+            Exam.is_deleted == False
+        ).order_by(Exam.created_at.desc()).all()
+    else:
+        exams = db.query(Exam).filter(
+            Exam.is_published == True,
+            Exam.is_deleted == False
+        ).order_by(Exam.start_time.desc()).all()
     
     student = db.query(Student).filter(
         (Student.user_id == current_user.id) |
         (Student.user.has(User.email == current_user.email))
     ).first()
+    
+    if not student and current_user.role == "student":
+        import secrets
+        prefix = "".join(c for c in current_user.email.split("@")[0].upper() if c.isalnum())[:8] or "STU"
+        roll = f"STU-{prefix}-{secrets.token_hex(2).upper()}"
+        student = Student(
+            user_id=current_user.id,
+            institution_id=current_user.institution_id,
+            roll_number=roll,
+            status="active"
+        )
+        db.add(student)
+        db.commit()
+        db.refresh(student)
     
     results = []
     for exam in exams:
@@ -403,6 +424,29 @@ def get_student_assigned_exams(
                 ExamCredential.exam_id == exam.id,
                 ExamCredential.student_id == student.id
             ).first()
+            if not cred and exam.is_published:
+                import secrets
+                clean_roll = "".join(c for c in (student.roll_number or current_user.email.split('@')[0]) if c.isalnum()).upper()[:16]
+                cand_username = f"{clean_roll}-{exam.exam_code}"[:40]
+                if db.query(ExamCredential).filter(ExamCredential.username == cand_username).first():
+                    cand_username = f"{cand_username}-{secrets.token_hex(2).upper()}"
+                cred = ExamCredential(
+                    exam_id=exam.id,
+                    student_id=student.id,
+                    username=cand_username,
+                    password=str(secrets.randbelow(900000) + 100000),
+                    expires_at=exam.end_time or (datetime.utcnow() + timedelta(days=7))
+                )
+                db.add(cred)
+                try:
+                    db.commit()
+                    db.refresh(cred)
+                except Exception:
+                    db.rollback()
+                    cred = db.query(ExamCredential).filter(
+                        ExamCredential.exam_id == exam.id,
+                        ExamCredential.student_id == student.id
+                    ).first()
             
         submission = None
         if cred:

@@ -63,10 +63,10 @@ export default function GuidePage() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.push("/login")}
+            onClick={() => router.push("/")}
             className="btn-primary flex items-center gap-2 text-xs py-2 px-4 shadow-sm cursor-pointer"
           >
-            <span>Proceed to Login Portal</span>
+            <span>Select Workspace Mode</span>
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -90,10 +90,10 @@ export default function GuidePage() {
         {/* Action CTAs */}
         <div className="pt-4 flex flex-wrap items-center justify-center gap-3">
           <button
-            onClick={() => router.push("/login")}
+            onClick={() => router.push("/")}
             className="px-6 py-3 bg-[#C84B18] hover:bg-[#B33E0F] dark:bg-[#EA580C] dark:hover:bg-[#C2410C] text-white font-bold rounded-xl text-xs transition-all shadow-md shadow-[#C84B18]/20 flex items-center gap-2 cursor-pointer"
           >
-            <span>Go to Login Window</span>
+            <span>Select Workspace Mode</span>
             <ArrowRight className="h-4 w-4" />
           </button>
 

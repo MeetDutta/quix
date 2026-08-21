@@ -7,7 +7,8 @@ import { apiFetch, API_V1, getWebSocketUrl } from "../../../lib/api";
 import { 
   Plus, BookOpen, Calendar, ChevronRight, ChevronDown, Check,
   Users, BarChart3, GraduationCap, Clock, 
-  Sparkles, ArrowRight, ArrowLeft, Radio, FileSpreadsheet
+  Sparkles, ArrowRight, ArrowLeft, Radio, FileSpreadsheet,
+  UploadCloud, FileUp, FileText, Loader2, CheckCircle2, X
 } from "lucide-react";
 
 import StudentDirectoryManager from "./_components/StudentDirectoryManager";
@@ -18,6 +19,7 @@ import LiveAssessmentsTable from "./_components/LiveAssessmentsTable";
 import PaperStudioModal from "./_components/PaperStudioModal";
 import LiveProctoringModal from "./_components/LiveProctoringModal";
 import GradebookAnalytics from "./_components/GradebookAnalytics";
+import UploadKBModal from "./_components/UploadKBModal";
 import { fetchStudentDirectories } from "@/lib/api/studentDirectories";
 import { StudentDirectory } from "@/types/studentDirectory";
 
@@ -62,6 +64,15 @@ export default function TeacherDashboard() {
   const [exams, setExams] = useState<any[]>([]);
   const [summaries, setSummaries] = useState<any | null>(null);
   const [kbSubjects, setKbSubjects] = useState<any[]>([]);
+  
+  // Step 1 Direct KB Upload state
+  const [step1SourceMode, setStep1SourceMode] = useState<"select" | "upload">("select");
+  const [step1UploadFile, setStep1UploadFile] = useState<File | null>(null);
+  const [step1UploadSubject, setStep1UploadSubject] = useState("");
+  const [isStep1Uploading, setIsStep1Uploading] = useState(false);
+  const [step1UploadSuccess, setStep1UploadSuccess] = useState<{ fileName: string; subjectId: string } | null>(null);
+  const [isStep1KbModalOpen, setIsStep1KbModalOpen] = useState(false);
+  const [step1IsDragging, setStep1IsDragging] = useState(false);
   
   // Modal states
   const [previewExam, setPreviewExam] = useState<any | null>(null);
@@ -324,6 +335,79 @@ export default function TeacherDashboard() {
       showToast(err?.message || "Network error while generating assessment", "error");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const validateAndSetStep1File = (file: File) => {
+    const maxSizeBytes = 25 * 1024 * 1024; // 25 MB
+    if (file.size > maxSizeBytes) {
+      showToast("File size exceeds 25MB limit. Please choose a smaller document.", "error");
+      return;
+    }
+    setStep1UploadFile(file);
+
+    // Auto-suggest subject name if empty
+    if (!step1UploadSubject) {
+      const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+      setStep1UploadSubject(cleanName.slice(0, 30));
+    }
+  };
+
+  const handleStep1DirectUpload = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!step1UploadFile) {
+      showToast("Please select or drop a document to upload.", "error");
+      return;
+    }
+    if (!step1UploadSubject.trim()) {
+      showToast("Please specify a subject domain name for this document.", "error");
+      return;
+    }
+
+    setIsStep1Uploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", step1UploadFile);
+      formData.append("subject_id", step1UploadSubject.trim());
+
+      const res = await apiFetch("/kb/upload", {
+        token,
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const sub = step1UploadSubject.trim();
+        const fName = step1UploadFile.name;
+        showToast(`Document "${fName}" indexed into "${sub}"!`, "success");
+        setStep1UploadSuccess({ fileName: fName, subjectId: sub });
+        setExamSubject(sub);
+
+        // Auto-fill exam title if empty
+        if (!examName) {
+          const cleanName = fName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+          setExamName(`${cleanName} Assessment`);
+        }
+
+        // Auto-fill topic if default
+        if (!examTopic || examTopic === "General") {
+          setExamTopic(sub);
+        }
+
+        setStep1UploadFile(null);
+        setStep1UploadSubject("");
+        setStep1SourceMode("select");
+
+        // Refresh subjects and documents
+        fetchData();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        showToast(errData.detail || "Upload failed. Please check the document format.", "error");
+      }
+    } catch {
+      showToast("Upload network error. Please verify backend connection.", "error");
+    } finally {
+      setIsStep1Uploading(false);
     }
   };
 
@@ -613,36 +697,226 @@ export default function TeacherDashboard() {
               {/* Step 1 Body */}
               {createStep === 1 && (
                 <div className="p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-4 max-w-xl animate-fadeIn">
-                  <div className="space-y-1.5 pt-2">
-                    <label className={labelCls}>Knowledge Source (Subject)</label>
-                    {kbSubjects.length > 0 ? (
-                      <select
-                        required
-                        value={examSubject}
-                        onChange={(e) => setExamSubject(e.target.value)}
-                        className={inputCls}
+                  
+                  {/* Knowledge Source Selection / Upload Dual-Mode Toggle */}
+                  <div className="space-y-2 pt-2">
+                    <div className="flex items-center justify-between">
+                      <label className={labelCls}>Knowledge Source</label>
+                      <button
+                        type="button"
+                        onClick={() => setIsStep1KbModalOpen(true)}
+                        className="text-xs font-bold text-[#C84B18] dark:text-[#EA580C] hover:underline flex items-center gap-1 cursor-pointer"
                       >
-                        <option value="">Select Knowledge Source...</option>
-                        {kbSubjects.map((s) => (
-                          <option key={s.subject_id} value={s.subject_id}>
-                            {s.name} ({s.document_count} document{s.document_count > 1 ? "s" : ""})
-                          </option>
-                        ))}
-                        <option value="general_101">General Knowledge Base</option>
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        required
-                        value={examSubject}
-                        onChange={(e) => setExamSubject(e.target.value)}
-                        placeholder="e.g. general_101 or ai_unit_1"
-                        className={inputCls}
-                      />
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>+ Upload New KB</span>
+                      </button>
+                    </div>
+
+                    {/* Mode Toggle Switcher */}
+                    <div className="flex p-1 bg-[#F0ECE4]/60 dark:bg-[#1D1B19] rounded-xl border border-[#E5E0D8] dark:border-[#292524]">
+                      <button
+                        type="button"
+                        onClick={() => setStep1SourceMode("select")}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          step1SourceMode === "select"
+                            ? "bg-white dark:bg-[#292524] text-[#242321] dark:text-[#F5F5F4] shadow-xs"
+                            : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-white"
+                        }`}
+                      >
+                        <BookOpen className="h-3.5 w-3.5" />
+                        <span>Existing Knowledge Base</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStep1SourceMode("upload")}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          step1SourceMode === "upload"
+                            ? "bg-[#C84B18] dark:bg-[#EA580C] text-white shadow-xs"
+                            : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-white"
+                        }`}
+                      >
+                        <UploadCloud className="h-3.5 w-3.5" />
+                        <span>Upload New Document Now</span>
+                      </button>
+                    </div>
+
+                    {/* Notification Chip if document was just uploaded */}
+                    {step1UploadSuccess && (
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 text-xs">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                          <span>
+                            Indexed <b>&ldquo;{step1UploadSuccess.fileName}&rdquo;</b> &rarr; Selected <b>&ldquo;{step1UploadSuccess.subjectId}&rdquo;</b>
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setStep1UploadSuccess(null)}
+                          className="text-emerald-600 hover:text-emerald-800 p-0.5"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     )}
-                    <p className="text-[11px] text-[#716D67]">
-                      Questions will be strictly generated using documents in this knowledge source.
-                    </p>
+
+                    {/* MODE A: Select from Existing Knowledge Base */}
+                    {step1SourceMode === "select" ? (
+                      <div className="space-y-1.5">
+                        {kbSubjects.length > 0 ? (
+                          <select
+                            required
+                            value={examSubject}
+                            onChange={(e) => {
+                              setExamSubject(e.target.value);
+                              if (step1UploadSuccess && e.target.value !== step1UploadSuccess.subjectId) {
+                                setStep1UploadSuccess(null);
+                              }
+                            }}
+                            className={inputCls}
+                          >
+                            <option value="">Select Knowledge Source...</option>
+                            {kbSubjects.map((s) => (
+                              <option key={s.subject_id} value={s.subject_id}>
+                                {s.name} ({s.document_count} document{s.document_count > 1 ? "s" : ""})
+                              </option>
+                            ))}
+                            <option value="general_101">General Knowledge Base</option>
+                          </select>
+                        ) : (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              required
+                              value={examSubject}
+                              onChange={(e) => setExamSubject(e.target.value)}
+                              placeholder="e.g. general_101 or ai_unit_1"
+                              className={inputCls}
+                            />
+                            <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                              No existing KB documents found. Switch to &ldquo;Upload New Document Now&rdquo; above to add your lecture notes or textbooks!
+                            </p>
+                          </div>
+                        )}
+                        <p className="text-[11px] text-[#716D67]">
+                          Questions will be strictly generated using documents in this knowledge source.
+                        </p>
+                      </div>
+                    ) : (
+                      /* MODE B: Direct Inline KB Document Upload */
+                      <div className="space-y-3 p-3.5 rounded-xl bg-[#FBF9F5] dark:bg-[#1D1B19] border border-[#E5E0D8] dark:border-[#292524]">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase tracking-wider">
+                            Subject / Knowledge Domain <span className="text-[#C84B18]">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={step1UploadSubject}
+                            onChange={(e) => setStep1UploadSubject(e.target.value)}
+                            placeholder="e.g. Machine_Learning_Unit_1"
+                            list="existing-kb-subjects-list"
+                            className={inputCls}
+                          />
+                          {kbSubjects.length > 0 && (
+                            <datalist id="existing-kb-subjects-list">
+                              {kbSubjects.map((s) => (
+                                <option key={s.subject_id} value={s.subject_id} />
+                              ))}
+                            </datalist>
+                          )}
+                        </div>
+
+                        {/* Dropzone */}
+                        <div
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setStep1IsDragging(true);
+                          }}
+                          onDragLeave={() => setStep1IsDragging(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setStep1IsDragging(false);
+                            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                              validateAndSetStep1File(e.dataTransfer.files[0]);
+                            }
+                          }}
+                          className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
+                            step1IsDragging
+                              ? "border-[#C84B18] bg-[#C84B18]/5"
+                              : step1UploadFile
+                              ? "border-emerald-500/50 bg-emerald-50/20 dark:bg-emerald-950/10"
+                              : "border-[#E5E0D8] dark:border-[#292524] hover:border-[#C84B18]/60 bg-white dark:bg-[#171615]"
+                          }`}
+                          onClick={() => {
+                            const input = document.getElementById("step1-file-input");
+                            if (input) input.click();
+                          }}
+                        >
+                          <input
+                            id="step1-file-input"
+                            type="file"
+                            accept=".pdf,.txt,.docx,.pptx,.md"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                validateAndSetStep1File(e.target.files[0]);
+                              }
+                            }}
+                            className="hidden"
+                          />
+
+                          {step1UploadFile ? (
+                            <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-[#171615] border border-emerald-500/30">
+                              <div className="flex items-center gap-2.5 text-left truncate">
+                                <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                <div className="truncate">
+                                  <div className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] truncate">{step1UploadFile.name}</div>
+                                  <div className="text-[10px] text-[#716D67]">{(step1UploadFile.size / 1024).toFixed(1)} KB</div>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setStep1UploadFile(null);
+                                }}
+                                className="p-1 text-rose-500 hover:text-rose-700 rounded"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-1 py-1">
+                              <UploadCloud className="h-6 w-6 text-[#C84B18] mx-auto" />
+                              <div className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4]">
+                                Drop document file or click to browse
+                              </div>
+                              <div className="text-[10px] text-[#716D67] dark:text-[#A8A29E]">
+                                PDF, DOCX, TXT, PPTX (Max 25MB)
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Upload & Index Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleStep1DirectUpload()}
+                          disabled={isStep1Uploading || !step1UploadFile || !step1UploadSubject.trim()}
+                          className="w-full py-2 px-4 bg-[#C84B18] hover:bg-[#B33E0F] dark:bg-[#EA580C] text-white font-bold rounded-xl text-xs transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                        >
+                          {isStep1Uploading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Indexing into Vector DB...</span>
+                            </>
+                          ) : (
+                            <>
+                              <UploadCloud className="h-4 w-4" />
+                              <span>Upload & Use as Knowledge Source</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -1199,6 +1473,27 @@ export default function TeacherDashboard() {
           setStudentDirectories((prev) => [newDir, ...prev]);
           setSelectedDirectoryId(newDir.id);
           showToast(`Student Directory "${newDir.name}" created and selected!`, "success");
+        }}
+      />
+
+      {/* Step 1 Quick Upload KB Modal */}
+      <UploadKBModal
+        isOpen={isStep1KbModalOpen}
+        onClose={() => setIsStep1KbModalOpen(false)}
+        token={token}
+        availableSubjects={kbSubjects}
+        onUploaded={(subId, fName) => {
+          setStep1UploadSuccess({ fileName: fName, subjectId: subId });
+          setExamSubject(subId);
+          if (!examName) {
+            const cleanName = fName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+            setExamName(`${cleanName} Assessment`);
+          }
+          if (!examTopic || examTopic === "General") {
+            setExamTopic(subId);
+          }
+          setStep1SourceMode("select");
+          fetchData();
         }}
       />
 

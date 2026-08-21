@@ -594,12 +594,12 @@ export default function DashboardLayout({
                 {pathname === "/dashboard/teacher" ? "Quiz Creator Studio" : "Student Portal"}
               </span>
               <a 
-                href="/portal" 
+                href="/" 
                 className="ml-2 hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] hover:bg-[#C84B18]/20 text-xs font-semibold transition-all border border-[#C84B18]/20"
-                title="Switch Workspace"
+                title="Switch Workspace Mode"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
-                <span>Switch Workspace</span>
+                <span>Switch Mode</span>
               </a>
             </div>
           </div>

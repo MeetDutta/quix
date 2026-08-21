@@ -8,16 +8,19 @@ import {
   Trophy, Target, BarChart3, XCircle, ChevronDown, ChevronUp, Medal,
   RefreshCw, CheckCircle2, AlertCircle, Clock, Sparkles, User, ArrowRight,
   BookMarked, HelpCircle, ShieldCheck, GraduationCap, Play, Key, Lock, Check,
-  Timer, ChevronRight, ExternalLink
+  Timer, ChevronRight, ExternalLink, FileCode2
 } from "lucide-react";
 import MathText from "../../../components/MathText";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, Radar } from "recharts";
+import { useRouter } from "next/navigation";
 
 export default function StudentDashboard() {
+  const router = useRouter();
   const { token, fullName, role } = useAuthStore();
   
   // Data States
   const [assignedExams, setAssignedExams] = useState<any[]>([]);
+  const [directCodeInput, setDirectCodeInput] = useState("");
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
   const [selectedSubDetail, setSelectedSubDetail] = useState<any | null>(null);
@@ -277,6 +280,43 @@ export default function StudentDashboard() {
       {/* ═══════ SECTION 1: ASSIGNED & LIVE EXAMS VIEW ═══════ */}
       {activePortalTab === "assigned" && (
         <div className="space-y-4">
+          
+          {/* Fast Direct Exam Jump Box */}
+          <div className="p-4 bg-white dark:bg-[#171615] rounded-xl border border-[#E5E0D8] dark:border-[#292524] flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]">
+                <FileCode2 className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4]">Have a Direct Assessment Code?</div>
+                <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">Enter the test code to jump straight into the candidate assessment room</div>
+              </div>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!directCodeInput.trim()) return;
+                const clean = directCodeInput.trim().replace(/^.*\/exam\//, "");
+                router.push(isTeacher ? `/exam/${clean}?mode=teacher_preview` : `/exam/${clean}`);
+              }}
+              className="flex items-center gap-2 w-full sm:w-auto"
+            >
+              <input
+                type="text"
+                value={directCodeInput}
+                onChange={(e) => setDirectCodeInput(e.target.value)}
+                placeholder="e.g. ex-com-1234"
+                className="px-3 py-1.5 bg-[#FBF9F5] dark:bg-[#1D1B19] border border-[#E5E0D8] dark:border-[#292524] rounded-lg text-xs font-mono text-[#242321] dark:text-[#F5F5F4] focus:outline-none focus:ring-1 focus:ring-[#C84B18] w-full sm:w-44"
+              />
+              <button
+                type="submit"
+                className="px-3.5 py-1.5 bg-[#C84B18] hover:bg-[#B33E0F] dark:bg-[#EA580C] text-white rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer shadow-xs"
+              >
+                Join Room
+              </button>
+            </form>
+          </div>
+
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-[#242321] dark:text-[#F5F5F4] uppercase tracking-wider">
               Available & Scheduled Examinations
@@ -397,11 +437,11 @@ export default function StudentDashboard() {
                         </button>
                       ) : isLive ? (
                         <a
-                          href={`/exam/${exam.exam_code}`}
+                          href={isTeacher ? `/exam/${exam.exam_code}?mode=teacher_preview` : `/exam/${exam.exam_code}`}
                           className="w-full py-2 rounded-lg bg-[#C84B18] hover:opacity-90 text-white dark:bg-[#EA580C] text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs"
                         >
                           <Play className="h-3.5 w-3.5 fill-current" />
-                          <span>Enter Exam Room</span>
+                          <span>{isTeacher ? "Launch Simulator Preview" : "Enter Exam Room"}</span>
                           <ArrowRight className="h-3.5 w-3.5" />
                         </a>
                       ) : isEnded ? (

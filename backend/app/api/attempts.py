@@ -146,12 +146,61 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
         
     cred = db.query(ExamCredential).filter(
         ExamCredential.exam_id == exam.id,
-        ExamCredential.username == login_in.username,
-        ExamCredential.password == login_in.password
+        ExamCredential.password == login_in.password,
+        (
+            (ExamCredential.username == login_in.username) |
+            (ExamCredential.student.has(Student.user.has(User.email == login_in.username.strip().lower()))) |
+            (ExamCredential.student.has(Student.roll_number == login_in.username.strip()))
+        )
     ).first()
     
     if not cred:
-        raise HTTPException(status_code=400, detail="Incorrect credentials for this exam")
+        from app.utils.security import verify_password
+        user = db.query(User).filter(User.email == login_in.username.strip().lower(), User.is_deleted == False).first()
+        if user and verify_password(login_in.password, user.hashed_password):
+            student = db.query(Student).filter(Student.user_id == user.id, Student.is_deleted == False).first()
+            if not student:
+                import secrets
+                prefix = "".join(c for c in user.email.split("@")[0].upper() if c.isalnum())[:8] or "STU"
+                roll = f"STU-{prefix}-{secrets.token_hex(2).upper()}"
+                student = Student(
+                    user_id=user.id,
+                    institution_id=user.institution_id,
+                    roll_number=roll,
+                    status="active"
+                )
+                db.add(student)
+                db.commit()
+                db.refresh(student)
+            cred = db.query(ExamCredential).filter(
+                ExamCredential.exam_id == exam.id,
+                ExamCredential.student_id == student.id
+            ).first()
+            if not cred:
+                import secrets
+                clean_roll = "".join(c for c in (student.roll_number or user.email.split('@')[0]) if c.isalnum()).upper()[:16]
+                cand_username = f"{clean_roll}-{exam.exam_code}"[:40]
+                if db.query(ExamCredential).filter(ExamCredential.username == cand_username).first():
+                    cand_username = f"{cand_username}-{secrets.token_hex(2).upper()}"
+                cred = ExamCredential(
+                    exam_id=exam.id,
+                    student_id=student.id,
+                    username=cand_username,
+                    password=str(secrets.randbelow(900000) + 100000),
+                    expires_at=exam.end_time or (datetime.utcnow() + timedelta(days=7))
+                )
+                db.add(cred)
+                try:
+                    db.commit()
+                    db.refresh(cred)
+                except Exception:
+                    db.rollback()
+                    cred = db.query(ExamCredential).filter(
+                        ExamCredential.exam_id == exam.id,
+                        ExamCredential.student_id == student.id
+                    ).first()
+        else:
+            raise HTTPException(status_code=400, detail="Incorrect credentials for this exam. Please check your passcode or portal login.")
         
     sub = db.query(ExamSubmission).filter(ExamSubmission.credential_id == cred.id).first()
     
@@ -424,7 +473,18 @@ def direct_start_for_student(
         
     student = db.query(Student).filter(Student.user_id == current_user.id, Student.is_deleted == False).first()
     if not student:
-        raise HTTPException(status_code=403, detail="Student profile not found")
+        import secrets
+        prefix = "".join(c for c in current_user.email.split("@")[0].upper() if c.isalnum())[:8] or "STU"
+        roll = f"STU-{prefix}-{secrets.token_hex(2).upper()}"
+        student = Student(
+            user_id=current_user.id,
+            institution_id=current_user.institution_id,
+            roll_number=roll,
+            status="active"
+        )
+        db.add(student)
+        db.commit()
+        db.refresh(student)
         
     cred = db.query(ExamCredential).filter(
         ExamCredential.exam_id == exam.id,
@@ -434,16 +494,27 @@ def direct_start_for_student(
     if not cred:
         # Auto-provision on-the-fly credential for enrolled student
         import secrets
+        clean_roll = "".join(c for c in (student.roll_number or current_user.email.split('@')[0]) if c.isalnum()).upper()[:16]
+        cand_username = f"{clean_roll}-{exam.exam_code}"[:40]
+        if db.query(ExamCredential).filter(ExamCredential.username == cand_username).first():
+            cand_username = f"{cand_username}-{secrets.token_hex(2).upper()}"
         cred = ExamCredential(
             exam_id=exam.id,
             student_id=student.id,
-            username=current_user.email,
+            username=cand_username,
             password=str(secrets.randbelow(900000) + 100000),
             expires_at=exam.end_time or (datetime.utcnow() + timedelta(days=7))
         )
         db.add(cred)
-        db.commit()
-        db.refresh(cred)
+        try:
+            db.commit()
+            db.refresh(cred)
+        except Exception:
+            db.rollback()
+            cred = db.query(ExamCredential).filter(
+                ExamCredential.exam_id == exam.id,
+                ExamCredential.student_id == student.id
+            ).first()
         
     sub = db.query(ExamSubmission).filter(ExamSubmission.credential_id == cred.id).first()
     token_expire = exam.end_time or (datetime.utcnow() + timedelta(hours=3))

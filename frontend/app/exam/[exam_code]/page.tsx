@@ -26,7 +26,7 @@ export default function ExamPortal() {
   const searchParams = useSearchParams();
   const examCode = params.exam_code as string;
   const { showToast } = useToast();
-  const { token: authToken, role: authRole } = useAuthStore();
+  const { token: authToken, role: authRole, fullName: authFullName } = useAuthStore();
   const isTeacherPreviewMode = searchParams.get("mode") === "teacher_preview" || searchParams.get("preview") === "true";
 
   const examStore = useExamStore();
@@ -172,6 +172,47 @@ export default function ExamPortal() {
       }
 
       setCandidateName(data.student_name || "Student");
+
+      // Fetch exam details
+      const infoRes = await apiFetch(`/attempts/exam-info?token=${data.session_token}`);
+      const info = await infoRes.json();
+
+      if (infoRes.ok) {
+        examStore.setExamSession(
+          data.session_token,
+          info.exam_name,
+          info.duration_minutes,
+          info.questions,
+          info.saved_answers,
+          info.time_remaining_seconds
+        );
+        setIsLogged(true);
+        showToast("Logged into exam portal securely.", "success");
+      }
+    } catch (err: any) {
+      setLoginError(err.message);
+      showToast(err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 1-Click Authenticated Student Launch Handler
+  const handleDirectStudentStart = async () => {
+    if (!authToken) return;
+    setLoading(true);
+    setLoginError(null);
+    try {
+      const res = await apiFetch(`/attempts/direct-start?exam_code=${examCode}`, {
+        method: "POST",
+        token: authToken,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to launch exam session");
+      }
+
+      setCandidateName(data.student_name || authFullName || "Student");
 
       // Fetch exam details
       const infoRes = await apiFetch(`/attempts/exam-info?token=${data.session_token}`);
@@ -459,6 +500,48 @@ export default function ExamPortal() {
             <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{loginError}</span>
+            </div>
+          )}
+
+          {/* 1-Click Direct Start for Authenticated User */}
+          {authToken && (
+            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                  Signed in as {authFullName || "Student"}
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50">
+                  Active User
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleDirectStudentStart}
+                disabled={loading}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    <span>Preparing Exam Room...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 fill-current" />
+                    <span>1-Click Launch Exam as {authFullName || "Student"}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {authToken && (
+            <div className="relative flex items-center justify-center">
+              <div className="border-t border-[#E5E0D8] dark:border-[#292524] w-full" />
+              <span className="bg-white dark:bg-[#171615] px-3 text-[10px] font-bold text-[#716D67] uppercase tracking-wider shrink-0">
+                or enter candidate passcode
+              </span>
+              <div className="border-t border-[#E5E0D8] dark:border-[#292524] w-full" />
             </div>
           )}
 
