@@ -8,7 +8,7 @@ class Document(TimeStampedModel):
     title = Column(String(255), nullable=False)
     filename = Column(String(255), nullable=False)
     file_path = Column(String(255), nullable=False)
-    file_hash = Column(String(64), unique=True, index=True, nullable=False) # For duplicate detection
+    file_hash = Column(String(64), unique=False, index=True, nullable=False) # For duplicate detection
     version = Column(Integer, default=1, nullable=False)
     uploader_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     workspace_id = Column(String(36), ForeignKey("workspaces.id"), index=True, nullable=True)

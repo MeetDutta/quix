@@ -374,38 +374,6 @@ export default function LoginPage() {
         <div className="bg-white dark:bg-[#171615] rounded-2xl p-7 sm:p-8 border border-[#E5E0D8] dark:border-[#292524] shadow-sm relative overflow-hidden space-y-5">
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#C84B18] via-amber-600 to-[#C84B18]" />
           
-          {/* Auth Mode Toggle Pill: Sign In vs Create Account */}
-          <div className="flex p-1 bg-[#F0ECE4]/60 dark:bg-[#1D1B19] rounded-xl border border-[#E5E0D8] dark:border-[#292524]">
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode("signin");
-                setError(null);
-              }}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                authMode === "signin"
-                  ? "bg-white dark:bg-[#292524] text-[#242321] dark:text-[#F5F5F4] shadow-xs"
-                  : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-white"
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode("signup");
-                setError(null);
-              }}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                authMode === "signup"
-                  ? "bg-[#C84B18] dark:bg-[#EA580C] text-white shadow-xs"
-                  : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-white"
-              }`}
-            >
-              Create Account
-            </button>
-          </div>
-
           <div>
             <h2 className="text-2xl font-bold text-[#242321] dark:text-[#F5F5F4] tracking-tight">
               {authMode === "signin" ? "Portal Sign In" : "Create New Account"}

@@ -20,7 +20,7 @@ export function getWebSocketUrl(path: string): string {
 }
 
 /**
- * Authenticated fetch wrapper. Automatically injects Bearer token and handles JSON.
+ * Authenticated fetch wrapper. Automatically injects Bearer token from argument or localStorage.
  * Automatically handles 401 Unauthorized / expired token by clearing session.
  */
 export async function apiFetch(
@@ -29,13 +29,21 @@ export async function apiFetch(
 ): Promise<Response> {
   const { token, headers, ...rest } = options;
   const h: Record<string, string> = { ...(headers as Record<string, string>) };
-  if (token) h["Authorization"] = `Bearer ${token}`;
+  
+  // Resolve token from parameter or fallback to localStorage
+  const effectiveToken = token || (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+  if (effectiveToken && !h["Authorization"]) {
+    h["Authorization"] = `Bearer ${effectiveToken}`;
+  }
+
+  // Inject Workspace ID if present in storage and not already set
   if (typeof window !== "undefined") {
     const wsId = localStorage.getItem("workspaceId");
     if (wsId && !h["X-Workspace-Id"]) {
       h["X-Workspace-Id"] = wsId;
     }
   }
+
   if (!h["Content-Type"] && !(rest.body instanceof FormData)) {
     h["Content-Type"] = "application/json";
   }
@@ -50,8 +58,16 @@ export async function apiFetch(
   
   const res = await fetch(`${API_V1}${formattedPath}`, { ...rest, headers: h });
 
-  // Automatic stale session cleanup on 401
-  if (res.status === 401 && typeof window !== "undefined" && !path.includes("/auth/login")) {
+  // Automatic stale session cleanup on 401 for authenticated endpoints
+  if (
+    res.status === 401 && 
+    typeof window !== "undefined" && 
+    effectiveToken && 
+    !path.includes("/auth/login") &&
+    !path.includes("/auth/register") &&
+    !path.includes("/attempts/login") &&
+    !path.includes("/attempts/exam-status")
+  ) {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
     localStorage.removeItem("fullName");

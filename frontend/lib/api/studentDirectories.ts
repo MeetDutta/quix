@@ -7,7 +7,7 @@ import {
   CSVImportResult
 } from '@/types/studentDirectory';
 
-export async function fetchStudentDirectories(token: string): Promise<StudentDirectory[]> {
+export async function fetchStudentDirectories(token?: string | null): Promise<StudentDirectory[]> {
   const res = await apiFetch('/student-directories/', { token });
   if (!res.ok) {
     throw new Error('Failed to fetch student directories');
@@ -15,7 +15,7 @@ export async function fetchStudentDirectories(token: string): Promise<StudentDir
   return res.json();
 }
 
-export async function fetchStudentDirectory(id: string, token: string): Promise<StudentDirectory> {
+export async function fetchStudentDirectory(id: string, token?: string | null): Promise<StudentDirectory> {
   const res = await apiFetch(`/student-directories/${id}`, { token });
   if (!res.ok) {
     throw new Error('Failed to fetch student directory');
@@ -25,7 +25,7 @@ export async function fetchStudentDirectory(id: string, token: string): Promise<
 
 export async function createStudentDirectory(
   payload: StudentDirectoryCreate,
-  token: string
+  token?: string | null
 ): Promise<StudentDirectory> {
   const res = await apiFetch('/student-directories/', {
     method: 'POST',
@@ -42,7 +42,7 @@ export async function createStudentDirectory(
 export async function updateStudentDirectory(
   id: string,
   payload: Partial<StudentDirectoryCreate>,
-  token: string
+  token?: string | null
 ): Promise<StudentDirectory> {
   const res = await apiFetch(`/student-directories/${id}`, {
     method: 'PUT',
@@ -56,7 +56,7 @@ export async function updateStudentDirectory(
   return res.json();
 }
 
-export async function deleteStudentDirectory(id: string, token: string): Promise<void> {
+export async function deleteStudentDirectory(id: string, token?: string | null): Promise<void> {
   const res = await apiFetch(`/student-directories/${id}`, {
     method: 'DELETE',
     token
@@ -68,7 +68,7 @@ export async function deleteStudentDirectory(id: string, token: string): Promise
 
 export async function fetchDirectoryStudents(
   directoryId: string,
-  token: string
+  token?: string | null
 ): Promise<DirectoryStudent[]> {
   const res = await apiFetch(`/student-directories/${directoryId}/students`, { token });
   if (!res.ok) {
@@ -80,7 +80,7 @@ export async function fetchDirectoryStudents(
 export async function addStudentToDirectory(
   directoryId: string,
   payload: DirectoryStudentCreate,
-  token: string
+  token?: string | null
 ): Promise<DirectoryStudent> {
   const res = await apiFetch(`/student-directories/${directoryId}/students`, {
     method: 'POST',
@@ -97,7 +97,7 @@ export async function addStudentToDirectory(
 export async function removeStudentFromDirectory(
   directoryId: string,
   studentId: string,
-  token: string
+  token?: string | null
 ): Promise<void> {
   const res = await apiFetch(`/student-directories/${directoryId}/students/${studentId}`, {
     method: 'DELETE',
@@ -111,7 +111,7 @@ export async function removeStudentFromDirectory(
 export async function importStudentsCSV(
   directoryId: string,
   file: File,
-  token: string
+  token?: string | null
 ): Promise<CSVImportResult> {
   const formData = new FormData();
   formData.append('file', file);

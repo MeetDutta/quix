@@ -94,7 +94,8 @@ export default function StudentDashboard() {
   };
 
   useEffect(() => {
-    if (token) {
+    const storedToken = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (token || storedToken) {
       fetchData();
     }
   }, [token, selectedStudentFilter]);

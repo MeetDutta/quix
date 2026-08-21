@@ -46,13 +46,16 @@ def upload_document(
     file_bytes = file.file.read()
     file_hash = hashlib.sha256(file_bytes).hexdigest()
     
-    # Check duplicate hash (both active and deleted)
-    existing = db.query(Document).filter(Document.file_hash == file_hash).first()
+    # Check duplicate hash within the active workspace (both active and deleted)
+    existing = db.query(Document).filter(
+        Document.file_hash == file_hash,
+        Document.workspace_id == current_workspace.id
+    ).first()
     if existing:
         if not existing.is_deleted:
-            raise HTTPException(status_code=400, detail="This document has already been uploaded.")
+            raise HTTPException(status_code=400, detail="This document has already been uploaded to your workspace.")
         else:
-            # Clean up soft-deleted record to avoid UNIQUE constraint violation on re-upload
+            # Clean up soft-deleted record to avoid duplicate record in same workspace
             db.delete(existing)
             db.flush()
         
