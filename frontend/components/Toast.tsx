@@ -47,14 +47,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      {/* Toast Container — fixed top-right */}
-      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2.5 pointer-events-none max-w-sm w-full">
+      {/* Toast Container — Mobile centered / Desktop top-right */}
+      <div className="fixed top-3 inset-x-3 sm:inset-x-auto sm:top-4 sm:right-4 z-[9999] flex flex-col gap-2 pointer-events-none sm:max-w-sm w-auto sm:w-full pt-safe">
         {toasts.map((t) => {
           const c = colorMap[t.type];
           return (
             <div
               key={t.id}
-              className={`pointer-events-auto ${c.bg} ${c.border} ${c.text} border rounded-xl px-4 py-3 shadow-lg flex items-start gap-2.5 text-sm font-medium animate-slideIn`}
+              className={`pointer-events-auto ${c.bg} ${c.border} ${c.text} border rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-lg flex items-start gap-2.5 text-xs sm:text-sm font-medium animate-slideIn`}
             >
               <span className="text-base leading-none shrink-0 mt-0.5">{c.icon}</span>
               <span className="flex-1 leading-snug">{t.message}</span>

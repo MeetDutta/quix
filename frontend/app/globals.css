@@ -105,11 +105,11 @@ html.dark .btn-primary:hover {
 
 /* Toast slide-in animation */
 @keyframes slideIn {
-  from { opacity: 0; transform: translateX(100%); }
-  to { opacity: 1; transform: translateX(0); }
+  from { opacity: 0; transform: translateY(-10px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .animate-slideIn {
-  animation: slideIn 0.15s ease-out;
+  animation: slideIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Fade-in animation */
@@ -120,4 +120,38 @@ html.dark .btn-primary:hover {
 .animate-fadeIn {
   animation: fadeIn 0.15s ease-out;
 }
+
+/* Mobile Safe Area & Touch Optimization */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+.pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+button, a, input, select, textarea {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure smooth touch scrolling on mobile */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent accidental iOS auto-zoom on input focus */
+@media screen and (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 

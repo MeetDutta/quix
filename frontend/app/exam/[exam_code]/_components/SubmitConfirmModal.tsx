@@ -91,12 +91,12 @@ export default function SubmitConfirmModal({
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-3 pt-2">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 pt-2">
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="px-4 py-2 rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-xs font-semibold text-[#716D67] hover:text-[#242321] dark:hover:text-white transition-all"
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-xs font-semibold text-[#716D67] hover:text-[#242321] dark:hover:text-white transition-all text-center cursor-pointer"
           >
             Return to Test
           </button>
@@ -104,7 +104,7 @@ export default function SubmitConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="btn-primary px-5 py-2 text-xs font-bold flex items-center gap-2"
+            className="btn-primary w-full sm:w-auto px-5 py-2.5 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-sm"
           >
             {loading ? (
               <>

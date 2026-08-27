@@ -185,24 +185,31 @@ export default function ExamCalculator({ isOpen, onClose }: ExamCalculatorProps)
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 animate-fadeIn select-none shadow-2xl">
-      <div className="bg-[#1C1917] text-[#FAF7F2] border border-[#44403C] rounded-2xl w-72 p-4 shadow-2xl space-y-3">
-        {/* Header Bar */}
-        <div className="flex items-center justify-between border-b border-[#292524] pb-2.5">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-xs font-bold uppercase tracking-wider text-[#A8A29E]">
-              Exam Calculator
-            </span>
+    <>
+      {/* Mobile Backdrop Overlay */}
+      <div 
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs sm:hidden z-50 animate-fadeIn" 
+        onClick={onClose} 
+      />
+      
+      <div className="fixed inset-x-3 bottom-4 sm:inset-x-auto sm:bottom-6 sm:right-6 z-50 animate-fadeIn select-none shadow-2xl flex justify-center pb-safe">
+        <div className="bg-[#1C1917] text-[#FAF7F2] border border-[#44403C] rounded-2xl w-full max-w-xs sm:w-72 p-4 shadow-2xl space-y-3">
+          {/* Header Bar */}
+          <div className="flex items-center justify-between border-b border-[#292524] pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-xs font-bold uppercase tracking-wider text-[#A8A29E]">
+                Exam Calculator
+              </span>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-[#A8A29E] hover:text-white hover:bg-[#292524] transition-colors cursor-pointer"
+              title="Close Calculator"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-[#A8A29E] hover:text-white hover:bg-[#292524] transition-colors"
-            title="Close Calculator"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
 
         {/* Display Screen */}
         <div className="bg-[#0C0A09] rounded-xl p-3 border border-[#292524] text-right space-y-0.5">
@@ -363,5 +370,8 @@ export default function ExamCalculator({ isOpen, onClose }: ExamCalculatorProps)
         </div>
       </div>
     </div>
+  </>
   );
 }
+
+

@@ -52,6 +52,7 @@ export default function ExamPortal() {
   const [syncStatus, setSyncStatus] = useState<"Synced" | "Saving..." | "Unsynced (Local)">("Synced");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [isPaletteMobileOpen, setIsPaletteMobileOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [autoSubmitReason, setAutoSubmitReason] = useState<string | null>(null);
@@ -447,7 +448,7 @@ export default function ExamPortal() {
           </div>
 
           {/* Countdown Clock */}
-          <div className="grid grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {[
               { label: "Days", val: countdown.days },
               { label: "Hours", val: countdown.hours },
@@ -674,8 +675,13 @@ export default function ExamPortal() {
   // ══════════════════════════════════════════════════════════════════════
   // VIEW 4: LIVE DISTRACTION-FREE EXAM TAKING ARENA
   // ══════════════════════════════════════════════════════════════════════
+  const answeredCount = examStore.questions.filter((q) => {
+    const a = examStore.answers[q.id];
+    return a !== undefined && a !== null && String(a).trim() !== "";
+  }).length;
+
   return (
-    <div className="min-h-screen bg-[#F7F4EF] dark:bg-[#0E0D0C] flex flex-col">
+    <div className="min-h-screen bg-[#F7F4EF] dark:bg-[#0E0D0C] flex flex-col pb-20 lg:pb-0">
       {/* Top HUD Bar */}
       <ExamHeaderHUD
         examName={examStore.examName || "Assessment"}
@@ -690,17 +696,20 @@ export default function ExamPortal() {
         onExitSimulation={() => router.push("/dashboard/teacher#exams")}
         tabSwitchCount={tabSwitchCount}
         proctorEventCount={examStore.proctorEventsCount}
+        onTogglePalette={() => setIsPaletteMobileOpen(true)}
+        answeredCount={answeredCount}
+        totalQuestions={examStore.questions.length}
       />
 
       {/* Main Exam Arena Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left / Center: Question Panel (8 cols) */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
+        {/* Left / Center: Question Panel (8 cols on desktop, full width on mobile) */}
         <div className="lg:col-span-8 space-y-4">
           {currentQ ? (
-            <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 shadow-xs space-y-6">
+            <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-4 sm:p-6 shadow-xs space-y-5 sm:space-y-6">
               {/* Question Header & Controls */}
-              <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-4">
-                <div className="flex items-center gap-2.5">
+              <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-3 sm:pb-4">
+                <div className="flex items-center gap-2 sm:gap-2.5">
                   <span className="px-2.5 py-1 rounded-lg bg-[#C84B18]/10 text-[#C84B18] font-mono font-bold text-xs">
                     Question {currentIndex + 1} of {examStore.questions.length}
                   </span>
@@ -715,14 +724,14 @@ export default function ExamPortal() {
                     onClick={() =>
                       setFlagged((prev) => ({ ...prev, [currentQ.id]: !prev[currentQ.id] }))
                     }
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border cursor-pointer ${
                       flagged[currentQ.id]
                         ? "bg-purple-100 dark:bg-purple-950/40 border-purple-300 text-purple-900 dark:text-purple-300"
                         : "border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-white"
                     }`}
                   >
                     <Flag className="h-3.5 w-3.5" />
-                    <span>{flagged[currentQ.id] ? "Marked for Review" : "Mark for Review"}</span>
+                    <span>{flagged[currentQ.id] ? "Marked" : "Mark for Review"}</span>
                   </button>
                 </div>
               </div>
@@ -744,9 +753,9 @@ export default function ExamPortal() {
                         key={optIdx}
                         type="button"
                         onClick={() => saveAnswerState(currentQ.id, opt)}
-                        className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-center gap-3.5 cursor-pointer ${
+                        className={`w-full text-left p-3 sm:p-3.5 rounded-xl border transition-all flex items-center gap-3 sm:gap-3.5 cursor-pointer ${
                           isSelected
-                            ? "bg-[#C84B18]/10 border-[#C84B18] text-[#242321] dark:text-[#F5F5F4] shadow-xs font-semibold"
+                            ? "bg-[#C84B18]/10 border-[#C84B18] text-[#242321] dark:text-[#F5F5F4] shadow-xs font-semibold ring-1 ring-[#C84B18]"
                             : "bg-[#F7F4EF]/50 dark:bg-[#141312] border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E] hover:border-[#C84B18]/50 hover:text-[#242321] dark:hover:text-white"
                         }`}
                       >
@@ -777,7 +786,7 @@ export default function ExamPortal() {
                     value={examStore.answers[currentQ.id] || ""}
                     onChange={(e) => saveAnswerState(currentQ.id, e.target.value)}
                     placeholder="Type your structured explanation, proofs, or calculations here..."
-                    className="w-full bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 text-xs sm:text-sm text-[#242321] dark:text-[#F5F5F4] focus:ring-1 focus:ring-[#C84B18] focus:outline-none"
+                    className="w-full bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-3 sm:p-4 text-xs sm:text-sm text-[#242321] dark:text-[#F5F5F4] focus:ring-1 focus:ring-[#C84B18] focus:outline-none"
                   />
                   <div className="flex justify-between text-[11px] text-[#716D67]">
                     <span>AI auto-evaluation active upon submission</span>
@@ -786,13 +795,13 @@ export default function ExamPortal() {
                 </div>
               )}
 
-              {/* Bottom Navigation Buttons */}
-              <div className="flex items-center justify-between border-t border-[#E5E0D8] dark:border-[#292524] pt-4">
+              {/* Desktop Bottom Navigation Buttons */}
+              <div className="hidden lg:flex items-center justify-between border-t border-[#E5E0D8] dark:border-[#292524] pt-4">
                 <button
                   type="button"
                   disabled={currentIndex === 0}
                   onClick={() => setCurrentIndex((prev) => prev - 1)}
-                  className="px-4 py-2 rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-xs font-semibold text-[#716D67] hover:text-[#242321] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all"
+                  className="px-4 py-2 rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-xs font-semibold text-[#716D67] hover:text-[#242321] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all cursor-pointer"
                 >
                   <ChevronLeft className="h-4 w-4" />
                   <span>Previous</span>
@@ -803,7 +812,7 @@ export default function ExamPortal() {
                   <button
                     type="button"
                     onClick={() => saveAnswerState(currentQ.id, null)}
-                    className="text-[11px] font-semibold text-[#716D67] hover:text-[#C84B18] transition-all"
+                    className="text-[11px] font-semibold text-[#716D67] hover:text-[#C84B18] transition-all cursor-pointer"
                   >
                     Clear Selection
                   </button>
@@ -813,7 +822,7 @@ export default function ExamPortal() {
                   <button
                     type="button"
                     onClick={() => setCurrentIndex((prev) => prev + 1)}
-                    className="btn-primary px-5 py-2 text-xs font-bold flex items-center gap-1.5"
+                    className="btn-primary px-5 py-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
                   >
                     <span>Next Question</span>
                     <ChevronRight className="h-4 w-4" />
@@ -822,7 +831,7 @@ export default function ExamPortal() {
                   <button
                     type="button"
                     onClick={() => setShowConfirmModal(true)}
-                    className="btn-primary px-6 py-2 text-xs font-bold flex items-center gap-1.5 shadow-md"
+                    className="btn-primary px-6 py-2 text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer"
                   >
                     <span>Review & Submit</span>
                     <ArrowRight className="h-4 w-4" />
@@ -837,8 +846,8 @@ export default function ExamPortal() {
           )}
         </div>
 
-        {/* Right: Question Palette & Review Matrix (4 cols) */}
-        <div className="lg:col-span-4 space-y-4">
+        {/* Right: Question Palette & Review Matrix (Visible on Large Screens) */}
+        <div className="hidden lg:block lg:col-span-4 space-y-4">
           <QuestionPalette
             questions={examStore.questions}
             currentIndex={currentIndex}
@@ -858,7 +867,7 @@ export default function ExamPortal() {
             <button
               type="button"
               onClick={() => setShowConfirmModal(true)}
-              className="btn-primary w-full py-2.5 text-xs font-bold flex items-center justify-center gap-2 shadow-xs"
+              className="btn-primary w-full py-2.5 text-xs font-bold flex items-center justify-center gap-2 shadow-xs cursor-pointer"
             >
               <CheckSquare className="h-4 w-4" />
               <span>Finish & Submit Exam</span>
@@ -866,6 +875,67 @@ export default function ExamPortal() {
           </div>
         </div>
       </main>
+
+      {/* Mobile Sticky Bottom Action Toolbar (Thumb Reachable) */}
+      <div className="lg:hidden fixed bottom-0 inset-x-0 bg-[#FFFFFF]/95 dark:bg-[#171615]/95 border-t border-[#E5E0D8] dark:border-[#292524] backdrop-blur-md px-3 py-2 pb-safe z-30 flex items-center justify-between gap-2 shadow-lg">
+        <button
+          type="button"
+          disabled={currentIndex === 0}
+          onClick={() => setCurrentIndex((prev) => prev - 1)}
+          className="p-2.5 rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-xs font-semibold text-[#716D67] hover:text-[#242321] disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer shrink-0"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          <span className="hidden xs:inline">Prev</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsPaletteMobileOpen(true)}
+          className="px-3 py-2 rounded-xl border border-[#E5E0D8] dark:border-[#292524] bg-[#F7F4EF] dark:bg-[#1D1B19] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+        >
+          <span>Palette</span>
+          <span className="px-1.5 py-0.5 rounded-full bg-[#C84B18] text-white text-[10px]">
+            {answeredCount}/{examStore.questions.length}
+          </span>
+        </button>
+
+        {currentIndex < examStore.questions.length - 1 ? (
+          <button
+            type="button"
+            onClick={() => setCurrentIndex((prev) => prev + 1)}
+            className="btn-primary py-2 px-3.5 text-xs font-bold flex items-center gap-1 shrink-0 cursor-pointer shadow-xs"
+          >
+            <span>Next</span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowConfirmModal(true)}
+            className="btn-primary py-2 px-4 text-xs font-bold flex items-center gap-1 shrink-0 cursor-pointer shadow-md bg-emerald-600 hover:bg-emerald-700"
+          >
+            <span>Submit</span>
+            <CheckSquare className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Mobile Question Palette Bottom Sheet Drawer */}
+      {isPaletteMobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end justify-center p-0 animate-fadeIn">
+          <div className="w-full bg-[#FFFFFF] dark:bg-[#171615] rounded-t-2xl max-h-[85vh] overflow-hidden shadow-2xl pb-safe">
+            <QuestionPalette
+              questions={examStore.questions}
+              currentIndex={currentIndex}
+              answers={examStore.answers}
+              flagged={flagged}
+              onSelectQuestion={(idx) => setCurrentIndex(idx)}
+              isMobileModal={true}
+              onCloseMobileModal={() => setIsPaletteMobileOpen(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Floating Scientific Calculator Modal */}
       {isCalculatorOpen && (
@@ -886,3 +956,4 @@ export default function ExamPortal() {
     </div>
   );
 }
+

@@ -206,6 +206,20 @@ export default function DashboardLayout({
     }
   };
 
+  // Lock body scroll when mobile sidebar drawer is open
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (sidebarOpen && window.innerWidth < 768) {
+        document.body.style.overflow = "hidden";
+      } else {
+        document.body.style.overflow = "";
+      }
+    }
+    return () => {
+      if (typeof window !== "undefined") document.body.style.overflow = "";
+    };
+  }, [sidebarOpen]);
+
 
 
   return (
@@ -643,7 +657,7 @@ export default function DashboardLayout({
 
               {/* Notification Flyout */}
               {notifOpen && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in duration-200">
+                <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 w-auto sm:w-96 bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in duration-200">
                   <div className="p-3.5 border-b border-[#E5E0D8] dark:border-[#292524] flex items-center justify-between bg-[#FAF8F5] dark:bg-[#141312]">
                     <div className="flex items-center gap-2">
                       <Bell className="h-4 w-4 text-[#C84B18]" />

@@ -189,7 +189,160 @@ export default function LiveAssessmentsTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Mobile Card List View (< 768px) */}
+      <div className="block md:hidden divide-y divide-[#E5E0D8] dark:divide-[#292524]">
+        {exams.length === 0 ? (
+          <div className="py-8 px-4 text-center text-xs text-[#716D67]">
+            No assessments created yet. Click "Create Assessment" to synthesize a new examination.
+          </div>
+        ) : (
+          exams.map((exam) => {
+            const sched = getExamScheduleInfo(exam);
+            const isLoadingCreds = loadingCredsExamId === exam.id;
+
+            return (
+              <div key={exam.id} className="p-4 space-y-3 hover:bg-[#F0ECE4]/30 dark:hover:bg-[#1D1B19]/30 transition-colors">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className={`w-2 h-2 rounded-full ${sched.dot}`} />
+                      <span className="capitalize font-semibold text-[10px] text-[#716D67] dark:text-[#A8A29E]">{sched.label}</span>
+                    </div>
+                    <h3 className="font-bold text-xs sm:text-sm text-[#242321] dark:text-[#F5F5F4]">{exam.name}</h3>
+                    <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E] font-mono mt-0.5">
+                      Code: <span className="font-bold text-[#C84B18]">{exam.exam_code}</span>
+                    </div>
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setQrModalExam(exam)}
+                    className="p-2 rounded-lg border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] shrink-0"
+                    title="QR Code"
+                  >
+                    <QrCode className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Metrics chips */}
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#716D67] dark:text-[#A8A29E]">
+                  <span className="px-2 py-0.5 rounded bg-[#F0ECE4]/60 dark:bg-[#1D1B19]">
+                    {exam.questions_count || (exam.questions_json ? JSON.parse(exam.questions_json).length : 0)} Qs ({exam.total_marks} pts)
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-[#F0ECE4]/60 dark:bg-[#1D1B19]">
+                    ⏱ {exam.duration_minutes} mins
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-[#F0ECE4]/60 dark:bg-[#1D1B19]">
+                    {exam.start_time ? new Date(exam.start_time).toLocaleDateString([], { month: "short", day: "numeric" }) : "Open"}
+                  </span>
+                </div>
+
+                {/* Touch Action Buttons */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {exam.is_published && (
+                    <button
+                      type="button"
+                      onClick={() => setLiveProctorExamId(exam.id)}
+                      className="px-2.5 py-1.5 rounded-lg border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Radio className="h-3 w-3 text-rose-600 animate-pulse" />
+                      <span>Monitor</span>
+                    </button>
+                  )}
+
+                  <a
+                    href={`/exam/${exam.exam_code || exam.code}?mode=teacher_preview`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-2.5 py-1.5 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold flex items-center gap-1"
+                  >
+                    <Play className="h-3 w-3 text-emerald-600" />
+                    <span>Test Run</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={() => onPreviewExam(exam)}
+                    className="px-2.5 py-1.5 rounded-lg border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Eye className="h-3 w-3" />
+                    <span>Preview / Edit</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isLoadingCreds}
+                    onClick={() => handleOpenCredentialsPreview(exam)}
+                    className="px-2.5 py-1.5 rounded-lg border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#C84B18] text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    {isLoadingCreds ? (
+                      <div className="w-3 h-3 border-2 border-[#C84B18] border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Key className="h-3 w-3" />
+                    )}
+                    <span>Credentials</span>
+                  </button>
+
+                  {!exam.is_published && (
+                    <button
+                      type="button"
+                      onClick={() => onPublishExam(exam.id)}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#C84B18] text-white dark:bg-[#EA580C] text-[11px] font-semibold hover:opacity-90 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      <span>Publish</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={cloningExamId === exam.id}
+                    onClick={() => handleCloneExam(exam)}
+                    className="p-1.5 rounded-lg border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#C84B18] cursor-pointer"
+                    title="Clone Exam"
+                  >
+                    <CopyPlus className="h-3.5 w-3.5" />
+                  </button>
+
+                  {deleteConfirmId === exam.id ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onDeleteExam(exam.id);
+                          setDeleteConfirmId(null);
+                        }}
+                        className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmId(null)}
+                        className="px-1.5 py-1 text-[10px] text-[#716D67]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmId(exam.id)}
+                      className="p-1.5 rounded-lg text-[#716D67] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 cursor-pointer"
+                      title="Delete Assessment"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop Table View (>= 768px) */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E]">
