@@ -150,10 +150,11 @@ export default function LoginPage() {
           const btnContainer = document.getElementById("google-signin-btn-container");
           if (btnContainer) {
             btnContainer.innerHTML = "";
+            const computedWidth = typeof window !== "undefined" ? Math.min(380, Math.max(240, window.innerWidth - 64)) : 300;
             (window as any).google.accounts.id.renderButton(btnContainer, {
               theme: theme === "dark" ? "filled_black" : "outline",
               size: "large",
-              width: 380,
+              width: computedWidth,
               text: authMode === "signup" ? "signup_with" : "continue_with",
               shape: "rectangular",
               logo_alignment: "left",
@@ -371,7 +372,7 @@ export default function LoginPage() {
         </div>
 
         {/* Main Authentication Card */}
-        <div className="bg-white dark:bg-[#171615] rounded-2xl p-7 sm:p-8 border border-[#E5E0D8] dark:border-[#292524] shadow-sm relative overflow-hidden space-y-5">
+        <div className="bg-white dark:bg-[#171615] rounded-2xl p-5 sm:p-8 border border-[#E5E0D8] dark:border-[#292524] shadow-sm relative overflow-hidden space-y-5">
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#C84B18] via-amber-600 to-[#C84B18]" />
           
           <div>

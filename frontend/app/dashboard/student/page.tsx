@@ -34,6 +34,7 @@ export default function StudentDashboard() {
   const [studentsList, setStudentsList] = useState<any[]>([]);
   const [selectedStudentFilter, setSelectedStudentFilter] = useState<string>("");
   const [progressData, setProgressData] = useState<any | null>(null);
+  const [mobileViewingDetail, setMobileViewingDetail] = useState(false);
 
   const fetchProgressData = async () => {
     try {
@@ -102,6 +103,7 @@ export default function StudentDashboard() {
 
   const loadSubDetail = async (subId: string) => {
     setSelectedSubId(subId);
+    setMobileViewingDetail(true);
     setLoadingDetail(true);
     try {
       const res = await apiFetch(`/reports/submission-detail/${subId}`, { token });
@@ -212,10 +214,10 @@ export default function StudentDashboard() {
         </div>
 
         {/* Portal View Switcher Tabs */}
-        <div className="flex items-center gap-2 pt-3 border-t border-[#E5E0D8] dark:border-[#292524]">
+        <div className="flex items-center gap-2 pt-3 border-t border-[#E5E0D8] dark:border-[#292524] overflow-x-auto pb-1 no-scrollbar">
           <button
             onClick={() => setActivePortalTab("assigned")}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
               activePortalTab === "assigned"
                 ? "bg-[#C84B18] text-white dark:bg-[#EA580C] shadow-xs"
                 : "bg-[#F0ECE4]/60 dark:bg-[#1D1B19] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
@@ -227,7 +229,7 @@ export default function StudentDashboard() {
 
           <button
             onClick={() => setActivePortalTab("submissions")}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
               activePortalTab === "submissions"
                 ? "bg-[#C84B18] text-white dark:bg-[#EA580C] shadow-xs"
                 : "bg-[#F0ECE4]/60 dark:bg-[#1D1B19] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
@@ -239,7 +241,7 @@ export default function StudentDashboard() {
 
           <button
             onClick={() => setActivePortalTab("progress")}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
               activePortalTab === "progress"
                 ? "bg-[#C84B18] text-white dark:bg-[#EA580C] shadow-xs"
                 : "bg-[#F0ECE4]/60 dark:bg-[#1D1B19] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
@@ -478,7 +480,7 @@ export default function StudentDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
             {/* ═══════ LEFT: QUIZ-WISE ATTEMPTS LIST ═══════ */}
-            <div className="lg:col-span-4 space-y-3">
+            <div className={`lg:col-span-4 space-y-3 ${mobileViewingDetail ? "hidden lg:block" : "block"}`}>
               <div className="flex items-center justify-between px-1">
                 <h2 className="text-xs font-bold text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider">
                   Completed Quizzes ({submissions.length})
@@ -494,7 +496,7 @@ export default function StudentDashboard() {
                     <button
                       key={sub.id}
                       onClick={() => loadSubDetail(sub.id)}
-                      className={`w-full text-left p-4 rounded-xl border transition-all text-xs space-y-2.5 ${
+                      className={`w-full text-left p-4 rounded-xl border transition-all text-xs space-y-2.5 cursor-pointer ${
                         isSelected
                           ? "bg-[#C84B18]/5 border-[#C84B18] shadow-xs dark:bg-[#EA580C]/10 dark:border-[#EA580C]"
                           : "bg-white dark:bg-[#171615] border-[#E5E0D8] dark:border-[#292524] hover:border-[#C84B18]/50 hover:bg-[#F0ECE4]/30 dark:hover:bg-[#1D1B19]/30"
@@ -555,15 +557,27 @@ export default function StudentDashboard() {
             </div>
 
             {/* ═══════ RIGHT: DEDICATED QUIZ PERFORMANCE SUMMARY ═══════ */}
-            <div className="lg:col-span-8">
+            <div className={`lg:col-span-8 ${mobileViewingDetail ? "block" : "hidden lg:block"}`}>
               {loadingDetail ? (
                 <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-16 text-center space-y-3">
                   <div className="w-8 h-8 border-2 border-[#C84B18] border-t-transparent rounded-full animate-spin mx-auto" />
                   <p className="text-xs text-[#716D67] font-medium">Loading Quiz Evaluation & Breakdown...</p>
                 </div>
               ) : selectedSubDetail ? (
-                <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-5 md:p-6 shadow-xs space-y-6">
+                <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 sm:p-6 shadow-xs space-y-5 sm:space-y-6">
                   
+                  {/* Mobile Back to List Button */}
+                  <div className="lg:hidden pb-3 border-b border-[#E5E0D8] dark:border-[#292524]">
+                    <button
+                      type="button"
+                      onClick={() => setMobileViewingDetail(false)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E5E0D8] dark:border-[#292524] bg-[#F7F4EF] dark:bg-[#1D1B19] text-xs font-semibold text-[#716D67] hover:text-[#242321] cursor-pointer"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      <span>Back to Completed Quizzes List</span>
+                    </button>
+                  </div>
+
                   {/* Quiz Header & Score Card */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E5E0D8] dark:border-[#292524]">
                     <div>

@@ -135,35 +135,35 @@ export default function PaperStudioModal({
   if (!exam) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-      <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl max-w-4xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 animate-fadeIn">
+      <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-4xl w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[92dvh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-4 shrink-0">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E0D8] dark:border-[#292524] pb-3 sm:pb-4 shrink-0">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#C84B18]/10 text-[#C84B18]">
                 Interactive Paper Studio
               </span>
-              <span className="text-xs text-[#716D67] font-mono">Code: {exam.exam_code}</span>
+              <span className="text-xs text-[#716D67] font-mono truncate">Code: {exam.exam_code}</span>
             </div>
-            <h2 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4] mt-1">{exam.name}</h2>
+            <h2 className="text-sm sm:text-base font-bold text-[#242321] dark:text-[#F5F5F4] mt-1 truncate">{exam.name}</h2>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <a
               href={`/exam/${exam.exam_code || exam.code}?mode=teacher_preview`}
               target="_blank"
               rel="noreferrer"
-              className="px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition-all"
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition-all"
               title="Launch Sandbox Simulator as Student"
             >
               <Play className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>Test Run as Student</span>
+              <span>Test Run</span>
             </a>
             <button
               type="button"
               onClick={() => setIsEditingPaper(!isEditingPaper)}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                 isEditingPaper
                   ? "bg-amber-600 text-white"
                   : "border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321]"
@@ -173,7 +173,7 @@ export default function PaperStudioModal({
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-md text-[#716D67] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] transition-all"
+              className="p-1.5 rounded-lg text-[#716D67] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] transition-all cursor-pointer ml-auto sm:ml-0"
             >
               <X className="h-5 w-5" />
             </button>

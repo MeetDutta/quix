@@ -1,11 +1,32 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "katex/dist/katex.min.css";
 import Providers from "./providers/Providers";
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F7F4EF" },
+    { media: "(prefers-color-scheme: dark)", color: "#0F0E0D" },
+  ],
+};
+
 export const metadata: Metadata = {
   title: "EduQuizX - AI Dynamic Examination & Student Management System",
   description: "EduQuizX Enterprise SaaS Examination platform for schools, colleges, and corporations.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "EduQuizX",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export default function RootLayout({

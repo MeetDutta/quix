@@ -485,8 +485,8 @@ export default function TeacherDashboard() {
       </div>
 
       {/* KPI Cards Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 shadow-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-3.5 sm:p-4 shadow-xs">
           <div className="text-[11px] font-medium text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider flex items-center gap-1.5">
             <Calendar className="h-3.5 w-3.5 text-[#C84B18]" />
             <span>Assessments</span>
@@ -495,7 +495,7 @@ export default function TeacherDashboard() {
           <div className="text-[10px] text-[#716D67] mt-0.5">{exams.filter((e) => e.is_published).length} Published Live</div>
         </div>
 
-        <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 shadow-xs">
+        <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-3.5 sm:p-4 shadow-xs">
           <div className="text-[11px] font-medium text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider flex items-center gap-1.5">
             <BookOpen className="h-3.5 w-3.5 text-[#C84B18]" />
             <span>Vector Docs</span>
@@ -504,7 +504,7 @@ export default function TeacherDashboard() {
           <div className="text-[10px] text-[#716D67] mt-0.5">RAG Indexed Sources</div>
         </div>
 
-        <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 shadow-xs">
+        <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-3.5 sm:p-4 shadow-xs">
           <div className="text-[11px] font-medium text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5 text-[#C84B18]" />
             <span>Cohorts & Classes</span>
@@ -513,7 +513,7 @@ export default function TeacherDashboard() {
           <div className="text-[10px] text-[#716D67] mt-0.5">Academic Mappings</div>
         </div>
 
-        <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 shadow-xs">
+        <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-3.5 sm:p-4 shadow-xs">
           <div className="text-[11px] font-medium text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-[#C84B18]" />
             <span>AI Studio</span>
@@ -635,7 +635,7 @@ export default function TeacherDashboard() {
       {/* ═══════ SECTION 2: CREATE ASSESSMENT WORKFLOW WIZARD ═══════ */}
       {(activeSectionTab === "all" || activeSectionTab === "create") && (
       <section id="create" className="scroll-mt-16 space-y-4">
-        <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 shadow-xs space-y-6">
+        <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-4 sm:p-6 shadow-xs space-y-5 sm:space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#E5E0D8] dark:border-[#292524]">
             <div>
               <h2 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">

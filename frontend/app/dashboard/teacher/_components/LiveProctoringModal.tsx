@@ -83,39 +83,39 @@ export default function LiveProctoringModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-      <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-5xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] flex flex-col relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 animate-fadeIn">
+      <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-4xl w-full p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 max-h-[92dvh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-4 shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E0D8] dark:border-[#292524] pb-3 sm:pb-4 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="relative p-2.5 bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 rounded-xl border border-rose-200 dark:border-rose-900">
+            <div className="relative p-2.5 bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 rounded-xl border border-rose-200 dark:border-rose-900 shrink-0">
               <Radio className="h-5 w-5 animate-pulse" />
               <span className="absolute -top-1 -right-1 flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
               </span>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-base text-[#242321] dark:text-[#F5F5F4]">
-                  Live Proctoring Room: {telemetry?.exam?.name || "Assessment"}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h3 className="font-bold text-sm sm:text-base text-[#242321] dark:text-[#F5F5F4] truncate">
+                  Live Monitor: {telemetry?.exam?.name || "Assessment"}
                 </h3>
-                <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 text-[10px] font-extrabold uppercase tracking-wider">
-                  LIVE TELEMETRY
+                <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider">
+                  LIVE
                 </span>
               </div>
-              <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">
-                Exam Code: <span className="font-mono font-bold text-[#C84B18]">{telemetry?.exam?.exam_code}</span> • Real-time candidate progress & focus tracking
+              <p className="text-[11px] sm:text-xs text-[#716D67] dark:text-[#A8A29E] truncate">
+                Exam Code: <span className="font-mono font-bold text-[#C84B18]">{telemetry?.exam?.exam_code}</span> • Real-time focus tracking
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Auto-Refresh Toggle */}
             <button
               type="button"
               onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                 autoRefresh
                   ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
                   : "bg-stone-100 text-stone-600 border-stone-200 dark:bg-stone-800 dark:text-stone-300"
@@ -130,16 +130,16 @@ export default function LiveProctoringModal({
               type="button"
               disabled={isExtending}
               onClick={() => handleExtendTime(10)}
-              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs transition-all disabled:opacity-50"
+              className="px-2.5 sm:px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
               title="Add 10 extra minutes for all candidates"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span>Grant +10 Mins</span>
+              <span>+10 Mins</span>
             </button>
 
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-[#716D67] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] transition-all ml-1"
+              className="p-1.5 rounded-lg text-[#716D67] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] transition-all ml-auto sm:ml-1 cursor-pointer"
             >
               <X className="h-5 w-5" />
             </button>
@@ -147,7 +147,7 @@ export default function LiveProctoringModal({
         </div>
 
         {/* Real-time KPI Bar */}
-        <div className="grid grid-cols-4 gap-3 shrink-0">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 shrink-0">
           <div className="bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-3 text-center">
             <div className="text-xl font-black text-[#242321] dark:text-[#F5F5F4]">
               {telemetry?.summary?.total_assigned || 0}
