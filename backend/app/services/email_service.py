@@ -12,8 +12,87 @@ class EmailService:
     def __init__(self):
         self.enabled = True
 
+    def _send_email_via_resend(self, to_email: str, subject: str, html_content: str) -> bool:
+        """Transmits email via Resend HTTP REST API over Port 443 (bypasses all cloud SMTP firewall blocks)."""
+        try:
+            import httpx
+            from_addr = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>"
+            # If using free Resend default domain, fallback to onboarding@resend.dev if custom domain not verified
+            if "gmail.com" in settings.EMAILS_FROM_EMAIL.lower() and not getattr(settings, "RESEND_FROM_EMAIL", None):
+                from_addr = f"{settings.EMAILS_FROM_NAME} <onboarding@resend.dev>"
+            elif hasattr(settings, "RESEND_FROM_EMAIL") and getattr(settings, "RESEND_FROM_EMAIL", None):
+                from_addr = getattr(settings, "RESEND_FROM_EMAIL")
+
+            res = httpx.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "from": from_addr,
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": html_content
+                },
+                timeout=12.0
+            )
+            if res.status_code in (200, 201):
+                logger.info(f"⚡ Real Resend HTTP API (Port 443) email delivered to {to_email}")
+                print(f"⚡ Real Resend HTTP API (Port 443) email delivered to {to_email}")
+                return True
+            else:
+                logger.warning(f"⚠️ Resend HTTP API rejected with status {res.status_code}: {res.text}")
+                print(f"⚠️ Resend HTTP API rejected with status {res.status_code}: {res.text}")
+                return False
+        except Exception as e:
+            logger.warning(f"⚠️ Resend HTTP API exception: {e}")
+            print(f"⚠️ Resend HTTP API exception: {e}")
+            return False
+
+    def _send_email_via_sendgrid(self, to_email: str, subject: str, html_content: str) -> bool:
+        """Transmits email via SendGrid HTTP API over Port 443."""
+        try:
+            import httpx
+            res = httpx.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                headers={
+                    "Authorization": f"Bearer {settings.SENDGRID_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "personalizations": [{"to": [{"email": to_email}]}],
+                    "from": {"email": settings.EMAILS_FROM_EMAIL, "name": settings.EMAILS_FROM_NAME},
+                    "subject": subject,
+                    "content": [{"type": "text/html", "value": html_content}]
+                },
+                timeout=12.0
+            )
+            if res.status_code in (200, 202):
+                logger.info(f"⚡ Real SendGrid HTTP API (Port 443) email delivered to {to_email}")
+                print(f"⚡ Real SendGrid HTTP API (Port 443) email delivered to {to_email}")
+                return True
+            else:
+                logger.warning(f"⚠️ SendGrid HTTP API rejected with status {res.status_code}: {res.text}")
+                print(f"⚠️ SendGrid HTTP API rejected with status {res.status_code}: {res.text}")
+                return False
+        except Exception as e:
+            logger.warning(f"⚠️ SendGrid HTTP API exception: {e}")
+            return False
+
     def _send_smtp_email(self, to_email: str, subject: str, html_content: str):
-        """Transmits raw HTML email via SMTP server if settings are configured in backend environment."""
+        """Transmits HTML email via Resend HTTP API (primary for Render) or SMTP server."""
+        # 1. Primary for Cloud: Resend HTTP REST API (Never blocked by cloud firewalls on Render/Vercel)
+        if getattr(settings, "RESEND_API_KEY", None):
+            if self._send_email_via_resend(to_email, subject, html_content):
+                return True
+
+        # 2. Secondary HTTP: SendGrid API
+        if getattr(settings, "SENDGRID_API_KEY", None):
+            if self._send_email_via_sendgrid(to_email, subject, html_content):
+                return True
+
+        # 3. Direct SMTP Server (SSL 465 then STARTTLS 587)
         if settings.SMTP_HOST and settings.SMTP_USER:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
@@ -21,10 +100,10 @@ class EmailService:
             msg["To"] = to_email
             msg.attach(MIMEText(html_content, "html"))
             
-            # Primary Attempt: SSL Port 465 (bypasses cloud Port 587 blocks on Render)
+            # Primary Attempt: SSL Port 465 (12s timeout for cloud latency)
             try:
                 context = ssl.create_default_context()
-                with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, context=context, timeout=5) as server:
+                with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, context=context, timeout=12) as server:
                     server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                     server.send_message(msg)
                 logger.info(f"⚡ Real SMTP SSL (Port 465) email transmitted to {to_email}")
@@ -35,7 +114,7 @@ class EmailService:
                 print(f"⚠️ Primary SSL 465 failed ({primary_err}), attempting STARTTLS 587 fallback...")
                 try:
                     # Fallback Attempt: STARTTLS Port 587
-                    with smtplib.SMTP(settings.SMTP_HOST, 587, timeout=5) as server:
+                    with smtplib.SMTP(settings.SMTP_HOST, 587, timeout=12) as server:
                         server.starttls()
                         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                         server.send_message(msg)
@@ -43,12 +122,24 @@ class EmailService:
                     print(f"⚡ Fallback STARTTLS (Port 587) email transmitted to {to_email}")
                     return True
                 except Exception as fallback_err:
-                    logger.error(f"❌ SMTP delivery failed for {to_email}: SSL 465={primary_err}, STARTTLS 587={fallback_err}")
-                    print(f"❌ SMTP delivery failed for {to_email}: SSL 465={primary_err}, STARTTLS 587={fallback_err}")
+                    logger.error(
+                        f"❌ Cloud Email Delivery Alert: Outbound SMTP blocked on server for {to_email}. "
+                        f"Errors: SSL 465={primary_err}, STARTTLS 587={fallback_err}. "
+                        f"NOTE: Render Free Tier blocks outbound SMTP ports 25/465/587 by default. "
+                        f"To enable email delivery on Render, add RESEND_API_KEY (free at resend.com) to your Render Environment Variables."
+                    )
+                    print(
+                        f"❌ Cloud Email Delivery Alert: Outbound SMTP blocked on server for {to_email}. "
+                        f"Render Free Tier blocks outbound SMTP ports 25/465/587. "
+                        f"Set RESEND_API_KEY in Render Environment Variables for instant HTTPS delivery."
+                    )
                     return False
         else:
-            logger.warning(f"⚠️ SMTP credentials not set on server. Missing SMTP_HOST ('{settings.SMTP_HOST}') or SMTP_USER ('{settings.SMTP_USER}').")
-            print(f"⚠️ SMTP credentials not set on server. Missing SMTP_HOST ('{settings.SMTP_HOST}') or SMTP_USER ('{settings.SMTP_USER}').")
+            logger.warning(
+                f"⚠️ SMTP credentials not configured. Missing SMTP_HOST ('{settings.SMTP_HOST}') or SMTP_USER ('{settings.SMTP_USER}'). "
+                f"Set RESEND_API_KEY or SMTP credentials in your Render Environment Variables."
+            )
+            print(f"⚠️ SMTP credentials not set on server. Missing SMTP_HOST or SMTP_USER.")
             return False
 
     def send_student_authorization_email(self, student_name: str, email: str, verification_token: str, roll_number: Optional[str] = None):

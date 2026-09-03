@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,6 +32,10 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = "bpofgsqqgmbectsb"
     EMAILS_FROM_EMAIL: str = "aegeusexams@gmail.com"
     EMAILS_FROM_NAME: str = "EduQuizX Examination System"
+    
+    # HTTP Email APIs (Recommended for Render, Heroku, or clouds blocking SMTP ports 465/587)
+    RESEND_API_KEY: Optional[str] = None
+    SENDGRID_API_KEY: Optional[str] = None
     
     # Allowed CORS origins (comma-separated string or wildcard)
     ALLOWED_ORIGINS: str = "*"

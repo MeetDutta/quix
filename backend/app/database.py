@@ -5,6 +5,8 @@ import os
 
 raw_db_url = settings.DATABASE_URL or ""
 db_url = raw_db_url.strip().strip('"').strip("'")
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 def create_sqlite_engine(url="sqlite:///quiz.db"):
     eng = create_engine(url, connect_args={"check_same_thread": False, "timeout": 15}, pool_pre_ping=True)
