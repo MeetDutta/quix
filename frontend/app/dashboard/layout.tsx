@@ -601,11 +601,11 @@ export default function DashboardLayout({
               <Menu className="h-5 w-5" />
             </button>
 
-            <div className="flex items-center gap-2 text-xs text-[#716D67] dark:text-[#A8A29E]">
-              <span className="font-medium">EduQuizX</span>
-              <span>/</span>
-              <span className="font-bold text-[#242321] dark:text-[#F5F5F4]">
-                {pathname === "/dashboard/teacher" ? "Quiz Creator Studio" : "Student Portal"}
+            <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-[#716D67] dark:text-[#A8A29E] min-w-0">
+              <span className="hidden sm:inline font-medium">EduQuizX</span>
+              <span className="hidden sm:inline">/</span>
+              <span className="font-bold text-[#242321] dark:text-[#F5F5F4] truncate max-w-[120px] sm:max-w-none">
+                {pathname === "/dashboard/teacher" ? "Creator Studio" : "Student Portal"}
               </span>
               <a 
                 href="/" 

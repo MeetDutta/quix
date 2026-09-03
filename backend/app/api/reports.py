@@ -38,7 +38,7 @@ def get_exam_analytics(
     total_credentials = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).count()
     submissions = db.query(ExamSubmission).filter(
         ExamSubmission.exam_id == exam_id, 
-        ExamSubmission.status == "submitted"
+        ExamSubmission.status.in_(["submitted", "auto_submitted"])
     ).order_by(ExamSubmission.score.desc()).all()
     
     attendance_count = len(submissions)
@@ -232,7 +232,7 @@ def export_exam_csv(
         
     submissions = db.query(ExamSubmission).filter(
         ExamSubmission.exam_id == exam_id, 
-        ExamSubmission.status == "submitted"
+        ExamSubmission.status.in_(["submitted", "auto_submitted"])
     ).order_by(ExamSubmission.score.desc()).all()
     
     exam_candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam_id).all()
@@ -650,7 +650,7 @@ def get_leaderboard(
     """Leaderboard ranking for a specific exam."""
     submissions = db.query(ExamSubmission).filter(
         ExamSubmission.exam_id == exam_id,
-        ExamSubmission.status == "submitted"
+        ExamSubmission.status.in_(["submitted", "auto_submitted"])
     ).order_by(ExamSubmission.score.desc()).all()
     
     board = []

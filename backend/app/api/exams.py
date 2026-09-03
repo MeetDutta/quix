@@ -140,13 +140,15 @@ def generate_exam_from_kb(
         chunks = rag_service.search_similarity(
             query=req.topic or "General Concept", 
             limit=15, 
-            document_ids=subject_doc_ids
+            document_ids=subject_doc_ids,
+            workspace_id=current_workspace.id
         )
     elif req.subject_id:
         chunks = rag_service.search_similarity(
             query=req.topic or "General Concept", 
             limit=15, 
-            subject_id=req.subject_id
+            subject_id=req.subject_id,
+            workspace_id=current_workspace.id
         )
 
     # 3. Direct DB fallback: If vector store is sparse, pull actual chunks from database table
@@ -1161,7 +1163,8 @@ def regenerate_single_question(
     chunks = rag_service.search_similarity(
         query=req.topic or req.custom_instruction or "Core domain concepts",
         limit=5,
-        subject_id=exam.subject_id
+        subject_id=exam.subject_id,
+        workspace_id=exam.workspace_id
     )
     
     if not chunks:
@@ -1501,6 +1504,10 @@ def get_exam_live_monitor(
             status_label = "in_progress"
             in_progress_count += 1
 
+        proctor_flags_count = 0
+        if sub:
+            proctor_flags_count = db.query(ProctoringLog).filter(ProctoringLog.submission_id == sub.id).count()
+
         candidates_list.append({
             "credential_id": c.id,
             "student_id": std.id if std else None,
@@ -1511,6 +1518,7 @@ def get_exam_live_monitor(
             "status": status_label,
             "answered_count": answered_count,
             "total_questions": total_questions,
+            "proctor_flags_count": proctor_flags_count,
             "score": score,
             "started_at": started_at,
             "submitted_at": submitted_at

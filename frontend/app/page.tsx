@@ -227,7 +227,7 @@ export default function UnifiedHomePage() {
           {/* CARD 1: CREATE TEST (TEACHER STUDIO) */}
           <div
             onClick={handleTeacherModeSelect}
-            className="group relative bg-white dark:bg-[#171615] rounded-3xl p-7 sm:p-8 border-2 border-[#E5E0D8] dark:border-[#292524] hover:border-[#C84B18] dark:hover:border-[#EA580C] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden"
+            className="group relative bg-white dark:bg-[#171615] rounded-3xl p-5 sm:p-8 border-2 border-[#E5E0D8] dark:border-[#292524] hover:border-[#C84B18] dark:hover:border-[#EA580C] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden"
           >
             <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#C84B18] via-amber-500 to-[#C84B18]" />
             
@@ -284,7 +284,7 @@ export default function UnifiedHomePage() {
           {/* CARD 2: TAKE TEST (STUDENT PORTAL) */}
           <div
             onClick={handleStudentModeSelect}
-            className="group relative bg-white dark:bg-[#171615] rounded-3xl p-7 sm:p-8 border-2 border-[#E5E0D8] dark:border-[#292524] hover:border-emerald-600 dark:hover:border-emerald-500 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden"
+            className="group relative bg-white dark:bg-[#171615] rounded-3xl p-5 sm:p-8 border-2 border-[#E5E0D8] dark:border-[#292524] hover:border-emerald-600 dark:hover:border-emerald-500 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden"
           >
             <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600" />
             

@@ -261,17 +261,32 @@ def get_exam_info(token: str, db: Session = Depends(get_db)):
     
     # Strip answers from questions payload before serving to student if in active exam!
     questions = json.loads(exam.questions_json) if exam.questions_json else []
+    settings_dict = json.loads(exam.settings_json) if exam.settings_json else {}
+
     student_questions = []
     for q in questions:
+        opts = list(q.get("options")) if (q.get("options") and isinstance(q.get("options"), list)) else q.get("options")
+        # Deterministic option shuffling per candidate if enabled
+        if settings_dict.get("shuffle_options") and isinstance(opts, list):
+            import random
+            opt_rng = random.Random(f"{sub.id}_{q['id']}")
+            opt_rng.shuffle(opts)
+
         student_questions.append({
             "id": q["id"],
             "question_text": q["question_text"],
             "question_type": q["question_type"],
-            "options": q.get("options"),
-            "marks": q.get("marks", 1)
+            "options": opts,
+            "marks": q.get("marks", 1),
+            "code_snippet": q.get("code_snippet"),
+            "code_language": q.get("code_language")
         })
-        
-    settings_dict = json.loads(exam.settings_json) if exam.settings_json else {}
+
+    # Deterministic question order shuffling per candidate if enabled
+    if settings_dict.get("shuffle_questions") and student_questions:
+        import random
+        q_rng = random.Random(sub.id)
+        q_rng.shuffle(student_questions)
     
     # Fetch existing progress
     saved_answers = json.loads(sub.answers_json) if (not is_completed and sub.answers_json) else {}
@@ -565,8 +580,8 @@ def save_progress(token: str, progress: Dict[str, Any], db: Session = Depends(ge
     return {"message": "Progress auto-saved."}
 
 @router.post("/proctor-alert")
-def proctor_alert(token: str, alert: ProctorLogCreate, db: Session = Depends(get_db)):
-    """Logs proctoring incidents (tab switches, resizing, dev tools, copy/paste)."""
+async def proctor_alert(token: str, alert: ProctorLogCreate, db: Session = Depends(get_db)):
+    """Logs proctoring incidents (tab switches, resizing, dev tools, copy/paste) and broadcasts to teacher live streams."""
     sub = get_submission_by_token(token, db)
     log = ProctoringLog(
         submission_id=sub.id,
@@ -575,7 +590,39 @@ def proctor_alert(token: str, alert: ProctorLogCreate, db: Session = Depends(get
     )
     db.add(log)
     db.commit()
-    return {"message": "Proctor event logged."}
+
+    # Resolve candidate details for live alert HUD
+    cand_name = "Candidate"
+    roll_no = ""
+    if sub.credential and sub.credential.student and sub.credential.student.user:
+        cand_name = sub.credential.student.user.full_name
+        roll_no = sub.credential.student.roll_number or ""
+    elif sub.credential:
+        from app.models.candidate import ExamCandidate
+        candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == sub.exam_id).all()
+        for c in candidates:
+            clean_name = "".join(ch for ch in c.name_snapshot.split()[0].lower() if ch.isalnum())
+            if clean_name in sub.credential.username.lower() or (c.roll_number_snapshot and c.roll_number_snapshot.lower() in sub.credential.username.lower()):
+                cand_name = c.name_snapshot
+                roll_no = c.roll_number_snapshot or ""
+                break
+        if cand_name == "Candidate" and candidates:
+            cand_name = candidates[0].name_snapshot
+            roll_no = candidates[0].roll_number_snapshot or ""
+
+    # Broadcast alert to all active teacher connections
+    await manager.broadcast_proctor_alert(
+        exam_id=sub.exam_id,
+        message={
+            "student_name": cand_name,
+            "roll_number": roll_no,
+            "event_type": alert.event_type,
+            "event_details": alert.event_details,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+
+    return {"message": "Proctor event logged and broadcasted."}
 
 @router.post("/submit")
 def submit_exam(token: str, db: Session = Depends(get_db)):

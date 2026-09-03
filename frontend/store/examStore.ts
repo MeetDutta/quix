@@ -25,13 +25,27 @@ export const useExamStore = create<ExamState>((set) => ({
   proctorEventsCount: 0,
   
   setExamSession: (token, name, duration, questions, savedAnswers = {}, serverTimeRemaining) => {
+    // Merge server saved answers with any un-synced local buffer from browser storage
+    let effectiveAnswers = { ...savedAnswers };
+    if (typeof window !== 'undefined') {
+      try {
+        const localRaw = localStorage.getItem(`answers_${token}`);
+        if (localRaw) {
+          const localParsed = JSON.parse(localRaw);
+          if (localParsed && typeof localParsed === 'object') {
+            effectiveAnswers = { ...effectiveAnswers, ...localParsed };
+          }
+        }
+      } catch {}
+    }
+
     set({
       sessionToken: token,
       examName: name,
       durationMinutes: duration,
       timeRemainingSeconds: serverTimeRemaining !== undefined ? serverTimeRemaining : duration * 60,
       questions,
-      answers: savedAnswers,
+      answers: effectiveAnswers,
       proctorEventsCount: 0
     });
   },
@@ -40,8 +54,10 @@ export const useExamStore = create<ExamState>((set) => ({
     set((state) => {
       const newAnswers = { ...state.answers, [questionId]: answer };
       // Save locally to support offline recovery!
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(`answers_${state.sessionToken}`, JSON.stringify(newAnswers));
+      if (typeof window !== 'undefined' && state.sessionToken) {
+        try {
+          localStorage.setItem(`answers_${state.sessionToken}`, JSON.stringify(newAnswers));
+        } catch {}
       }
       return { answers: newAnswers };
     });
@@ -60,14 +76,21 @@ export const useExamStore = create<ExamState>((set) => ({
   },
   
   clearExamSession: () => {
-    set({
-      sessionToken: null,
-      examName: null,
-      durationMinutes: 0,
-      timeRemainingSeconds: 0,
-      questions: [],
-      answers: {},
-      proctorEventsCount: 0
+    set((state) => {
+      if (typeof window !== 'undefined' && state.sessionToken) {
+        try {
+          localStorage.removeItem(`answers_${state.sessionToken}`);
+        } catch {}
+      }
+      return {
+        sessionToken: null,
+        examName: null,
+        durationMinutes: 0,
+        timeRemainingSeconds: 0,
+        questions: [],
+        answers: {},
+        proctorEventsCount: 0
+      };
     });
   }
 }));
