@@ -8,6 +8,11 @@ db_url = raw_db_url.strip().strip('"').strip("'")
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
+# Ensure Supabase connections enforce SSL mode
+if ("supabase.co" in db_url or "pooler.supabase.com" in db_url) and "sslmode" not in db_url:
+    delimiter = "&" if "?" in db_url else "?"
+    db_url = f"{db_url}{delimiter}sslmode=require"
+
 def create_sqlite_engine(url="sqlite:///quiz.db"):
     eng = create_engine(url, connect_args={"check_same_thread": False, "timeout": 15}, pool_pre_ping=True)
     @event.listens_for(eng, "connect")
@@ -46,7 +51,7 @@ else:
     try:
         test_engine = create_engine(
             db_url, 
-            connect_args={"connect_timeout": 5},
+            connect_args={"connect_timeout": 15},
             pool_size=10, 
             max_overflow=20, 
             pool_recycle=300, 
@@ -54,6 +59,8 @@ else:
         )
         with test_engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+        host_preview = db_url.split("@")[-1].split("/")[0] if "@" in db_url else "remote"
+        print(f"✅ [Database] Connected successfully to remote PostgreSQL ({host_preview})")
         engine = test_engine
     except Exception as e:
         print(f"[Database Notice] Remote PostgreSQL unreachable: {e}. Gracefully falling back to persistent SQLite at {get_sqlite_path()}.")
