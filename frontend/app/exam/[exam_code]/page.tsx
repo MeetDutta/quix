@@ -8,9 +8,9 @@ import { apiFetch, API_V1 } from "../../../lib/api";
 import { useToast } from "../../../components/Toast";
 import { 
   AlertCircle, Lock, Timer, Flag, ChevronLeft, ChevronRight, 
-  CheckSquare, ShieldAlert, CheckCircle2, FileText, Clock, 
+  CheckSquare, ShieldAlert, ShieldCheck, CheckCircle2, FileText, Clock, 
   CalendarClock, Calculator, Maximize2, Minimize2, Sparkles,
-  ArrowRight, ArrowLeft, RefreshCw, Trophy, Home
+  ArrowRight, ArrowLeft, RefreshCw, Trophy, Home, Play
 } from "lucide-react";
 import MathText from "../../../components/MathText";
 import ExamCalculator from "../../../components/ExamCalculator";
@@ -483,15 +483,15 @@ export default function ExamPortal() {
   // ══════════════════════════════════════════════════════════════════════
   if (!isLogged && !submittedResult) {
     return (
-      <div className="min-h-screen bg-[#F7F4EF] dark:bg-[#0E0D0C] flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-8 shadow-xl space-y-6 animate-fadeIn">
+      <div className="min-h-screen bg-[#F7F4EF] dark:bg-[#0E0D0C] flex flex-col items-center justify-center p-3 sm:p-4">
+        <div className="max-w-md w-full bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-5 sm:p-8 shadow-xl space-y-5 sm:space-y-6 animate-fadeIn">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#C84B18]/10 text-[#C84B18] rounded-xl flex items-center justify-center font-bold font-serif text-lg">
+            <div className="w-10 h-10 bg-[#C84B18]/10 text-[#C84B18] rounded-xl flex items-center justify-center font-bold font-serif text-lg shrink-0">
               EQ
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-[#242321] dark:text-[#F5F5F4]">Candidate Examination Gateway</h1>
-              <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-[#242321] dark:text-[#F5F5F4] truncate">Candidate Examination Gateway</h1>
+              <p className="text-xs text-[#716D67] dark:text-[#A8A29E] truncate">
                 Assessment Code: <b className="font-mono text-[#C84B18]">{examCode}</b>
               </p>
             </div>
@@ -506,15 +506,16 @@ export default function ExamPortal() {
 
           {/* 1-Click Direct Start for Authenticated User */}
           {authToken && (
-            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-2.5">
+            <div className="p-3.5 sm:p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                  Signed in as {authFullName || "Student"}
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50">
-                  Active User
-                </span>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>Authenticated Account Detected</span>
+                </div>
               </div>
+              <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                You are logged in. Click below to begin immediately with your profile:
+              </p>
               <button
                 type="button"
                 onClick={handleDirectStudentStart}
@@ -528,8 +529,8 @@ export default function ExamPortal() {
                   </>
                 ) : (
                   <>
-                    <Play className="h-4 w-4 fill-current" />
-                    <span>1-Click Launch Exam as {authFullName || "Student"}</span>
+                    <Play className="h-4 w-4 fill-current shrink-0" />
+                    <span className="truncate">Launch Exam as {authFullName || "Student"}</span>
                   </>
                 )}
               </button>
@@ -604,8 +605,8 @@ export default function ExamPortal() {
   if (submittedResult) {
     const isPass = submittedResult.is_passed;
     return (
-      <div className="min-h-screen bg-[#F7F4EF] dark:bg-[#0E0D0C] flex flex-col items-center justify-center p-4">
-        <div className="max-w-xl w-full bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-8 shadow-2xl space-y-6 text-center animate-fadeIn">
+      <div className="min-h-screen bg-[#F7F4EF] dark:bg-[#0E0D0C] flex flex-col items-center justify-center p-3 sm:p-4">
+        <div className="max-w-xl w-full bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-5 sm:p-8 shadow-2xl space-y-5 sm:space-y-6 text-center animate-fadeIn">
           <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto ${
             isPass ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40" : "bg-rose-100 text-rose-600 dark:bg-rose-950/40"
           }`}>
@@ -681,7 +682,7 @@ export default function ExamPortal() {
   }).length;
 
   return (
-    <div className="min-h-screen bg-[#F7F4EF] dark:bg-[#0E0D0C] flex flex-col pb-20 lg:pb-0">
+    <div className="min-h-screen bg-[#F7F4EF] dark:bg-[#0E0D0C] flex flex-col pb-28 lg:pb-6">
       {/* Top HUD Bar */}
       <ExamHeaderHUD
         examName={examStore.examName || "Assessment"}
@@ -718,7 +719,17 @@ export default function ExamPortal() {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  {examStore.answers[currentQ.id] && (
+                    <button
+                      type="button"
+                      onClick={() => saveAnswerState(currentQ.id, null)}
+                      className="px-2 sm:px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-[#716D67] hover:text-rose-600 dark:hover:text-rose-400 border border-dashed border-[#E5E0D8] dark:border-[#292524] transition-all cursor-pointer"
+                      title="Clear your selected answer"
+                    >
+                      <span>Clear</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() =>
@@ -731,7 +742,8 @@ export default function ExamPortal() {
                     }`}
                   >
                     <Flag className="h-3.5 w-3.5" />
-                    <span>{flagged[currentQ.id] ? "Marked" : "Mark for Review"}</span>
+                    <span className="hidden xs:inline">{flagged[currentQ.id] ? "Marked" : "Mark for Review"}</span>
+                    <span className="xs:hidden">{flagged[currentQ.id] ? "Marked" : "Review"}</span>
                   </button>
                 </div>
               </div>
@@ -740,6 +752,19 @@ export default function ExamPortal() {
               <div className="text-sm sm:text-base font-medium text-[#242321] dark:text-[#F5F5F4] leading-relaxed">
                 <MathText text={currentQ.question_text || "No question stem provided."} />
               </div>
+
+              {/* Optional Code Snippet Block */}
+              {currentQ.code_snippet && (
+                <div className="rounded-xl bg-[#1E1E1E] text-[#D4D4D4] p-3.5 sm:p-4 overflow-x-auto border border-[#333] font-mono text-xs leading-relaxed my-2 shadow-inner">
+                  {currentQ.code_language && (
+                    <div className="text-[10px] text-stone-400 uppercase tracking-widest pb-1.5 border-b border-stone-700/60 mb-2 font-bold flex items-center justify-between">
+                      <span>{currentQ.code_language}</span>
+                      <span className="text-[9px] lowercase bg-stone-800 text-stone-300 px-2 py-0.5 rounded font-sans">syntax preview</span>
+                    </div>
+                  )}
+                  <pre className="whitespace-pre overflow-x-auto"><code>{currentQ.code_snippet}</code></pre>
+                </div>
+              )}
 
               {/* Option Cards for MCQs / Objective */}
               {currentQ.options && Array.isArray(currentQ.options) && currentQ.options.length > 0 ? (
@@ -922,8 +947,16 @@ export default function ExamPortal() {
 
       {/* Mobile Question Palette Bottom Sheet Drawer */}
       {isPaletteMobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end justify-center p-0 animate-fadeIn">
-          <div className="w-full bg-[#FFFFFF] dark:bg-[#171615] rounded-t-2xl max-h-[85vh] overflow-hidden shadow-2xl pb-safe">
+        <div 
+          onClick={() => setIsPaletteMobileOpen(false)}
+          className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end justify-center p-0 animate-fadeIn"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-full bg-[#FFFFFF] dark:bg-[#171615] rounded-t-2xl max-h-[85vh] overflow-hidden shadow-2xl pb-safe border-t border-[#E5E0D8] dark:border-[#292524]"
+          >
+            {/* Mobile Sheet Drag / Dismiss Indicator */}
+            <div className="w-12 h-1.5 bg-stone-300 dark:bg-stone-700 rounded-full mx-auto my-2 shrink-0" />
             <QuestionPalette
               questions={examStore.questions}
               currentIndex={currentIndex}

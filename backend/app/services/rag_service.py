@@ -209,10 +209,17 @@ class RAGService:
             vector.append(val)
         return vector
 
-    def add_document_to_index(self, doc_id: str, doc_title: str, chunks: List[Dict[str, Any]], subject_id: Optional[str] = None):
+    def add_document_to_index(
+        self, 
+        doc_id: str, 
+        doc_title: str, 
+        chunks: List[Dict[str, Any]], 
+        subject_id: Optional[str] = None,
+        workspace_id: Optional[str] = None
+    ):
         """
         Generates embeddings for chunks and appends them to local index.
-        Stores subject_id for strict subject-level vector search scoping.
+        Stores subject_id and workspace_id for strict multi-tenant vector search scoping.
         """
         for c in chunks:
             clean_content = self._sanitize_unicode(c["content"])
@@ -221,6 +228,7 @@ class RAGService:
                 "chunk_id": f"{doc_id}_{c.get('chunk_index', 0)}",
                 "document_id": doc_id,
                 "subject_id": subject_id,
+                "workspace_id": workspace_id,
                 "doc_title": self._sanitize_unicode(doc_title),
                 "content": clean_content,
                 "page_number": c.get("page_number", 1),
@@ -228,16 +236,26 @@ class RAGService:
             })
         self._save_vectors()
 
-    def index_document(self, document_id: str = "", doc_title: str = "", chunks: Optional[List[Dict[str, Any]]] = None, subject_id: Optional[str] = None, **kwargs):
+    def index_document(
+        self, 
+        document_id: str = "", 
+        doc_title: str = "", 
+        chunks: Optional[List[Dict[str, Any]]] = None, 
+        subject_id: Optional[str] = None, 
+        workspace_id: Optional[str] = None,
+        **kwargs
+    ):
         """
         Backward-compatible alias for add_document_to_index supporting document_id or doc_id.
         """
         actual_doc_id = document_id or kwargs.get("doc_id", "")
+        actual_ws_id = workspace_id or kwargs.get("workspace_id")
         return self.add_document_to_index(
             doc_id=actual_doc_id,
             doc_title=doc_title,
             chunks=chunks or [],
-            subject_id=subject_id
+            subject_id=subject_id,
+            workspace_id=actual_ws_id
         )
 
     def remove_document_from_index(self, doc_id: str):
@@ -252,17 +270,20 @@ class RAGService:
         query: str, 
         limit: int = 5, 
         document_ids: Optional[List[str]] = None,
-        subject_id: Optional[str] = None
+        subject_id: Optional[str] = None,
+        workspace_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Finds the top similarity matches using Cosine Similarity.
-        Filterable by dynamic list of document IDs or specific subject_id.
+        Filterable by dynamic list of document IDs, specific subject_id, and multi-tenant workspace_id.
         """
         query_vector = self.compute_embedding(query)
         scored_chunks = []
         
-        # Filter vectors if document_ids or subject_id are provided
+        # Filter vectors if workspace_id, document_ids or subject_id are provided
         target_vectors = self.vectors
+        if workspace_id:
+            target_vectors = [v for v in target_vectors if not v.get("workspace_id") or v.get("workspace_id") == workspace_id]
         if subject_id:
             target_vectors = [v for v in target_vectors if v.get("subject_id") and str(v.get("subject_id")).strip().lower() == str(subject_id).strip().lower()]
         if document_ids:
@@ -276,6 +297,7 @@ class RAGService:
                 "page_number": v["page_number"],
                 "document_id": v["document_id"],
                 "subject_id": v.get("subject_id"),
+                "workspace_id": v.get("workspace_id"),
                 "doc_title": v["doc_title"],
                 "score": score
             })

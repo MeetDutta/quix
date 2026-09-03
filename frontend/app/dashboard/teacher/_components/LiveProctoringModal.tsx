@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import { 
   X, Radio, Users, Clock, ShieldAlert, CheckCircle2, 
-  AlertTriangle, RefreshCw, Plus, Play, Pause, Search, UserCheck
+  AlertTriangle, RefreshCw, Plus, Play, Pause, Search, UserCheck,
+  AlertOctagon, Flame
 } from "lucide-react";
-import { API_V1, apiFetch } from "../../../../lib/api";
+import { API_V1, apiFetch, getWebSocketUrl } from "../../../../lib/api";
 import { useAuthStore } from "../../../../store/authStore";
 import { useToast } from "../../../../components/Toast";
 
@@ -20,7 +21,9 @@ interface LiveProctoringModalProps {
 export default function LiveProctoringModal({
   examId,
   exam,
+  alerts,
   onClose,
+  onEndExamEarly,
 }: LiveProctoringModalProps) {
   const { token } = useAuthStore();
   const { showToast } = useToast();
@@ -31,6 +34,8 @@ export default function LiveProctoringModal({
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isExtending, setIsExtending] = useState(false);
+  const [liveAlerts, setLiveAlerts] = useState<any[]>(alerts || []);
+  const [showAlertsDrawer, setShowAlertsDrawer] = useState(false);
 
   const fetchLiveTelemetry = async () => {
     if (!targetExamId) return;
@@ -44,6 +49,35 @@ export default function LiveProctoringModal({
       setLoading(false);
     }
   };
+
+  // Real-time WebSocket connection to proctoring telemetry channel
+  useEffect(() => {
+    if (!targetExamId) return;
+    let ws: WebSocket | null = null;
+    try {
+      const wsUrl = getWebSocketUrl(`/api/v1/attempts/ws/teacher/${targetExamId}`);
+      ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          const alertData = JSON.parse(event.data);
+          setLiveAlerts((prev) => [alertData, ...prev.slice(0, 49)]);
+          showToast(`⚠️ Proctor Violation: ${alertData.student_name} (${alertData.event_type.replace("_", " ")})`, "error");
+          fetchLiveTelemetry();
+        } catch {}
+      };
+
+      ws.onerror = (e) => {
+        console.warn("Proctoring WebSocket notice:", e);
+      };
+    } catch (err) {
+      console.warn("WebSocket init exception:", err);
+    }
+
+    return () => {
+      if (ws) ws.close();
+    };
+  }, [targetExamId]);
 
   useEffect(() => {
     if (!token || !targetExamId) return;
@@ -125,6 +159,20 @@ export default function LiveProctoringModal({
               <span>{autoRefresh ? "Live Sync (4s)" : "Paused"}</span>
             </button>
 
+            {/* Live Violations Stream Button */}
+            <button
+              type="button"
+              onClick={() => setShowAlertsDrawer(!showAlertsDrawer)}
+              className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                liveAlerts.length > 0
+                  ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 animate-pulse"
+                  : "bg-stone-100 text-stone-600 border-stone-200 dark:bg-stone-800 dark:text-stone-300"
+              }`}
+            >
+              <ShieldAlert className="h-3.5 w-3.5 text-rose-600" />
+              <span>Violations ({liveAlerts.length})</span>
+            </button>
+
             {/* Grant +10 Mins Button */}
             <button
               type="button"
@@ -136,6 +184,19 @@ export default function LiveProctoringModal({
               <Plus className="h-3.5 w-3.5" />
               <span>+10 Mins</span>
             </button>
+
+            {/* End Assessment Early Button */}
+            {onEndExamEarly && (
+              <button
+                type="button"
+                onClick={() => onEndExamEarly(targetExamId, telemetry?.exam?.name || "Assessment")}
+                className="px-2.5 sm:px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer"
+                title="Immediately terminate this assessment window for all candidates"
+              >
+                <AlertOctagon className="h-3.5 w-3.5" />
+                <span>End Early</span>
+              </button>
+            )}
 
             <button
               onClick={onClose}
@@ -185,6 +246,49 @@ export default function LiveProctoringModal({
           </div>
         </div>
 
+        {/* Live Proctoring Violations Stream (Collapsible or visible if infractions occurred) */}
+        {showAlertsDrawer && (
+          <div className="border border-rose-300 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-950/20 rounded-xl p-3 space-y-2 max-h-40 overflow-y-auto shrink-0 animate-fadeIn">
+            <div className="flex items-center justify-between text-xs font-bold text-rose-700 dark:text-rose-300">
+              <span className="flex items-center gap-1.5">
+                <Flame className="h-4 w-4 text-rose-600" />
+                Live Anti-Cheat Interceptions Stream ({liveAlerts.length})
+              </span>
+              <button
+                type="button"
+                onClick={() => setLiveAlerts([])}
+                className="text-[11px] underline hover:text-rose-900 dark:hover:text-white"
+              >
+                Clear Feed
+              </button>
+            </div>
+            {liveAlerts.length === 0 ? (
+              <p className="text-[11px] text-[#716D67]">No proctoring violations recorded yet for this session.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {liveAlerts.map((alt, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between bg-white dark:bg-[#1C1A18] px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900/50 text-[11px]"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-[#242321] dark:text-[#F5F5F4]">{alt.student_name}</span>
+                      {alt.roll_number && <span className="text-[#716D67] font-mono text-[10px]">({alt.roll_number})</span>}
+                      <span className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-extrabold text-[9px] uppercase tracking-wider">
+                        {alt.event_type}
+                      </span>
+                      <span className="text-[#716D67] truncate max-w-[120px] sm:max-w-[240px]">{alt.event_details}</span>
+                    </div>
+                    <span className="text-[10px] text-[#716D67] font-mono shrink-0">
+                      {new Date(alt.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Filter / Search Bar */}
         <div className="flex items-center gap-2 shrink-0">
           <div className="relative flex-1">
@@ -200,7 +304,7 @@ export default function LiveProctoringModal({
         </div>
 
         {/* Live Candidates Table */}
-        <div className="flex-1 overflow-y-auto border border-[#E5E0D8] dark:border-[#292524] rounded-xl">
+        <div className="flex-1 overflow-x-auto overflow-y-auto border border-[#E5E0D8] dark:border-[#292524] rounded-xl">
           {loading ? (
             <div className="py-20 text-center space-y-2">
               <RefreshCw className="h-6 w-6 animate-spin text-[#C84B18] mx-auto" />
@@ -217,6 +321,7 @@ export default function LiveProctoringModal({
                   <th className="py-2.5 px-4 font-bold text-[#716D67]">Candidate</th>
                   <th className="py-2.5 px-4 font-bold text-[#716D67]">Username / Roll</th>
                   <th className="py-2.5 px-4 font-bold text-[#716D67]">Status</th>
+                  <th className="py-2.5 px-4 font-bold text-[#716D67]">Proctoring</th>
                   <th className="py-2.5 px-4 font-bold text-[#716D67]">Progress</th>
                   <th className="py-2.5 px-4 font-bold text-[#716D67] text-right">Score</th>
                 </tr>
@@ -255,6 +360,20 @@ export default function LiveProctoringModal({
                         ) : (
                           <span className="px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 font-medium text-[10px]">
                             Not Started
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-4">
+                        {c.proctor_flags_count > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold text-[10px] border border-rose-200 dark:border-rose-900">
+                            <ShieldAlert className="h-3 w-3 text-rose-600" />
+                            <span>{c.proctor_flags_count} flags</span>
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span>Clean</span>
                           </span>
                         )}
                       </td>

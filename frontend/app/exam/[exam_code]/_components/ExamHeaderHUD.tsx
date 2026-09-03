@@ -33,6 +33,9 @@ export default function ExamHeaderHUD({
   onExitSimulation,
   tabSwitchCount = 0,
   proctorEventCount = 0,
+  onTogglePalette,
+  answeredCount,
+  totalQuestions,
 }: ExamHeaderHUDProps) {
   const formatTime = (secs: number) => {
     const h = Math.floor(secs / 3600);
@@ -131,44 +134,26 @@ export default function ExamHeaderHUD({
             </div>
           )}
 
-          {/* Mobile Palette Trigger Button */}
-          {onTogglePalette && (
-            <button
-              type="button"
-              onClick={onTogglePalette}
-              className="lg:hidden p-2 rounded-xl border border-[#E5E0D8] dark:border-[#292524] bg-white dark:bg-[#171615] text-[#716D67] hover:text-[#C84B18] dark:hover:text-white transition-all relative cursor-pointer"
-              title="Open Question Palette"
-              aria-label="Open Question Palette"
-            >
-              <LayoutGrid className="h-4 w-4" />
-              {totalQuestions !== undefined && answeredCount !== undefined && (
-                <span className="absolute -top-1 -right-1 px-1 min-w-[16px] h-4 rounded-full bg-[#C84B18] text-white text-[9px] font-bold flex items-center justify-center">
-                  {answeredCount}
-                </span>
-              )}
-            </button>
-          )}
-
           {/* Calculator Toggle */}
           <button
             type="button"
             onClick={onToggleCalculator}
-            className={`p-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`p-1.5 sm:p-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
               isCalculatorOpen
                 ? "bg-[#C84B18] text-white border-[#C84B18]"
                 : "border-[#E5E0D8] dark:border-[#292524] bg-white dark:bg-[#171615] text-[#716D67] hover:text-[#242321] dark:hover:text-white"
             }`}
             title="Toggle Scientific Calculator"
           >
-            <Calculator className="h-4 w-4" />
+            <Calculator className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             <span className="hidden md:inline">Calculator</span>
           </button>
 
-          {/* Fullscreen Toggle */}
+          {/* Fullscreen Toggle (Desktop / Tablet) */}
           <button
             type="button"
             onClick={onToggleFullscreen}
-            className="p-2 rounded-xl border border-[#E5E0D8] dark:border-[#292524] bg-white dark:bg-[#171615] text-[#716D67] hover:text-[#242321] dark:hover:text-white transition-all cursor-pointer"
+            className="hidden sm:flex p-1.5 sm:p-2 rounded-xl border border-[#E5E0D8] dark:border-[#292524] bg-white dark:bg-[#171615] text-[#716D67] hover:text-[#242321] dark:hover:text-white transition-all cursor-pointer"
             title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen Mode"}
           >
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}

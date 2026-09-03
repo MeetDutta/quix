@@ -119,6 +119,7 @@ def upload_document(
             document_id=doc.id,
             doc_title=doc.title,
             subject_id=subject_id,
+            workspace_id=doc.workspace_id,
             chunks=rag_chunks
         )
         
@@ -188,10 +189,16 @@ def get_kb_subjects(
 def search_kb(
     query_in: SearchQuery,
     document_ids: Optional[List[str]] = Query(None),
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(get_current_user)
 ):
     """Semantic searches the index using cosine similarity and document filters."""
-    results = rag_service.search_similarity(query_in.query, limit=query_in.limit, document_ids=document_ids)
+    results = rag_service.search_similarity(
+        query_in.query, 
+        limit=query_in.limit, 
+        document_ids=document_ids,
+        workspace_id=current_workspace.id
+    )
     
     resp = []
     for r in results:
@@ -207,6 +214,7 @@ def search_kb(
 @router.post("/generate-questions", response_model=List[QuestionResponse])
 def generate_ai_questions(
     config: AIQuestionGenConfig,
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
@@ -221,12 +229,18 @@ def generate_ai_questions(
         from sqlalchemy import func
         docs = db.query(Document).filter(
             func.lower(Document.subject_id) == func.lower(config.subject_id.strip()),
+            Document.workspace_id == current_workspace.id,
             Document.is_deleted == False
         ).all()
         doc_ids = [d.id for d in docs]
         
     query = config.topic if config.topic else f"Questions about subject"
-    chunks = rag_service.search_similarity(query, limit=10, document_ids=doc_ids)
+    chunks = rag_service.search_similarity(
+        query, 
+        limit=10, 
+        document_ids=doc_ids,
+        workspace_id=current_workspace.id
+    )
     
     if not chunks:
         chunks = [{

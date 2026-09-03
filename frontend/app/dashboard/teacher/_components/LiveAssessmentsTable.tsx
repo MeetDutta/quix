@@ -615,8 +615,8 @@ export default function LiveAssessmentsTable({
 
       {/* ═══════ GENERATED CREDENTIALS PREVIEW MODAL ═══════ */}
       {credsModalData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-3xl w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-4 shrink-0">
               <div className="flex items-center gap-3">
@@ -682,7 +682,7 @@ export default function LiveAssessmentsTable({
             </div>
 
             {/* Credentials Table Preview */}
-            <div className="overflow-y-auto flex-1 border border-[#E5E0D8] dark:border-[#292524] rounded-xl overflow-hidden bg-[#F7F4EF]/40 dark:bg-[#141312]/40">
+            <div className="overflow-x-auto overflow-y-auto flex-1 border border-[#E5E0D8] dark:border-[#292524] rounded-xl bg-[#F7F4EF]/40 dark:bg-[#141312]/40">
               <table className="w-full text-xs text-left border-collapse">
                 <thead className="bg-[#E5E0D8]/60 dark:bg-[#292524] text-[#716D67] dark:text-[#A8A29E] uppercase font-bold sticky top-0 z-10">
                   <tr>

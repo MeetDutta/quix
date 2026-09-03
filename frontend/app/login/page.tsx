@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuthStore } from "../../store/authStore";
 import { 
   AlertCircle, 
@@ -25,8 +25,11 @@ import {
 import Script from "next/script";
 import { apiFetch } from "../../lib/api";
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const isRegisterRoute = pathname === "/register" || searchParams.get("mode") === "signup";
   const setAuth = useAuthStore((state) => state.setAuth);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,7 +41,7 @@ export default function LoginPage() {
   const [gisLoaded, setGisLoaded] = useState(false);
 
   // Auth Mode: "signin" | "signup"
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">(isRegisterRoute ? "signup" : "signin");
 
   // Registration Form State
   const [regFullName, setRegFullName] = useState("");
@@ -339,7 +342,8 @@ export default function LoginPage() {
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/80 dark:bg-[#171615]/80 border border-[#E5E0D8] dark:border-[#292524] text-xs font-semibold text-[#C84B18] dark:text-[#EA580C] hover:underline backdrop-blur-xs shadow-xs"
         >
           <BookOpen className="h-3.5 w-3.5" />
-          <span>← View Platform Usage Guide</span>
+          <span className="hidden sm:inline">← View Platform Usage Guide</span>
+          <span className="sm:hidden">Guide</span>
         </a>
 
         <button
@@ -810,5 +814,17 @@ export default function LoginPage() {
 
       {/* ═══════ FORGOT PASSWORD MODAL ═══════ */}
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#F7F4EF] dark:bg-[#0F0E0D] flex items-center justify-center">
+        <div className="w-6 h-6 rounded-full border-2 border-[#C84B18] border-t-transparent animate-spin" />
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }

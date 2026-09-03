@@ -6,7 +6,7 @@ import { useAuthStore } from "../../../store/authStore";
 import { 
   Award, Calendar, FileText, CheckCircle, TrendingUp, BookOpen, Download,
   Trophy, Target, BarChart3, XCircle, ChevronDown, ChevronUp, Medal,
-  RefreshCw, CheckCircle2, AlertCircle, Clock, Sparkles, User, ArrowRight,
+  RefreshCw, CheckCircle2, AlertCircle, Clock, Sparkles, User, ArrowRight, ArrowLeft,
   BookMarked, HelpCircle, ShieldCheck, GraduationCap, Play, Key, Lock, Check,
   Timer, ChevronRight, ExternalLink, FileCode2
 } from "lucide-react";
