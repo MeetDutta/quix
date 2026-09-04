@@ -7,33 +7,9 @@ Detailed step-by-step instructions for starting, running, and operating the **AI
 ## 📋 System Prerequisites
 
 Before starting, ensure you have the following installed on your machine:
-- **Option A (Docker)**: Docker Desktop / Docker Engine & Docker Compose
-- **Option B (Local Dev)**: Python `3.9+`, Node.js `18.0+`, npm `9.0+`
-
----
-
-## 🐳 Starting with Docker (Recommended for Deployment)
-
-You can launch both the FastAPI backend and Next.js frontend with a single command:
-
-```bash
-# From the project root
-docker compose up --build
-```
-
-- **Frontend**: [http://localhost:3000](http://localhost:3000)
-- **Backend API**: [http://localhost:8000](http://localhost:8000)
-- **API Docs (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
-
-To run in detached background mode:
-```bash
-docker compose up -d
-```
-
-To stop containers:
-```bash
-docker compose down
-```
+- Python `3.9+`
+- Node.js `18.0+`
+- npm `9.0+`
 
 ---
 
