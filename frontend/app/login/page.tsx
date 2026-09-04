@@ -19,7 +19,8 @@ import {
   KeyRound, 
   X,
   FileCode2,
-  BookOpen
+  BookOpen,
+  Check
 } from "lucide-react";
 
 import Script from "next/script";
@@ -397,6 +398,114 @@ function LoginContent() {
             </div>
           )}
 
+          {/* ═══════ SIDE-BY-SIDE MODE SELECTION CARDS ═══════ */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#C84B18] dark:text-[#EA580C]" />
+                <span>Select Portal Mode</span>
+              </label>
+              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20">
+                {regRole === "teacher" ? "Instructor Mode" : "Candidate Mode"}
+              </span>
+            </div>
+
+            {/* Always side-by-side on mobile, half screen, and desktop (grid-cols-2) */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              {/* Teacher / Educator Mode Card */}
+              <button
+                type="button"
+                onClick={() => {
+                  setRegRole("teacher");
+                  setTargetDestination("teacher_dashboard");
+                }}
+                className={`group relative rounded-2xl overflow-hidden border-2 text-center transition-all duration-300 cursor-pointer flex flex-col bg-white dark:bg-[#1C1A17] shadow-xs ${
+                  regRole === "teacher"
+                    ? "border-[#C84B18] dark:border-[#EA580C] ring-2 ring-[#C84B18]/30 shadow-md shadow-[#C84B18]/15 scale-[1.02]"
+                    : "border-[#E5E0D8] dark:border-[#292524] hover:border-[#C84B18]/50 opacity-80 hover:opacity-100 hover:scale-[1.01]"
+                }`}
+              >
+                {/* Photo / Visual on Top */}
+                <div className="relative w-full aspect-[4/3] xs:aspect-square overflow-hidden bg-[#F0ECE4] dark:bg-[#242321]">
+                  <img
+                    src="/images/teacher_mode.jpg"
+                    alt="Teacher Mode"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/10 pointer-events-none" />
+
+                  {regRole === "teacher" ? (
+                    <div className="absolute top-2 right-2 bg-[#C84B18] text-white p-1 rounded-full shadow-sm">
+                      <Check className="w-3 h-3 stroke-[3]" />
+                    </div>
+                  ) : (
+                    <div className="absolute top-2 right-2 w-4 h-4 rounded-full border border-white/70 bg-black/30 backdrop-blur-xs" />
+                  )}
+
+                  <span className="absolute bottom-1.5 left-2 px-2 py-0.5 rounded-full text-[9px] font-bold bg-black/65 text-white backdrop-blur-xs">
+                    Instructor
+                  </span>
+                </div>
+
+                {/* Bold Centered Title on Bottom */}
+                <div className="p-2.5 sm:p-3 bg-white dark:bg-[#171615]">
+                  <h3 className="font-extrabold text-xs sm:text-sm text-[#242321] dark:text-[#F5F5F4] group-hover:text-[#C84B18] dark:group-hover:text-[#EA580C] transition-colors leading-tight">
+                    Teacher Mode
+                  </h3>
+                  <p className="text-[10px] text-[#716D67] dark:text-[#A8A29E] mt-0.5 truncate">
+                    Create & Proctor
+                  </p>
+                </div>
+              </button>
+
+              {/* Student / Candidate Mode Card */}
+              <button
+                type="button"
+                onClick={() => {
+                  setRegRole("student");
+                  setTargetDestination("student_dashboard");
+                }}
+                className={`group relative rounded-2xl overflow-hidden border-2 text-center transition-all duration-300 cursor-pointer flex flex-col bg-white dark:bg-[#1C1A17] shadow-xs ${
+                  regRole === "student"
+                    ? "border-emerald-600 dark:border-emerald-500 ring-2 ring-emerald-600/30 shadow-md shadow-emerald-600/15 scale-[1.02]"
+                    : "border-[#E5E0D8] dark:border-[#292524] hover:border-emerald-500/50 opacity-80 hover:opacity-100 hover:scale-[1.01]"
+                }`}
+              >
+                {/* Photo / Visual on Top */}
+                <div className="relative w-full aspect-[4/3] xs:aspect-square overflow-hidden bg-[#F0ECE4] dark:bg-[#242321]">
+                  <img
+                    src="/images/student_mode.jpg"
+                    alt="Student Mode"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/10 pointer-events-none" />
+
+                  {regRole === "student" ? (
+                    <div className="absolute top-2 right-2 bg-emerald-600 text-white p-1 rounded-full shadow-sm">
+                      <Check className="w-3 h-3 stroke-[3]" />
+                    </div>
+                  ) : (
+                    <div className="absolute top-2 right-2 w-4 h-4 rounded-full border border-white/70 bg-black/30 backdrop-blur-xs" />
+                  )}
+
+                  <span className="absolute bottom-1.5 left-2 px-2 py-0.5 rounded-full text-[9px] font-bold bg-black/65 text-white backdrop-blur-xs">
+                    Candidate
+                  </span>
+                </div>
+
+                {/* Bold Centered Title on Bottom */}
+                <div className="p-2.5 sm:p-3 bg-white dark:bg-[#171615]">
+                  <h3 className="font-extrabold text-xs sm:text-sm text-[#242321] dark:text-[#F5F5F4] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors leading-tight">
+                    Student Mode
+                  </h3>
+                  <p className="text-[10px] text-[#716D67] dark:text-[#A8A29E] mt-0.5 truncate">
+                    Take Assessments
+                  </p>
+                </div>
+              </button>
+            </div>
+          </div>
+
           {/* ═══════════════════════════════════════════════════════════════
               SIGN IN FORM
               ═══════════════════════════════════════════════════════════════ */}
@@ -487,42 +596,6 @@ function LoginContent() {
                CREATE ACCOUNT (SIGN UP) FORM
                ═══════════════════════════════════════════════════════════════ */
             <form onSubmit={handleRegisterSubmit} className="space-y-4">
-              {/* Role Selection Tabs */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#57534E] dark:text-[#A8A29E] uppercase tracking-wider">
-                  I am registering as an
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRegRole("teacher")}
-                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                      regRole === "teacher"
-                        ? "bg-[#C84B18]/10 dark:bg-[#EA580C]/15 border-[#C84B18] dark:border-[#EA580C] text-[#C84B18] dark:text-[#EA580C]"
-                        : "bg-[#FBF9F5] dark:bg-[#1D1B19] border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E]"
-                    }`}
-                  >
-                    <div className="font-bold text-xs flex items-center gap-1.5">
-                      <span>🎓 Educator / Teacher</span>
-                    </div>
-                    <div className="text-[10px] opacity-75 mt-0.5">Author quizzes & gradebooks</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRegRole("student")}
-                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                      regRole === "student"
-                        ? "bg-[#C84B18]/10 dark:bg-[#EA580C]/15 border-[#C84B18] dark:border-[#EA580C] text-[#C84B18] dark:text-[#EA580C]"
-                        : "bg-[#FBF9F5] dark:bg-[#1D1B19] border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E]"
-                    }`}
-                  >
-                    <div className="font-bold text-xs flex items-center gap-1.5">
-                      <span>🎒 Student / Candidate</span>
-                    </div>
-                    <div className="text-[10px] opacity-75 mt-0.5">Attempt tests & track results</div>
-                  </button>
-                </div>
-              </div>
 
               {/* Full Name Field */}
               <div className="space-y-1.5">

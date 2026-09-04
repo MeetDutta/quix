@@ -222,61 +222,62 @@ export default function UnifiedHomePage() {
         </section>
 
         {/* ═══════ THE 2 CORE WORKSPACE MODE CARDS ═══════ */}
-        <section id="mode-selection" className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 max-w-5xl mx-auto">
+        {/* ═══════ THE 2 CORE WORKSPACE MODE CARDS (SIDE-BY-SIDE ON ALL SCREENS) ═══════ */}
+        <section id="mode-selection" className="grid grid-cols-2 gap-3 sm:gap-6 max-w-5xl mx-auto">
           
           {/* CARD 1: CREATE TEST (TEACHER STUDIO) */}
           <div
             onClick={handleTeacherModeSelect}
-            className="group relative bg-white dark:bg-[#171615] rounded-3xl p-5 sm:p-8 border-2 border-[#E5E0D8] dark:border-[#292524] hover:border-[#C84B18] dark:hover:border-[#EA580C] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden"
+            className="group relative bg-white dark:bg-[#171615] rounded-2xl sm:rounded-3xl border-2 border-[#E5E0D8] dark:border-[#292524] hover:border-[#C84B18] dark:hover:border-[#EA580C] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden"
           >
-            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#C84B18] via-amber-500 to-[#C84B18]" />
+            <div className="absolute top-0 left-0 right-0 h-1.5 sm:h-2 bg-gradient-to-r from-[#C84B18] via-amber-500 to-[#C84B18] z-10" />
             
-            <div className="space-y-5">
-              <div className="flex items-center justify-between">
-                <div className="w-14 h-14 rounded-2xl bg-[#FFF8F5] dark:bg-[#292524] border border-[#F7D5CA] dark:border-[#383330] text-[#C84B18] dark:text-[#EA580C] flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform duration-300">
-                  <FileEdit className="h-7 w-7" />
-                </div>
-                <span className="text-[11px] font-bold tracking-wider uppercase px-3 py-1 rounded-full bg-[#FFF8F5] dark:bg-[#292524] text-[#C84B18] dark:text-[#EA580C] border border-[#F7D5CA] dark:border-[#383330]">
+            <div>
+              {/* Photo Banner on Top */}
+              <div className="relative w-full aspect-[4/3] sm:aspect-[16/10] overflow-hidden bg-[#F0ECE4] dark:bg-[#242321]">
+                <img
+                  src="/images/teacher_mode.jpg"
+                  alt="Instructor Studio"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10 pointer-events-none" />
+                <span className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 text-[9px] sm:text-[11px] font-bold tracking-wider uppercase px-2 sm:px-2.5 py-0.5 rounded-full bg-black/60 text-white backdrop-blur-xs border border-white/20">
                   Instructor Studio
                 </span>
               </div>
 
-              <div>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-[#242321] dark:text-[#F5F5F4] tracking-tight group-hover:text-[#C84B18] dark:group-hover:text-[#EA580C] transition-colors">
+              <div className="p-3.5 sm:p-6 space-y-2 sm:space-y-3">
+                <h2 className="text-base sm:text-2xl font-extrabold text-[#242321] dark:text-[#F5F5F4] tracking-tight group-hover:text-[#C84B18] dark:group-hover:text-[#EA580C] transition-colors leading-tight">
                   Create Test
                 </h2>
-                <p className="text-xs text-[#716D67] dark:text-[#A8A29E] font-medium mt-1.5 leading-relaxed">
-                  Design syllabus blueprints, upload course files to RAG vector knowledge base, monitor anti-cheat telemetry, and export graded analytics.
+                <p className="text-[11px] sm:text-xs text-[#716D67] dark:text-[#A8A29E] font-medium leading-relaxed line-clamp-2 sm:line-clamp-none">
+                  Design syllabus blueprints, upload course files to RAG vector knowledge base, and export analytics.
                 </p>
-              </div>
 
-              <ul className="space-y-2.5 text-xs text-[#57534E] dark:text-[#A8A29E] font-medium border-t border-[#E5E0D8]/60 dark:border-[#292524]/60 pt-5">
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-[#C84B18] dark:text-[#EA580C] shrink-0" />
-                  <span>AI Question Generator with Direct Document Upload</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-[#C84B18] dark:text-[#EA580C] shrink-0" />
-                  <span>Multi-modal Knowledge Base (PDF, DOCX, PPTX, TXT)</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-[#C84B18] dark:text-[#EA580C] shrink-0" />
-                  <span>Live Proctoring Radar & Real-Time Violation Logs</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-[#C84B18] dark:text-[#EA580C] shrink-0" />
-                  <span>Teacher Sandbox Simulation Preview with Zero Pollution</span>
-                </li>
-              </ul>
+                <ul className="hidden sm:space-y-2 text-xs text-[#57534E] dark:text-[#A8A29E] font-medium border-t border-[#E5E0D8]/60 dark:border-[#292524]/60 pt-3">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#C84B18] dark:text-[#EA580C] shrink-0" />
+                    <span className="truncate">AI Question Generator with Direct Document Upload</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#C84B18] dark:text-[#EA580C] shrink-0" />
+                    <span className="truncate">Multi-modal Knowledge Base (PDF, DOCX, XLSX, TXT)</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#C84B18] dark:text-[#EA580C] shrink-0" />
+                    <span className="truncate">Live Proctoring Radar & Real-Time Logs</span>
+                  </li>
+                </ul>
+              </div>
             </div>
 
-            <div className="pt-8">
+            <div className="p-3.5 sm:p-6 pt-0">
               <button 
                 type="button"
-                className="w-full bg-[#C84B18] hover:bg-[#B33E0F] dark:bg-[#EA580C] dark:hover:bg-[#C2410C] text-white font-bold rounded-xl py-3.5 text-xs transition-all shadow-md shadow-[#C84B18]/20 flex items-center justify-center gap-2 group-hover:gap-3 cursor-pointer"
+                className="w-full bg-[#C84B18] hover:bg-[#B33E0F] dark:bg-[#EA580C] dark:hover:bg-[#C2410C] text-white font-bold rounded-xl py-2.5 sm:py-3 text-[11px] sm:text-xs transition-all shadow-md shadow-[#C84B18]/20 flex items-center justify-center gap-1.5 sm:gap-2 group-hover:gap-3 cursor-pointer"
               >
-                <span>{token && isTeacher ? "Open Teacher Studio" : "Proceed to Create Test"}</span>
-                <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                <span>{token && isTeacher ? "Open Studio" : "Create Test"}</span>
+                <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-1" />
               </button>
             </div>
           </div>
@@ -284,56 +285,56 @@ export default function UnifiedHomePage() {
           {/* CARD 2: TAKE TEST (STUDENT PORTAL) */}
           <div
             onClick={handleStudentModeSelect}
-            className="group relative bg-white dark:bg-[#171615] rounded-3xl p-5 sm:p-8 border-2 border-[#E5E0D8] dark:border-[#292524] hover:border-emerald-600 dark:hover:border-emerald-500 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden"
+            className="group relative bg-white dark:bg-[#171615] rounded-2xl sm:rounded-3xl border-2 border-[#E5E0D8] dark:border-[#292524] hover:border-emerald-600 dark:hover:border-emerald-500 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden"
           >
-            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600" />
+            <div className="absolute top-0 left-0 right-0 h-1.5 sm:h-2 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 z-10" />
             
-            <div className="space-y-5">
-              <div className="flex items-center justify-between">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform duration-300">
-                  <GraduationCap className="h-7 w-7" />
-                </div>
-                <span className="text-[11px] font-bold tracking-wider uppercase px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
+            <div>
+              {/* Photo Banner on Top */}
+              <div className="relative w-full aspect-[4/3] sm:aspect-[16/10] overflow-hidden bg-[#F0ECE4] dark:bg-[#242321]">
+                <img
+                  src="/images/student_mode.jpg"
+                  alt="Candidate Portal"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10 pointer-events-none" />
+                <span className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 text-[9px] sm:text-[11px] font-bold tracking-wider uppercase px-2 sm:px-2.5 py-0.5 rounded-full bg-black/60 text-white backdrop-blur-xs border border-white/20">
                   Candidate Portal
                 </span>
               </div>
 
-              <div>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-[#242321] dark:text-[#F5F5F4] tracking-tight group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+              <div className="p-3.5 sm:p-6 space-y-2 sm:space-y-3">
+                <h2 className="text-base sm:text-2xl font-extrabold text-[#242321] dark:text-[#F5F5F4] tracking-tight group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors leading-tight">
                   Take Test
                 </h2>
-                <p className="text-xs text-[#716D67] dark:text-[#A8A29E] font-medium mt-1.5 leading-relaxed">
-                  Student workspace for attempting assigned assessments, entering timed passcode rooms, and downloading detailed AI response diagnostic reviews.
+                <p className="text-[11px] sm:text-xs text-[#716D67] dark:text-[#A8A29E] font-medium leading-relaxed line-clamp-2 sm:line-clamp-none">
+                  Student workspace for attempting assigned assessments and entering timed passcode rooms.
                 </p>
-              </div>
 
-              <ul className="space-y-2.5 text-xs text-[#57534E] dark:text-[#A8A29E] font-medium border-t border-[#E5E0D8]/60 dark:border-[#292524]/60 pt-5">
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>1-Click Launch with Auto-Provisioned Credentials</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>Real-time Local & Cloud Response Synchronization</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>Anti-Cheat HUD with Tab-Switch Interception</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>Instant Scoring Breakdown & Question Explanations</span>
-                </li>
-              </ul>
+                <ul className="hidden sm:space-y-2 text-xs text-[#57534E] dark:text-[#A8A29E] font-medium border-t border-[#E5E0D8]/60 dark:border-[#292524]/60 pt-3">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="truncate">1-Click Launch with Auto-Provisioned Credentials</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="truncate">Real-time Response Cloud Synchronization</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="truncate">Anti-Cheat HUD with Tab-Switch Telemetry</span>
+                  </li>
+                </ul>
+              </div>
             </div>
 
-            <div className="pt-8">
+            <div className="p-3.5 sm:p-6 pt-0">
               <button 
                 type="button"
-                className="w-full bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-700 text-white font-bold rounded-xl py-3.5 text-xs transition-all shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 group-hover:gap-3 cursor-pointer"
+                className="w-full bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-700 text-white font-bold rounded-xl py-2.5 sm:py-3 text-[11px] sm:text-xs transition-all shadow-md shadow-emerald-700/20 flex items-center justify-center gap-1.5 sm:gap-2 group-hover:gap-3 cursor-pointer"
               >
-                <span>{token ? "Open Student Portal" : "Proceed to Take Test"}</span>
-                <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                <span>{token ? "Open Portal" : "Take Test"}</span>
+                <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-1" />
               </button>
             </div>
           </div>
