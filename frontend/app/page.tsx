@@ -276,7 +276,7 @@ export default function UnifiedHomePage() {
                 type="button"
                 className="w-full bg-[#C84B18] hover:bg-[#B33E0F] dark:bg-[#EA580C] dark:hover:bg-[#C2410C] text-white font-bold rounded-xl py-2.5 sm:py-3 text-[11px] sm:text-xs transition-all shadow-md shadow-[#C84B18]/20 flex items-center justify-center gap-1.5 sm:gap-2 group-hover:gap-3 cursor-pointer"
               >
-                <span>{token && isTeacher ? "Open Studio" : "Create Test"}</span>
+                <span>{mounted && token && isTeacher ? "Open Studio" : "Create Test"}</span>
                 <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-1" />
               </button>
             </div>
@@ -333,7 +333,7 @@ export default function UnifiedHomePage() {
                 type="button"
                 className="w-full bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-700 text-white font-bold rounded-xl py-2.5 sm:py-3 text-[11px] sm:text-xs transition-all shadow-md shadow-emerald-700/20 flex items-center justify-center gap-1.5 sm:gap-2 group-hover:gap-3 cursor-pointer"
               >
-                <span>{token ? "Open Portal" : "Take Test"}</span>
+                <span>{mounted && token ? "Open Portal" : "Take Test"}</span>
                 <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-1" />
               </button>
             </div>
