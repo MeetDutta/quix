@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { X, FolderPlus, UploadCloud, FileText, CheckCircle, AlertCircle, Users } from 'lucide-react';
+import { X, FolderPlus, UploadCloud, FileText, CheckCircle, AlertCircle, Users, DownloadCloud } from 'lucide-react';
 import { createStudentDirectory, importStudentsCSV } from '@/lib/api/studentDirectories';
 import { StudentDirectory } from '@/types/studentDirectory';
+import { API_V1 } from '@/lib/api';
 
 interface CreateDirectoryModalProps {
   isOpen: boolean;
@@ -29,11 +30,13 @@ export default function CreateDirectoryModal({
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-      if (file.name.endsWith('.csv') || file.type === 'text/csv') {
+      const validExts = ['.csv', '.xlsx', '.xls', '.tsv', '.txt'];
+      const isValid = validExts.some((ext) => file.name.toLowerCase().endsWith(ext));
+      if (isValid) {
         setCsvFile(file);
         setError(null);
       } else {
-        setError('Please drop a valid .csv file');
+        setError('Please drop a valid Excel (.xlsx, .xls) or CSV (.csv, .tsv) file');
       }
     }
   };
@@ -148,16 +151,36 @@ export default function CreateDirectoryModal({
             />
           </div>
 
-          {/* Optional CSV Upload Dropzone */}
+          {/* Optional CSV / Excel Upload Dropzone */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-[#57534E] dark:text-[#A8A29E] mb-1.5">
-              Initial Student Roster <span className="text-[#716D67] dark:text-[#A8A29E] font-normal">(Optional CSV)</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#57534E] dark:text-[#A8A29E]">
+                Initial Student Roster <span className="text-[#716D67] dark:text-[#A8A29E] font-normal">(Optional Excel / CSV)</span>
+              </label>
+              <div className="flex items-center gap-1.5 text-[10px] text-[#716D67]">
+                <span>Sample:</span>
+                <a
+                  href={`${API_V1}/student-directories/template/excel`}
+                  download="student_roster_template.xlsx"
+                  className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
+                >
+                  Excel
+                </a>
+                <span>·</span>
+                <a
+                  href={`${API_V1}/student-directories/template/csv`}
+                  download="student_roster_template.csv"
+                  className="text-[#C84B18] font-semibold hover:underline"
+                >
+                  CSV
+                </a>
+              </div>
+            </div>
             
             <input
               type="file"
               ref={fileInputRef}
-              accept=".csv"
+              accept=".csv, .xlsx, .xls, .tsv, .txt, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
               onChange={handleFileSelect}
               className="hidden"
             />
@@ -173,9 +196,11 @@ export default function CreateDirectoryModal({
                   <UploadCloud className="w-5 h-5" />
                 </div>
                 <div className="text-xs text-[#242321] dark:text-[#F5F5F4]">
-                  <span className="text-[#C84B18] font-medium hover:underline">Click to upload CSV</span> or drag and drop
+                  <span className="text-[#C84B18] font-medium hover:underline">Click to upload Excel or CSV</span> or drag and drop
                 </div>
-                <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">Headers: name, email, roll_number, phone</p>
+                <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">
+                  Supports .xlsx, .xls, .csv, and .tsv with automatic column detection
+                </p>
               </div>
             ) : (
               <div className="flex items-center justify-between p-3.5 bg-[#C84B18]/10 border border-[#C84B18]/20 rounded-xl">

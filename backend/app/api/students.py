@@ -18,6 +18,11 @@ from app.utils.security import get_password_hash, RoleChecker, get_current_user
 from app.services.email_service import email_service
 from app.services.notification_service import create_notification
 from app.config import settings
+from app.utils.tabular_parser import (
+    parse_tabular_file,
+    generate_student_template_csv,
+    generate_student_template_excel
+)
 
 router = APIRouter(prefix="/students", tags=["students"])
 teacher_or_admin_required = RoleChecker(["inst_admin", "teacher", "super_admin"])
@@ -210,36 +215,48 @@ def import_students_csv(
     db: Session = Depends(get_db)
 ):
     """
-    Imports students from a CSV file.
-    Expected CSV columns: full_name, email, roll_number, division, batch
+    Imports students from any CSV or Excel file (.xlsx, .xls, .csv, .tsv, .txt).
+    Expected columns: Full Name, Email, Roll Number, Division, Batch
     """
-    contents = file.file.read().decode("utf-8")
-    io_string = io.StringIO(contents)
-    reader = csv.DictReader(io_string)
-    
+    valid_extensions = (".csv", ".xlsx", ".xls", ".tsv", ".txt", ".xlsm", ".xltx", ".xltm")
+    if not file.filename.lower().endswith(valid_extensions):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file format. Please upload an Excel workbook (.xlsx, .xls) or CSV/TSV (.csv, .tsv) file."
+        )
+
+    file_bytes = file.file.read()
+    try:
+        rows = parse_tabular_file(file_bytes, file.filename)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="The file is empty or contains no valid student records.")
+
     imported_count = 0
     errors = []
-    
-    for idx, row in enumerate(reader):
-        email = row.get("email", "").strip()
-        full_name = row.get("full_name", "").strip()
-        roll_number = row.get("roll_number", "").strip()
-        division = row.get("division", "").strip()
-        batch = row.get("batch", "").strip()
-        
+
+    for idx, row in enumerate(rows, start=1):
+        email = (row.get("email") or "").strip().lower()
+        full_name = (row.get("full_name") or row.get("name") or "").strip()
+        roll_number = (row.get("roll_number") or "").strip()
+        division = (row.get("division") or "").strip()
+        batch = (row.get("batch") or "2026").strip()
+
         if not email or not full_name or not roll_number:
-            errors.append(f"Row {idx+1}: Missing required columns")
+            errors.append(f"Row {idx}: Missing required columns (need name, email, roll number)")
             continue
-            
+
         exists = db.query(User).filter(User.email == email, User.is_deleted == False).first()
         if exists:
-            # Skip or update
+            # Skip duplicate account
             continue
-            
+
         verification_token = str(uuid.uuid4())
         temp_pwd = str(uuid.uuid4())[:12]
         hashed_pwd = get_password_hash(temp_pwd)
-        
+
         try:
             user = User(
                 email=email,
@@ -253,7 +270,7 @@ def import_students_csv(
             )
             db.add(user)
             db.flush()
-            
+
             student = Student(
                 user_id=user.id,
                 roll_number=roll_number,
@@ -271,7 +288,7 @@ def import_students_csv(
                 roll_number=str(roll_number) if roll_number else None
             )
         except Exception as e:
-            errors.append(f"Row {idx+1}: Error saving to DB ({str(e)})")
+            errors.append(f"Row {idx}: Error saving to DB ({str(e)})")
             
     db.commit()
     return {"message": f"Successfully imported {imported_count} students. Authorization emails dispatched.", "errors": errors}
@@ -499,17 +516,22 @@ def get_student_assigned_exams(
 @router.get("/csv-template")
 def download_student_csv_template():
     """Generates and returns a downloadable sample CSV template for bulk student import."""
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["full_name", "email", "roll_number", "division", "batch", "department_name"])
-    writer.writerow(["Alex Johnson", "alex.johnson@university.edu", "CS-2026-101", "A", "2026", "Computer Science"])
-    writer.writerow(["Samantha Miller", "samantha.m@university.edu", "CS-2026-102", "A", "2026", "Computer Science"])
-    writer.writerow(["David Chen", "david.chen@university.edu", "CS-2026-103", "B", "2026", "Computer Science"])
-    
+    csv_content = generate_student_template_csv()
     return Response(
-        content=output.getvalue(),
+        content=csv_content,
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=eduquizx_student_roster_template.csv"}
+    )
+
+@router.get("/excel-template")
+@router.get("/xlsx-template")
+def download_student_excel_template():
+    """Generates and returns a downloadable formatted Excel (.xlsx) template for bulk student import."""
+    excel_bytes = generate_student_template_excel()
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=eduquizx_student_roster_template.xlsx"}
     )
 
 @router.post("/{student_id}/instant-authorize")

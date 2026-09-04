@@ -132,7 +132,30 @@ class RAGService:
                 clean_text = self._sanitize_unicode(raw_text)
                 if clean_text.strip():
                     pages.append({"page_number": 1, "text": clean_text})
-            elif ext in [".txt", ".csv", ".md", ".json", ".py", ".js", ".java", ".cpp", ".c", ".html"]:
+            elif ext in [".xlsx", ".xls", ".xlsm"]:
+                try:
+                    import pandas as pd
+                    excel_data = pd.read_excel(file_path, sheet_name=None, dtype=str)
+                    sheet_texts = []
+                    for sheet_name, df_sheet in excel_data.items():
+                        df_sheet = df_sheet.fillna("")
+                        if not df_sheet.empty:
+                            sheet_lines = [f"### Sheet: {sheet_name}"]
+                            headers = [str(c) for c in df_sheet.columns]
+                            sheet_lines.append(" | ".join(headers))
+                            sheet_lines.append("-" * min(len(" | ".join(headers)), 80))
+                            for _, r in df_sheet.iterrows():
+                                row_vals = [str(v).strip() for v in r]
+                                if any(row_vals):
+                                    sheet_lines.append(" | ".join(row_vals))
+                            sheet_texts.append("\n".join(sheet_lines))
+                    raw_text = "\n\n".join(sheet_texts)
+                    clean_text = self._sanitize_unicode(raw_text)
+                    if clean_text.strip():
+                        pages.append({"page_number": 1, "text": clean_text})
+                except Exception as ex:
+                    logger.warning(f"Error reading Excel file {filename}: {ex}")
+            elif ext in [".txt", ".csv", ".tsv", ".md", ".json", ".py", ".js", ".java", ".cpp", ".c", ".html"]:
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as txt_file:
                     raw_text = txt_file.read()
                 clean_text = self._sanitize_unicode(raw_text)

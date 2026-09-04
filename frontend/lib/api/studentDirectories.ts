@@ -116,14 +116,16 @@ export async function importStudentsCSV(
   const formData = new FormData();
   formData.append('file', file);
 
-  const res = await apiFetch(`/student-directories/${directoryId}/import-csv`, {
+  const res = await apiFetch(`/student-directories/${directoryId}/import`, {
     method: 'POST',
     body: formData,
     token
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Failed to import CSV' }));
-    throw new Error(err.detail || 'Failed to import CSV');
+    const err = await res.json().catch(() => ({ detail: 'Failed to import student roster' }));
+    throw new Error(err.detail || 'Failed to import student roster');
   }
   return res.json();
 }
+
+export const importStudentsFile = importStudentsCSV;

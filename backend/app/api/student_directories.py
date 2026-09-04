@@ -17,8 +17,39 @@ from app.schemas.student_directory import (
 )
 from app.utils.security import get_current_user
 from app.services.workspace_service import get_current_workspace
+from app.utils.tabular_parser import (
+    parse_tabular_file,
+    generate_student_template_csv,
+    generate_student_template_excel
+)
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
 
 router = APIRouter(prefix="/student-directories", tags=["student_directories"])
+
+# ──────── REFERENCE TEMPLATES ────────
+
+@router.get("/template/csv")
+def download_roster_csv_template():
+    """Returns a downloadable sample CSV template for bulk student roster import."""
+    csv_content = generate_student_template_csv()
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=student_roster_template.csv"}
+    )
+
+@router.get("/template/excel")
+@router.get("/template/xlsx")
+def download_roster_excel_template():
+    """Returns a downloadable styled Excel (.xlsx) reference template for bulk student roster import."""
+    excel_bytes = generate_student_template_excel()
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=student_roster_template.xlsx"}
+    )
 
 def _get_authorized_directory(directory_id: str, workspace: Workspace, db: Session) -> StudentDirectory:
     directory = db.query(StudentDirectory).filter(
@@ -326,9 +357,10 @@ def delete_directory_student(
     db.commit()
     return {"message": "Student removed from directory"}
 
-# ──────── CSV IMPORT / EXPORT ────────
+# ──────── CSV & EXCEL IMPORT / EXPORT ────────
 
 @router.post("/{directory_id}/import", response_model=CSVImportResult)
+@router.post("/{directory_id}/import-csv", response_model=CSVImportResult)
 def import_students_csv(
     directory_id: str,
     file: UploadFile = File(...),
@@ -336,39 +368,34 @@ def import_students_csv(
     db: Session = Depends(get_db)
 ):
     """
-    Imports students from a CSV file into the specified directory.
+    Imports students from any CSV, TSV, or Excel file (.xlsx, .xls, .csv, .tsv, .txt) into the specified directory.
     Performs header normalization, whitespace trimming, email validation,
     duplicate checks, and detailed row error reporting.
     """
     directory = _get_authorized_directory(directory_id, current_workspace, db)
 
-    if not file.filename.endswith((".csv", ".txt")):
-        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a CSV file.")
-
-    content = file.file.read().decode("utf-8-sig", errors="ignore")
-    reader = csv.reader(io.StringIO(content))
-
-    headers = next(reader, None)
-    if not headers:
-        raise HTTPException(status_code=400, detail="CSV file is empty or missing headers")
-
-    # Normalize headers
-    col_map = {}
-    for idx, h in enumerate(headers):
-        clean_h = h.strip().lower().replace(" ", "_").replace("-", "_")
-        if clean_h in ("name", "full_name", "student_name"):
-            col_map["name"] = idx
-        elif clean_h in ("email", "student_email", "mail"):
-            col_map["email"] = idx
-        elif clean_h in ("roll_number", "roll_no", "roll", "candidate_id", "id"):
-            col_map["roll_number"] = idx
-        elif clean_h in ("phone", "phone_number", "mobile", "contact"):
-            col_map["phone"] = idx
-
-    if "name" not in col_map and "email" not in col_map:
+    valid_extensions = (".csv", ".xlsx", ".xls", ".tsv", ".txt", ".xlsm", ".xltx", ".xltm")
+    if not file.filename.lower().endswith(valid_extensions):
         raise HTTPException(
             status_code=400,
-            detail="CSV must contain at least a 'name' or 'email' column (e.g. roll_number, name, email, phone)"
+            detail="Invalid file format. Please upload an Excel workbook (.xlsx, .xls) or CSV/TSV (.csv, .tsv) file."
+        )
+
+    file_bytes = file.file.read()
+    try:
+        rows = parse_tabular_file(file_bytes, file.filename)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="The file is empty or contains no valid student records.")
+
+    # Check that at least 'name' or 'email' is detected
+    sample_keys = set().union(*(r.keys() for r in rows[:10]))
+    if "name" not in sample_keys and "email" not in sample_keys:
+        raise HTTPException(
+            status_code=400,
+            detail="File must contain at least a 'Name' or 'Email' column (e.g. Full Name, Email, Roll Number, Phone)"
         )
 
     # Fetch existing emails and roll numbers for this directory
@@ -393,18 +420,15 @@ def import_students_csv(
     seen_file_emails = set()
     seen_file_rolls = set()
 
-    for row_idx, row in enumerate(reader, start=2):
-        if not row or not any(field.strip() for field in row):
-            continue
-
-        raw_name = row[col_map["name"]].strip() if "name" in col_map and len(row) > col_map["name"] else ""
-        raw_email = row[col_map["email"]].strip().lower() if "email" in col_map and len(row) > col_map["email"] else ""
-        raw_roll = row[col_map["roll_number"]].strip() if "roll_number" in col_map and len(row) > col_map["roll_number"] else ""
-        raw_phone = row[col_map["phone"]].strip() if "phone" in col_map and len(row) > col_map["phone"] else ""
+    for row_idx, item in enumerate(rows, start=2):
+        raw_name = item.get("name", "") or item.get("full_name", "")
+        raw_email = item.get("email", "").lower() if item.get("email") else ""
+        raw_roll = item.get("roll_number", "")
+        raw_phone = item.get("phone", "")
 
         if not raw_name and not raw_email:
             skipped_count += 1
-            errors.append(f"Row {row_idx}: Missing name and email")
+            errors.append(f"Row {row_idx}: Missing candidate name and email")
             continue
 
         name = raw_name or raw_email.split("@")[0].capitalize()
@@ -454,6 +478,7 @@ def import_students_csv(
     }
 
 @router.get("/{directory_id}/export")
+@router.get("/{directory_id}/export-csv")
 def export_students_csv(
     directory_id: str,
     current_workspace: Workspace = Depends(get_current_workspace),
@@ -485,5 +510,57 @@ def export_students_csv(
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@router.get("/{directory_id}/export-excel")
+def export_students_excel(
+    directory_id: str,
+    current_workspace: Workspace = Depends(get_current_workspace),
+    db: Session = Depends(get_db)
+):
+    """Exports all students in the directory as a formatted Excel (.xlsx) workbook."""
+    directory = _get_authorized_directory(directory_id, current_workspace, db)
+    students = db.query(DirectoryStudent).filter(
+        DirectoryStudent.directory_id == directory.id,
+        DirectoryStudent.is_deleted == False
+    ).order_by(DirectoryStudent.roll_number.asc()).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"{directory.name[:25]} Roster"
+    header_fill = PatternFill(start_color="C84B18", end_color="C84B18", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    data_font = Font(name="Calibri", size=10, color="242321")
+
+    headers = ["Roll Number", "Full Name", "Email Address", "Phone Number", "Status", "Joined Date"]
+    ws.append(headers)
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    for s in students:
+        ws.append([
+            s.roll_number or "",
+            s.name,
+            s.email or "",
+            s.phone or "",
+            s.status,
+            s.created_at.strftime("%Y-%m-%d %H:%M") if s.created_at else ""
+        ])
+
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 14)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    filename = f"{re.sub(r'[^a-zA-Z0-9]+', '_', directory.name.lower())}_roster.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )

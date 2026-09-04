@@ -203,9 +203,17 @@ export default function StudentDirectoryManager() {
     }
   };
 
-  const handleExportCsv = () => {
+    const handleExportCsv = () => {
     if (!selectedDirectory) return;
     const downloadUrl = `${API_V1}/student-directories/${selectedDirectory.id}/export-csv?token=${encodeURIComponent(
+      token
+    )}`;
+    window.open(downloadUrl, '_blank');
+  };
+
+  const handleExportExcel = () => {
+    if (!selectedDirectory) return;
+    const downloadUrl = `${API_V1}/student-directories/${selectedDirectory.id}/export-excel?token=${encodeURIComponent(
       token
     )}`;
     window.open(downloadUrl, '_blank');
@@ -294,18 +302,29 @@ export default function StudentDirectoryManager() {
                   setCsvImportResult(null);
                   setIsCsvModalOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-[#F0ECE4] dark:bg-[#292524] text-[#242321] dark:text-[#F5F5F4] hover:bg-[#E5E0D8] dark:hover:bg-[#3E3A36] text-xs font-medium rounded-xl border border-[#E5E0D8] dark:border-[#3E3A36] transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-[#F0ECE4] dark:bg-[#292524] text-[#242321] dark:text-[#F5F5F4] hover:bg-[#E5E0D8] dark:hover:bg-[#3E3A36] text-xs font-medium rounded-xl border border-[#E5E0D8] dark:border-[#3E3A36] transition-colors cursor-pointer shadow-2xs"
+                title="Import student roster from Excel (.xlsx, .xls) or CSV (.csv, .tsv)"
               >
-                <UploadCloud className="w-3.5 h-3.5" />
-                <span>Import CSV</span>
+                <UploadCloud className="w-3.5 h-3.5 text-[#C84B18]" />
+                <span>Import Excel / CSV</span>
+              </button>
+
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#F0ECE4] dark:bg-[#292524] text-[#242321] dark:text-[#F5F5F4] hover:bg-[#E5E0D8] dark:hover:bg-[#3E3A36] text-xs font-medium rounded-xl border border-[#E5E0D8] dark:border-[#3E3A36] transition-colors cursor-pointer shadow-2xs"
+                title="Export roster as Microsoft Excel (.xlsx)"
+              >
+                <DownloadCloud className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Excel</span>
               </button>
 
               <button
                 onClick={handleExportCsv}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-[#F0ECE4] dark:bg-[#292524] text-[#242321] dark:text-[#F5F5F4] hover:bg-[#E5E0D8] dark:hover:bg-[#3E3A36] text-xs font-medium rounded-xl border border-[#E5E0D8] dark:border-[#3E3A36] transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#F0ECE4] dark:bg-[#292524] text-[#242321] dark:text-[#F5F5F4] hover:bg-[#E5E0D8] dark:hover:bg-[#3E3A36] text-xs font-medium rounded-xl border border-[#E5E0D8] dark:border-[#3E3A36] transition-colors cursor-pointer shadow-2xs"
+                title="Export roster as CSV (.csv)"
               >
                 <DownloadCloud className="w-3.5 h-3.5" />
-                <span>Export CSV</span>
+                <span>CSV</span>
               </button>
 
               <button
@@ -598,14 +617,17 @@ export default function StudentDirectoryManager() {
         </div>
       )}
 
-      {/* CSV IMPORT MODAL */}
+      {/* CSV & EXCEL IMPORT MODAL */}
       {isCsvModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-lg mx-3 sm:mx-auto bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
             <div className="flex items-center justify-between px-5 sm:px-6 py-4 sm:py-5 border-b border-[#E5E0D8] dark:border-[#292524] bg-[#FAF8F5] dark:bg-[#141312] shrink-0">
               <div className="flex items-center gap-2.5">
                 <UploadCloud className="w-5 h-5 text-[#C84B18]" />
-                <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">Import Student Roster CSV</h3>
+                <div>
+                  <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">Import Student Roster (Excel / CSV)</h3>
+                  <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">Universal spreadsheet support with auto header mapping</p>
+                </div>
               </div>
               <button
                 onClick={() => setIsCsvModalOpen(false)}
@@ -615,11 +637,43 @@ export default function StudentDirectoryManager() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-5 sm:p-6 space-y-4 overflow-y-auto">
+              {/* Downloadable Reference File Box */}
+              <div className="p-3.5 bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-[#C84B18]" />
+                    <span>Download Reference Template</span>
+                  </span>
+                  <span className="text-[10px] text-[#716D67] uppercase font-semibold">Sample Files</span>
+                </div>
+                <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">
+                  Use our sample template pre-configured with the required columns (Full Name, Email, Roll/Student ID, Phone, Division).
+                </p>
+                <div className="flex flex-col xs:flex-row items-center gap-2 pt-1">
+                  <a
+                    href={`${API_V1}/student-directories/template/excel`}
+                    download="student_roster_template.xlsx"
+                    className="w-full xs:flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold transition-colors"
+                  >
+                    <DownloadCloud className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Excel Template (.xlsx)</span>
+                  </a>
+                  <a
+                    href={`${API_V1}/student-directories/template/csv`}
+                    download="student_roster_template.csv"
+                    className="w-full xs:flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-[#C84B18]/10 hover:bg-[#C84B18]/20 text-[#C84B18] dark:text-[#EA580C] border border-[#C84B18]/30 rounded-lg text-xs font-semibold transition-colors"
+                  >
+                    <DownloadCloud className="w-3.5 h-3.5" />
+                    <span>CSV Template (.csv)</span>
+                  </a>
+                </div>
+              </div>
+
               <input
                 type="file"
                 ref={fileInputRef}
-                accept=".csv"
+                accept=".csv, .xlsx, .xls, .tsv, .txt, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
                     setCsvFile(e.target.files[0]);
@@ -634,9 +688,14 @@ export default function StudentDirectoryManager() {
                   onClick={() => fileInputRef.current?.click()}
                   className="border-2 border-dashed border-[#E5E0D8] dark:border-[#292524] hover:border-[#C84B18]/50 bg-[#F7F4EF] dark:bg-[#141312] hover:bg-[#F0ECE4] dark:hover:bg-[#1C1A17] rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2"
                 >
-                  <UploadCloud className="w-7 h-7 text-[#C84B18]" />
-                  <p className="text-xs text-[#242321] dark:text-[#F5F5F4] font-medium">Click to select a CSV roster file</p>
-                  <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">Headers: name, email, roll_number, phone</p>
+                  <UploadCloud className="w-8 h-8 text-[#C84B18]" />
+                  <p className="text-xs text-[#242321] dark:text-[#F5F5F4] font-medium">Click to select an Excel (.xlsx, .xls) or CSV roster file</p>
+                  <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">
+                    Supports .xlsx, .xls, .csv, and .tsv with automatic comma, semicolon, and tab detection
+                  </p>
+                  <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] bg-[#E5E0D8]/60 dark:bg-[#292524] text-[#716D67] dark:text-[#A8A29E] font-medium">
+                    Headers: Full Name, Email, Roll Number, Phone, Division
+                  </span>
                 </div>
               ) : (
                 <div className="flex items-center justify-between p-3.5 bg-[#C84B18]/10 border border-[#C84B18]/20 rounded-xl">
@@ -694,7 +753,7 @@ export default function StudentDirectoryManager() {
                   onClick={handleImportCsv}
                   className="px-4 py-2 text-xs font-semibold bg-[#C84B18] hover:bg-[#B33F12] disabled:opacity-50 text-white rounded-xl shadow-sm transition-colors cursor-pointer"
                 >
-                  {csvImportLoading ? 'Importing Roster...' : 'Upload & Import'}
+                  {csvImportLoading ? 'Importing Roster...' : 'Upload & Import Roster'}
                 </button>
               </div>
             </div>
