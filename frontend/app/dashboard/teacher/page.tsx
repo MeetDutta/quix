@@ -126,6 +126,7 @@ export default function TeacherDashboard() {
   
   // Data states
   const [createStep, setCreateStep] = useState<number>(1);
+  const [expandedStep, setExpandedStep] = useState<number | null>(1);
   const [documents, setDocuments] = useState<any[]>([]);
   const [exams, setExams] = useState<any[]>([]);
   const [summaries, setSummaries] = useState<any | null>(null);
@@ -389,6 +390,7 @@ export default function TeacherDashboard() {
         const newExam = await res.json();
         showToast(`Assessment "${newExam.name}" successfully created!`, "success");
         setCreateStep(1);
+        setExpandedStep(1);
         setExamName("");
         setActiveSectionTab("exams");
         if (typeof window !== "undefined") {
@@ -521,6 +523,37 @@ export default function TeacherDashboard() {
 
   const labelCls = "block text-xs font-semibold text-[#242321] dark:text-[#F5F5F4] mb-1 uppercase tracking-wider";
   const inputCls = "w-full bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-lg px-3 py-2 text-xs text-[#242321] dark:text-[#F5F5F4] focus:outline-none focus:ring-1 focus:ring-[#C84B18]";
+
+  const WIZARD_STEPS = [
+    {
+      step: 1,
+      title: "01. Knowledge Source & Details",
+      shortTitle: "1. Source",
+      summary: examName ? `${examName} • ${examSubject || "General"}` : (examSubject || "Domain & Title"),
+      icon: BookOpen,
+    },
+    {
+      step: 2,
+      title: "02. Questions & AI Blueprint",
+      shortTitle: "2. Questions",
+      summary: `${numMcq} MCQ • ${difficulty.toUpperCase()}`,
+      icon: Sparkles,
+    },
+    {
+      step: 3,
+      title: "03. Rules & Scheduling",
+      shortTitle: "3. Schedule",
+      summary: `${examDuration} min • ${examMarks} pts`,
+      icon: Clock,
+    },
+    {
+      step: 4,
+      title: "04. Review & Synthesis",
+      shortTitle: "4. Review",
+      summary: "Directory & Generate",
+      icon: CheckCircle2,
+    },
+  ];
 
   return (
     <div className="space-y-8 animate-fadeIn">
@@ -704,21 +737,108 @@ export default function TeacherDashboard() {
       {(activeSectionTab === "all" || activeSectionTab === "create") && (
       <section id="create" className="scroll-mt-16 space-y-4">
         <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-4 sm:p-6 shadow-xs space-y-5 sm:space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#E5E0D8] dark:border-[#292524]">
-            <div>
-              <h2 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">
-                Create New Assessment
-              </h2>
-              <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">
-                Follow the 4 top-down steps below to synthesize and calibrate your examination paper.
-              </p>
+          {/* ═══════ HEADER & PROGRESS SUMMARY ═══════ */}
+          <div className="space-y-4 pb-4 border-b border-[#E5E0D8] dark:border-[#292524]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-[#C84B18]/10 text-[#C84B18] dark:text-[#EA580C]">
+                    <Sparkles className="h-4 w-4" />
+                  </span>
+                  <h2 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">
+                    Create New Assessment
+                  </h2>
+                </div>
+                <p className="text-xs text-[#716D67] dark:text-[#A8A29E] mt-0.5">
+                  Follow the 4 calibrated steps below or tap any tab to jump directly.
+                </p>
+              </div>
+
+              {/* Step Progress Pill & Toggle Buttons */}
+              <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#C84B18]/10 text-[#C84B18] dark:text-[#EA580C] text-xs font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#C84B18] dark:bg-[#EA580C] animate-pulse" />
+                  <span>Step {createStep} of 4: {WIZARD_STEPS[createStep - 1].shortTitle}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExpandedStep(expandedStep ? null : createStep)}
+                  className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-[#E5E0D8] dark:border-[#292524] hover:bg-[#F7F4EF] dark:hover:bg-[#1D1B19] text-[#716D67] dark:text-[#A8A29E] transition-colors cursor-pointer"
+                >
+                  {expandedStep ? "Hide / Minimize Step" : "Expand Step"}
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#C84B18]/10 text-[#C84B18] text-xs font-bold self-start sm:self-auto">
-              <span>Step {createStep} of 4</span>
+
+            {/* Visual Progress Line */}
+            <div className="w-full bg-[#E5E0D8]/60 dark:bg-[#292524] h-1.5 rounded-full overflow-hidden">
+              <div 
+                className="bg-gradient-to-r from-[#C84B18] to-emerald-500 h-full transition-all duration-300 rounded-full"
+                style={{ width: `${(createStep / 4) * 100}%` }}
+              />
+            </div>
+
+            {/* ═══════ INTERACTIVE STEPS TAB BAR NAVIGATION ═══════ */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-1">
+              {WIZARD_STEPS.map((s) => {
+                const isActive = createStep === s.step;
+                const isExpanded = expandedStep === s.step;
+                const isCompleted = createStep > s.step;
+                const StepIcon = s.icon;
+                return (
+                  <button
+                    key={s.step}
+                    type="button"
+                    onClick={() => {
+                      setCreateStep(s.step);
+                      setExpandedStep(s.step);
+                    }}
+                    className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 relative group ${
+                      isActive && isExpanded
+                        ? "bg-white dark:bg-[#1D1B19] border-[#C84B18] dark:border-[#EA580C] shadow-xs ring-1 ring-[#C84B18]/30"
+                        : isActive
+                        ? "bg-[#C84B18]/5 dark:bg-[#EA580C]/10 border-[#C84B18]/50"
+                        : isCompleted
+                        ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/60 hover:border-emerald-400"
+                        : "bg-[#F7F4EF]/50 dark:bg-[#141312]/50 border-[#E5E0D8] dark:border-[#292524] hover:bg-white dark:hover:bg-[#1D1B19] hover:border-[#C84B18]/40"
+                    }`}
+                  >
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs transition-colors ${
+                      isActive
+                        ? "bg-[#C84B18] dark:bg-[#EA580C] text-white shadow-xs"
+                        : isCompleted
+                        ? "bg-emerald-600 text-white"
+                        : "bg-[#E5E0D8] dark:bg-[#292524] text-[#716D67] group-hover:bg-[#C84B18]/10 group-hover:text-[#C84B18]"
+                    }`}>
+                      {isCompleted ? <Check className="h-4 w-4" /> : s.step}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-bold truncate ${
+                          isActive
+                            ? "text-[#C84B18] dark:text-[#EA580C]"
+                            : isCompleted
+                            ? "text-emerald-700 dark:text-emerald-400"
+                            : "text-[#242321] dark:text-[#F5F5F4]"
+                        }`}>
+                          {s.shortTitle}
+                        </span>
+                        {isActive && isExpanded && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#C84B18] dark:bg-[#EA580C] shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-[10px] text-[#716D67] dark:text-[#A8A29E] truncate">
+                        {s.summary}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* ═══════ TOP-DOWN VERTICAL STEPPER ═══════ */}
+          {/* ═══════ TOP-DOWN COLLAPSIBLE STEPPER ═══════ */}
           <form onSubmit={handleCreateExam} className="space-y-4">
             
             {/* STEP 1: CONTENT SOURCE */}
@@ -729,13 +849,21 @@ export default function TeacherDashboard() {
                 ? "bg-white dark:bg-[#171615] border-[#E5E0D8] dark:border-[#292524]"
                 : "bg-[#F7F4EF]/60 dark:bg-[#141312]/60 border-[#E5E0D8] dark:border-[#292524] opacity-85"
             }`}>
-              {/* Step 1 Header */}
-              <div
-                onClick={() => setCreateStep(1)}
-                className="p-4 flex items-center justify-between cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1D1B19]/50 transition-colors"
+              {/* Step 1 Header Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (expandedStep === 1) {
+                    setExpandedStep(null);
+                  } else {
+                    setExpandedStep(1);
+                    setCreateStep(1);
+                  }
+                }}
+                className="w-full p-4 flex items-center justify-between text-left cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1D1B19]/50 transition-colors focus:outline-none"
               >
                 <div className="flex items-center gap-3">
-                  <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs ${
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                     createStep > 1
                       ? "bg-emerald-600 text-white"
                       : createStep === 1
@@ -744,31 +872,31 @@ export default function TeacherDashboard() {
                   }`}>
                     {createStep > 1 ? <Check className="h-4 w-4" /> : "1"}
                   </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4]">
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] truncate">
                       01. Knowledge Source & Assessment Details
                     </h3>
-                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">
+                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E] truncate">
                       {examName ? `${examName} • ${examSubject || "General"}` : "Select curriculum domain and title"}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {createStep > 1 && (
-                    <span className="text-xs font-semibold text-[#C84B18] hover:underline">Edit</span>
-                  )}
-                  <ChevronDown className={`h-4 w-4 text-[#716D67] transition-transform ${createStep === 1 ? "rotate-180" : ""}`} />
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <span className="text-xs font-semibold text-[#716D67] dark:text-[#A8A29E] hidden sm:inline">
+                    {expandedStep === 1 ? "Minimize" : "Expand"}
+                  </span>
+                  <ChevronDown className={`h-4 w-4 text-[#716D67] transition-transform duration-200 ${expandedStep === 1 ? "rotate-180" : ""}`} />
                 </div>
-              </div>
+              </button>
 
               {/* Step 1 Body */}
-              {createStep === 1 && (
-                <div className="p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-4 max-w-xl animate-fadeIn">
+              {expandedStep === 1 && (
+                <div className="p-4 sm:p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-4 max-w-3xl animate-fadeIn">
                   
                   {/* Knowledge Source Selection / Upload Dual-Mode Toggle */}
                   <div className="space-y-2 pt-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-1">
                       <label className={labelCls}>Knowledge Source</label>
                       <button
                         type="button"
@@ -781,11 +909,11 @@ export default function TeacherDashboard() {
                     </div>
 
                     {/* Mode Toggle Switcher */}
-                    <div className="flex flex-col sm:flex-row p-1 bg-[#F0ECE4]/60 dark:bg-[#1D1B19] rounded-xl border border-[#E5E0D8] dark:border-[#292524] gap-1 sm:gap-0">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 p-1 bg-[#F0ECE4]/60 dark:bg-[#1D1B19] rounded-xl border border-[#E5E0D8] dark:border-[#292524] gap-1.5">
                       <button
                         type="button"
                         onClick={() => setStep1SourceMode("select")}
-                        className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                           step1SourceMode === "select"
                             ? "bg-white dark:bg-[#292524] text-[#242321] dark:text-[#F5F5F4] shadow-xs"
                             : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-white"
@@ -797,7 +925,7 @@ export default function TeacherDashboard() {
                       <button
                         type="button"
                         onClick={() => setStep1SourceMode("upload")}
-                        className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                           step1SourceMode === "upload"
                             ? "bg-[#C84B18] dark:bg-[#EA580C] text-white shadow-xs"
                             : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-white"
@@ -946,7 +1074,7 @@ export default function TeacherDashboard() {
                                   e.stopPropagation();
                                   setStep1UploadFile(null);
                                 }}
-                                className="p-1 text-rose-500 hover:text-rose-700 rounded"
+                                className="p-1 text-rose-500 hover:text-rose-700 rounded cursor-pointer"
                               >
                                 <X className="h-4 w-4" />
                               </button>
@@ -1010,8 +1138,15 @@ export default function TeacherDashboard() {
                     />
                   </div>
 
-                  <div className="pt-2 flex justify-end">
-                    <button type="button" onClick={() => setCreateStep(2)} className="btn-primary py-2 px-4 text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                  <div className="pt-3 flex justify-end">
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setCreateStep(2);
+                        setExpandedStep(2);
+                      }} 
+                      className="w-full sm:w-auto btn-primary py-2.5 px-5 text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                    >
                       <span>Continue to Questions</span>
                       <ArrowRight className="h-3.5 w-3.5" />
                     </button>
@@ -1028,13 +1163,21 @@ export default function TeacherDashboard() {
                 ? "bg-white dark:bg-[#171615] border-[#E5E0D8] dark:border-[#292524]"
                 : "bg-[#F7F4EF]/60 dark:bg-[#141312]/60 border-[#E5E0D8] dark:border-[#292524] opacity-85"
             }`}>
-              {/* Step 2 Header */}
-              <div
-                onClick={() => setCreateStep(2)}
-                className="p-4 flex items-center justify-between cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1D1B19]/50 transition-colors"
+              {/* Step 2 Header Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (expandedStep === 2) {
+                    setExpandedStep(null);
+                  } else {
+                    setExpandedStep(2);
+                    setCreateStep(2);
+                  }
+                }}
+                className="w-full p-4 flex items-center justify-between text-left cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1D1B19]/50 transition-colors focus:outline-none"
               >
                 <div className="flex items-center gap-3">
-                  <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs ${
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                     createStep > 2
                       ? "bg-emerald-600 text-white"
                       : createStep === 2
@@ -1043,27 +1186,27 @@ export default function TeacherDashboard() {
                   }`}>
                     {createStep > 2 ? <Check className="h-4 w-4" /> : "2"}
                   </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4]">
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] truncate">
                       02. Question Format, Difficulty & AI Blueprint
                     </h3>
-                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">
+                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E] truncate">
                       {numMcq} MCQ • {numSubjective} Subjective • Difficulty: {difficulty.toUpperCase()}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {createStep > 2 && (
-                    <span className="text-xs font-semibold text-[#C84B18] hover:underline">Edit</span>
-                  )}
-                  <ChevronDown className={`h-4 w-4 text-[#716D67] transition-transform ${createStep === 2 ? "rotate-180" : ""}`} />
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <span className="text-xs font-semibold text-[#716D67] dark:text-[#A8A29E] hidden sm:inline">
+                    {expandedStep === 2 ? "Minimize" : "Expand"}
+                  </span>
+                  <ChevronDown className={`h-4 w-4 text-[#716D67] transition-transform duration-200 ${expandedStep === 2 ? "rotate-180" : ""}`} />
                 </div>
-              </div>
+              </button>
 
               {/* Step 2 Body */}
-              {createStep === 2 && (
-                <div className="p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-4 max-w-xl animate-fadeIn">
+              {expandedStep === 2 && (
+                <div className="p-4 sm:p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-4 max-w-3xl animate-fadeIn">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-2">
                     <div className="space-y-1.5">
                       <label className={labelCls}>Question Format</label>
@@ -1180,7 +1323,7 @@ export default function TeacherDashboard() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <label className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase">
-                          Bloom's Cognitive Target
+                          Bloom&apos;s Cognitive Target
                         </label>
                         <select
                           value={cognitiveTarget}
@@ -1198,16 +1341,16 @@ export default function TeacherDashboard() {
                         <label className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase">
                           Difficulty Ratio Blend
                         </label>
-                        <div className="flex items-center gap-2 pt-1">
-                          <span className="text-[11px] font-semibold text-[#C84B18]">Easy: {diffEasyPct}%</span>
-                          <span className="text-[11px] font-semibold text-amber-600">Med: {diffMedPct}%</span>
-                          <span className="text-[11px] font-semibold text-rose-600">Hard: {diffHardPct}%</span>
+                        <div className="flex items-center gap-2 pt-1 flex-wrap">
+                          <span className="text-[11px] font-semibold text-[#C84B18] bg-[#C84B18]/10 px-2 py-0.5 rounded">Easy: {diffEasyPct}%</span>
+                          <span className="text-[11px] font-semibold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded">Med: {diffMedPct}%</span>
+                          <span className="text-[11px] font-semibold text-rose-600 bg-rose-500/10 px-2 py-0.5 rounded">Hard: {diffHardPct}%</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="space-y-2.5">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
                         <label className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5 text-[#C84B18]" />
                           <span>Teacher Instructions to AI Generator</span>
@@ -1328,16 +1471,26 @@ export default function TeacherDashboard() {
                     </div>
                   </div>
 
-                  <div className="pt-2 flex justify-between">
+                  <div className="pt-3 flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2.5">
                     <button
                       type="button"
-                      onClick={() => setCreateStep(1)}
-                      className="px-3.5 py-2 border border-[#E5E0D8] dark:border-[#292524] rounded-xl text-xs font-semibold text-[#716D67] hover:text-[#242321] flex items-center gap-1.5"
+                      onClick={() => {
+                        setCreateStep(1);
+                        setExpandedStep(1);
+                      }}
+                      className="w-full sm:w-auto px-4 py-2 border border-[#E5E0D8] dark:border-[#292524] rounded-xl text-xs font-semibold text-[#716D67] hover:text-[#242321] flex items-center justify-center gap-1.5 cursor-pointer bg-white dark:bg-[#171615]"
                     >
                       <ArrowLeft className="h-3.5 w-3.5" />
-                      <span>Back</span>
+                      <span>Back to Source</span>
                     </button>
-                    <button type="button" onClick={() => setCreateStep(3)} className="btn-primary py-2 px-4 text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setCreateStep(3);
+                        setExpandedStep(3);
+                      }} 
+                      className="w-full sm:w-auto btn-primary py-2.5 px-5 text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                    >
                       <span>Continue to Rules</span>
                       <ArrowRight className="h-3.5 w-3.5" />
                     </button>
@@ -1354,13 +1507,21 @@ export default function TeacherDashboard() {
                 ? "bg-white dark:bg-[#171615] border-[#E5E0D8] dark:border-[#292524]"
                 : "bg-[#F7F4EF]/60 dark:bg-[#141312]/60 border-[#E5E0D8] dark:border-[#292524] opacity-85"
             }`}>
-              {/* Step 3 Header */}
-              <div
-                onClick={() => setCreateStep(3)}
-                className="p-4 flex items-center justify-between cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1D1B19]/50 transition-colors"
+              {/* Step 3 Header Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (expandedStep === 3) {
+                    setExpandedStep(null);
+                  } else {
+                    setExpandedStep(3);
+                    setCreateStep(3);
+                  }
+                }}
+                className="w-full p-4 flex items-center justify-between text-left cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1D1B19]/50 transition-colors focus:outline-none"
               >
                 <div className="flex items-center gap-3">
-                  <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs ${
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                     createStep > 3
                       ? "bg-emerald-600 text-white"
                       : createStep === 3
@@ -1369,27 +1530,27 @@ export default function TeacherDashboard() {
                   }`}>
                     {createStep > 3 ? <Check className="h-4 w-4" /> : "3"}
                   </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4]">
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] truncate">
                       03. Duration, Marks & Schedule Window
                     </h3>
-                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">
+                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E] truncate">
                       {examDuration} Minutes • {examMarks} Total Marks
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {createStep > 3 && (
-                    <span className="text-xs font-semibold text-[#C84B18] hover:underline">Edit</span>
-                  )}
-                  <ChevronDown className={`h-4 w-4 text-[#716D67] transition-transform ${createStep === 3 ? "rotate-180" : ""}`} />
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <span className="text-xs font-semibold text-[#716D67] dark:text-[#A8A29E] hidden sm:inline">
+                    {expandedStep === 3 ? "Minimize" : "Expand"}
+                  </span>
+                  <ChevronDown className={`h-4 w-4 text-[#716D67] transition-transform duration-200 ${expandedStep === 3 ? "rotate-180" : ""}`} />
                 </div>
-              </div>
+              </button>
 
               {/* Step 3 Body */}
-              {createStep === 3 && (
-                <div className="p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-4 max-w-xl animate-fadeIn">
+              {expandedStep === 3 && (
+                <div className="p-4 sm:p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-4 max-w-3xl animate-fadeIn">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-2">
                     <div className="space-y-1.5">
                       <label className={labelCls}>Duration (Minutes)</label>
@@ -1411,35 +1572,35 @@ export default function TeacherDashboard() {
                     </div>
                   </div>
 
-                  {/* Presets */}
+                  {/* Presets Grid */}
                   <div className="space-y-2 pt-1">
                     <label className={labelCls}>Quick Schedule Presets</label>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <button
                         type="button"
                         onClick={() => setSchedulePreset("now")}
-                        className="px-3 py-1.5 text-xs font-semibold border border-[#E5E0D8] dark:border-[#292524] rounded-lg bg-[#F7F4EF] dark:bg-[#141312] hover:border-[#C84B18]"
+                        className="p-2 text-center text-xs font-semibold border border-[#E5E0D8] dark:border-[#292524] rounded-xl bg-[#F7F4EF] dark:bg-[#141312] hover:border-[#C84B18] transition-colors cursor-pointer truncate"
                       >
                         ⚡ Start Now
                       </button>
                       <button
                         type="button"
                         onClick={() => setSchedulePreset("open30days")}
-                        className="px-3 py-1.5 text-xs font-semibold border border-[#E5E0D8] dark:border-[#292524] rounded-lg bg-[#F7F4EF] dark:bg-[#141312] hover:border-[#C84B18]"
+                        className="p-2 text-center text-xs font-semibold border border-[#E5E0D8] dark:border-[#292524] rounded-xl bg-[#F7F4EF] dark:bg-[#141312] hover:border-[#C84B18] transition-colors cursor-pointer truncate"
                       >
                         📅 30-Day Window
                       </button>
                       <button
                         type="button"
                         onClick={() => setSchedulePreset("today4pm")}
-                        className="px-3 py-1.5 text-xs font-semibold border border-[#E5E0D8] dark:border-[#292524] rounded-lg bg-[#F7F4EF] dark:bg-[#141312] hover:border-[#C84B18]"
+                        className="p-2 text-center text-xs font-semibold border border-[#E5E0D8] dark:border-[#292524] rounded-xl bg-[#F7F4EF] dark:bg-[#141312] hover:border-[#C84B18] transition-colors cursor-pointer truncate"
                       >
                         Today 4 PM
                       </button>
                       <button
                         type="button"
                         onClick={() => setSchedulePreset("tomorrow10am")}
-                        className="px-3 py-1.5 text-xs font-semibold border border-[#E5E0D8] dark:border-[#292524] rounded-lg bg-[#F7F4EF] dark:bg-[#141312] hover:border-[#C84B18]"
+                        className="p-2 text-center text-xs font-semibold border border-[#E5E0D8] dark:border-[#292524] rounded-xl bg-[#F7F4EF] dark:bg-[#141312] hover:border-[#C84B18] transition-colors cursor-pointer truncate"
                       >
                         Tomorrow 10 AM
                       </button>
@@ -1453,7 +1614,7 @@ export default function TeacherDashboard() {
                         type="datetime-local"
                         value={examStartDate}
                         onChange={(e) => setExamStartDate(e.target.value)}
-                        className={inputCls}
+                        className={`${inputCls} min-w-0`}
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -1462,21 +1623,31 @@ export default function TeacherDashboard() {
                         type="datetime-local"
                         value={examEndDate}
                         onChange={(e) => setExamEndDate(e.target.value)}
-                        className={inputCls}
+                        className={`${inputCls} min-w-0`}
                       />
                     </div>
                   </div>
 
-                  <div className="pt-2 flex justify-between">
+                  <div className="pt-3 flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2.5">
                     <button
                       type="button"
-                      onClick={() => setCreateStep(2)}
-                      className="px-3.5 py-2 border border-[#E5E0D8] dark:border-[#292524] rounded-xl text-xs font-semibold text-[#716D67] hover:text-[#242321] flex items-center gap-1.5"
+                      onClick={() => {
+                        setCreateStep(2);
+                        setExpandedStep(2);
+                      }}
+                      className="w-full sm:w-auto px-4 py-2 border border-[#E5E0D8] dark:border-[#292524] rounded-xl text-xs font-semibold text-[#716D67] hover:text-[#242321] flex items-center justify-center gap-1.5 cursor-pointer bg-white dark:bg-[#171615]"
                     >
                       <ArrowLeft className="h-3.5 w-3.5" />
-                      <span>Back</span>
+                      <span>Back to Questions</span>
                     </button>
-                    <button type="button" onClick={() => setCreateStep(4)} className="btn-primary py-2 px-4 text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setCreateStep(4);
+                        setExpandedStep(4);
+                      }} 
+                      className="w-full sm:w-auto btn-primary py-2.5 px-5 text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                    >
                       <span>Review & Generate</span>
                       <ArrowRight className="h-3.5 w-3.5" />
                     </button>
@@ -1491,35 +1662,48 @@ export default function TeacherDashboard() {
                 ? "bg-white dark:bg-[#171615] border-[#C84B18]/40 shadow-sm ring-1 ring-[#C84B18]/20"
                 : "bg-[#F7F4EF]/60 dark:bg-[#141312]/60 border-[#E5E0D8] dark:border-[#292524] opacity-85"
             }`}>
-              {/* Step 4 Header */}
-              <div
-                onClick={() => setCreateStep(4)}
-                className="p-4 flex items-center justify-between cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1D1B19]/50 transition-colors"
+              {/* Step 4 Header Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (expandedStep === 4) {
+                    setExpandedStep(null);
+                  } else {
+                    setExpandedStep(4);
+                    setCreateStep(4);
+                  }
+                }}
+                className="w-full p-4 flex items-center justify-between text-left cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1D1B19]/50 transition-colors focus:outline-none"
               >
                 <div className="flex items-center gap-3">
-                  <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs ${
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                     createStep === 4
                       ? "bg-[#C84B18] text-white"
                       : "bg-[#E5E0D8] dark:bg-[#292524] text-[#716D67]"
                   }`}>
                     4
                   </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4]">
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] truncate">
                       04. Final Blueprint Review & AI Paper Synthesis
                     </h3>
-                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">
+                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E] truncate">
                       Confirm blueprint specs and generate assessment
                     </p>
                   </div>
                 </div>
 
-                <ChevronDown className={`h-4 w-4 text-[#716D67] transition-transform ${createStep === 4 ? "rotate-180" : ""}`} />
-              </div>
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <span className="text-xs font-semibold text-[#716D67] dark:text-[#A8A29E] hidden sm:inline">
+                    {expandedStep === 4 ? "Minimize" : "Expand"}
+                  </span>
+                  <ChevronDown className={`h-4 w-4 text-[#716D67] transition-transform duration-200 ${expandedStep === 4 ? "rotate-180" : ""}`} />
+                </div>
+              </button>
 
               {/* Step 4 Body */}
-              {createStep === 4 && (
-                <div className="p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-5 max-w-xl animate-fadeIn">
+              {expandedStep === 4 && (
+                <div className="p-4 sm:p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-5 max-w-3xl animate-fadeIn">
                   {/* Student Directory Selector with + Create Directory button */}
                   <div className="pt-2 space-y-2">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -1557,7 +1741,7 @@ export default function TeacherDashboard() {
                           <button
                             type="button"
                             onClick={() => setIsCreateDirModalOpen(true)}
-                            className="btn-primary py-1.5 px-3 text-xs font-bold inline-flex items-center gap-1.5 shadow-xs"
+                            className="btn-primary py-1.5 px-3 text-xs font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
                           >
                             <Plus className="h-3.5 w-3.5" />
                             <span>Create First Student Directory</span>
@@ -1584,16 +1768,23 @@ export default function TeacherDashboard() {
                     </div>
                   </div>
 
-                  <div className="pt-2 flex justify-between">
+                  <div className="pt-3 flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2.5">
                     <button
                       type="button"
-                      onClick={() => setCreateStep(3)}
-                      className="px-3.5 py-2 border border-[#E5E0D8] dark:border-[#292524] rounded-xl text-xs font-semibold text-[#716D67] hover:text-[#242321] flex items-center gap-1.5"
+                      onClick={() => {
+                        setCreateStep(3);
+                        setExpandedStep(3);
+                      }}
+                      className="w-full sm:w-auto px-4 py-2 border border-[#E5E0D8] dark:border-[#292524] rounded-xl text-xs font-semibold text-[#716D67] hover:text-[#242321] flex items-center justify-center gap-1.5 cursor-pointer bg-white dark:bg-[#171615]"
                     >
                       <ArrowLeft className="h-3.5 w-3.5" />
-                      <span>Back</span>
+                      <span>Back to Schedule</span>
                     </button>
-                    <button type="submit" disabled={isGenerating} className="btn-primary py-2 px-5 text-xs font-bold flex items-center gap-2 shadow-xs">
+                    <button 
+                      type="submit" 
+                      disabled={isGenerating} 
+                      className="w-full sm:w-auto btn-primary py-2.5 px-6 text-xs font-bold flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                    >
                       {isGenerating ? (
                         <>
                           <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
