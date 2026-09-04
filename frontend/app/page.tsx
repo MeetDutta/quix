@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "../store/authStore";
+import { apiFetch } from "../lib/api";
 import { 
   School, 
   FileEdit, 
@@ -29,7 +30,8 @@ import {
   Clock,
   Award,
   Zap,
-  HelpCircle
+  HelpCircle,
+  LogIn
 } from "lucide-react";
 
 export default function UnifiedHomePage() {
@@ -40,6 +42,41 @@ export default function UnifiedHomePage() {
   const [directExamCode, setDirectExamCode] = useState("");
   const [copiedCred, setCopiedCred] = useState<string | null>(null);
   const [activeGuideTab, setActiveGuideTab] = useState<"creator" | "student" | "proctor" | "analytics">("creator");
+  const [loggingInRole, setLoggingInRole] = useState<string | null>(null);
+
+  const handleQuickDemoLogin = async (email: string, pass: string, roleKey: string) => {
+    setLoggingInRole(roleKey);
+    try {
+      const res = await apiFetch("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password: pass }),
+      });
+      const data = await res.json();
+      if (res.ok && data.access_token) {
+        useAuthStore.getState().setAuth(
+          data.access_token,
+          data.role,
+          data.full_name,
+          data.institution_id
+        );
+        if (data.workspace_id) {
+          localStorage.setItem("workspaceId", data.workspace_id);
+          localStorage.setItem("workspaceName", data.workspace_name || "Personal Workspace");
+        }
+        if (data.role === "student") {
+          router.push("/dashboard/student");
+        } else {
+          router.push("/dashboard/teacher");
+        }
+      } else {
+        router.push(`/login?role=${roleKey}`);
+      }
+    } catch {
+      router.push(`/login?role=${roleKey}`);
+    } finally {
+      setLoggingInRole(null);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -554,55 +591,95 @@ export default function UnifiedHomePage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Teacher Demo Card */}
-            <div className="p-5 rounded-2xl bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]">
-                    <FileEdit className="h-4 w-4" />
+            <div className="p-5 rounded-2xl bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] shadow-xs space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]">
+                      <FileEdit className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-xs text-[#242321] dark:text-[#F5F5F4]">Instructor / Teacher Demo</h4>
+                      <span className="text-[10px] text-[#716D67]">Dr. Sarah Jenkins · Full creator privileges</span>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-xs text-[#242321] dark:text-[#F5F5F4]">Instructor / Teacher Demo</h4>
-                    <span className="text-[10px] text-[#716D67]">Full creator & proctor privileges</span>
-                  </div>
+                  <button
+                    onClick={() => copyToClipboard("teacher@aegeus.edu\nsecurepassword", "teacher")}
+                    className="px-2.5 py-1 rounded-lg bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] text-[11px] font-semibold text-[#716D67] hover:text-[#242321] flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    {copiedCred === "teacher" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copiedCred === "teacher" ? "Copied!" : "Copy"}</span>
+                  </button>
                 </div>
-                <button
-                  onClick={() => copyToClipboard("kb_test_teacher@aegeus.edu\nSecurePassword123!", "teacher")}
-                  className="px-2.5 py-1 rounded-lg bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] text-[11px] font-semibold text-[#716D67] hover:text-[#242321] flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  {copiedCred === "teacher" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                  <span>{copiedCred === "teacher" ? "Copied!" : "Copy"}</span>
-                </button>
+                <div className="font-mono text-xs p-2.5 rounded-xl bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] space-y-1 mt-3">
+                  <div className="flex justify-between"><span className="text-[#716D67]">Email:</span> <b className="text-[#242321] dark:text-[#F5F5F4]">teacher@aegeus.edu</b></div>
+                  <div className="flex justify-between"><span className="text-[#716D67]">Pass:</span> <b className="text-[#C84B18] dark:text-[#EA580C]">securepassword</b></div>
+                </div>
               </div>
-              <div className="font-mono text-xs p-2.5 rounded-xl bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] space-y-1">
-                <div className="flex justify-between"><span className="text-[#716D67]">Email:</span> <b className="text-[#242321] dark:text-[#F5F5F4]">kb_test_teacher@aegeus.edu</b></div>
-                <div className="flex justify-between"><span className="text-[#716D67]">Pass:</span> <b className="text-[#C84B18] dark:text-[#EA580C]">SecurePassword123!</b></div>
-              </div>
+              <button
+                type="button"
+                disabled={loggingInRole === "teacher"}
+                onClick={() => handleQuickDemoLogin("teacher@aegeus.edu", "securepassword", "teacher")}
+                className="w-full py-2 px-3 bg-[#C84B18] hover:bg-[#B33E0F] dark:bg-[#EA580C] dark:hover:bg-[#C2410C] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {loggingInRole === "teacher" ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Launching Studio...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="h-3.5 w-3.5" />
+                    <span>1-Click Launch Instructor Studio</span>
+                  </>
+                )}
+              </button>
             </div>
 
             {/* Student Demo Card */}
-            <div className="p-5 rounded-2xl bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-                    <GraduationCap className="h-4 w-4" />
+            <div className="p-5 rounded-2xl bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] shadow-xs space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                      <GraduationCap className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-xs text-[#242321] dark:text-[#F5F5F4]">Student / Candidate Demo</h4>
+                      <span className="text-[10px] text-[#716D67]">Alex Johnson · Enrolled candidate testing portal</span>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-xs text-[#242321] dark:text-[#F5F5F4]">Student / Candidate Demo</h4>
-                    <span className="text-[10px] text-[#716D67]">Enrolled candidate test portal</span>
-                  </div>
+                  <button
+                    onClick={() => copyToClipboard("student@aegeus.edu\nsecurepassword", "student")}
+                    className="px-2.5 py-1 rounded-lg bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] text-[11px] font-semibold text-[#716D67] hover:text-[#242321] flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    {copiedCred === "student" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copiedCred === "student" ? "Copied!" : "Copy"}</span>
+                  </button>
                 </div>
-                <button
-                  onClick={() => copyToClipboard("alex.student@aegeus.edu\nSecurePassword123!", "student")}
-                  className="px-2.5 py-1 rounded-lg bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] text-[11px] font-semibold text-[#716D67] hover:text-[#242321] flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  {copiedCred === "student" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                  <span>{copiedCred === "student" ? "Copied!" : "Copy"}</span>
-                </button>
+                <div className="font-mono text-xs p-2.5 rounded-xl bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] space-y-1 mt-3">
+                  <div className="flex justify-between"><span className="text-[#716D67]">Email:</span> <b className="text-[#242321] dark:text-[#F5F5F4]">student@aegeus.edu</b></div>
+                  <div className="flex justify-between"><span className="text-[#716D67]">Pass:</span> <b className="text-emerald-600 dark:text-emerald-400">securepassword</b></div>
+                </div>
               </div>
-              <div className="font-mono text-xs p-2.5 rounded-xl bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] space-y-1">
-                <div className="flex justify-between"><span className="text-[#716D67]">Email:</span> <b className="text-[#242321] dark:text-[#F5F5F4]">alex.student@aegeus.edu</b></div>
-                <div className="flex justify-between"><span className="text-[#716D67]">Pass:</span> <b className="text-emerald-600 dark:text-emerald-400">SecurePassword123!</b></div>
-              </div>
+              <button
+                type="button"
+                disabled={loggingInRole === "student"}
+                onClick={() => handleQuickDemoLogin("student@aegeus.edu", "securepassword", "student")}
+                className="w-full py-2 px-3 bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {loggingInRole === "student" ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Launching Portal...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="h-3.5 w-3.5" />
+                    <span>1-Click Launch Candidate Portal</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </section>

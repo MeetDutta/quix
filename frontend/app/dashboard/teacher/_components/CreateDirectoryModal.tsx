@@ -5,6 +5,7 @@ import { X, FolderPlus, UploadCloud, FileText, CheckCircle, AlertCircle, Users, 
 import { createStudentDirectory, importStudentsCSV } from '@/lib/api/studentDirectories';
 import { StudentDirectory } from '@/types/studentDirectory';
 import { API_V1 } from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
 
 interface CreateDirectoryModalProps {
   isOpen: boolean;
@@ -58,7 +59,7 @@ export default function CreateDirectoryModal({
     setLoading(true);
     setError(null);
 
-    const token = localStorage.getItem('token') || '';
+    const token = useAuthStore.getState().token || (typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '');
 
     try {
       // 1. Create the directory

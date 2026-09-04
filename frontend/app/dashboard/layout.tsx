@@ -61,7 +61,7 @@ export default function DashboardLayout({
       const res = await apiFetch("/notifications/?limit=10", { token });
       if (res.ok) {
         const data = await res.json();
-        setNotifications(data);
+        setNotifications(Array.isArray(data) ? data : []);
       }
       const countRes = await apiFetch("/notifications/unread-count", { token });
       if (countRes.ok) {

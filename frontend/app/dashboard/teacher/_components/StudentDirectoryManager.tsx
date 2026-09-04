@@ -33,9 +33,17 @@ import {
   CSVImportResult
 } from '@/types/studentDirectory';
 import { API_V1 } from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
 import CreateDirectoryModal from './CreateDirectoryModal';
 
-export default function StudentDirectoryManager() {
+interface StudentDirectoryManagerProps {
+  token?: string | null;
+}
+
+export default function StudentDirectoryManager({ token: propToken }: StudentDirectoryManagerProps = {}) {
+  const storeToken = useAuthStore((state) => state.token);
+  const token = propToken || storeToken || (typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '');
+
   const [directories, setDirectories] = useState<StudentDirectory[]>([]);
   const [selectedDirectory, setSelectedDirectory] = useState<StudentDirectory | null>(null);
   const [students, setStudents] = useState<DirectoryStudent[]>([]);
@@ -63,14 +71,17 @@ export default function StudentDirectoryManager() {
   const [csvImportLoading, setCsvImportLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-
-  const loadDirectories = async () => {
+  const loadDirectories = async (authToken?: string) => {
+    const activeToken = authToken || token;
+    if (!activeToken) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchStudentDirectories(token);
-      setDirectories(data);
+      const data = await fetchStudentDirectories(activeToken);
+      setDirectories(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.message || 'Failed to load student directories');
     } finally {
@@ -78,11 +89,13 @@ export default function StudentDirectoryManager() {
     }
   };
 
-  const loadStudents = async (dirId: string) => {
+  const loadStudents = async (dirId: string, authToken?: string) => {
+    const activeToken = authToken || token;
+    if (!activeToken) return;
     try {
       setStudentsLoading(true);
-      const data = await fetchDirectoryStudents(dirId, token);
-      setStudents(data);
+      const data = await fetchDirectoryStudents(dirId, activeToken);
+      setStudents(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.message || 'Failed to load students for this directory');
     } finally {
@@ -91,8 +104,10 @@ export default function StudentDirectoryManager() {
   };
 
   useEffect(() => {
-    loadDirectories();
-  }, []);
+    if (token) {
+      loadDirectories(token);
+    }
+  }, [token]);
 
   const handleSelectDirectory = (dir: StudentDirectory) => {
     setSelectedDirectory(dir);

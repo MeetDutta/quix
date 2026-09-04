@@ -93,6 +93,14 @@ function LoginContent() {
       if (targetParam) {
         setTargetDestination(targetParam);
       }
+      const demoParam = params.get("demo");
+      if (demoParam === "teacher") {
+        setEmail("teacher@aegeus.edu");
+        setPassword("securepassword");
+      } else if (demoParam === "student") {
+        setEmail("student@aegeus.edu");
+        setPassword("securepassword");
+      }
     }
 
     // Load saved preferences
@@ -511,6 +519,48 @@ function LoginContent() {
               ═══════════════════════════════════════════════════════════════ */}
           {authMode === "signin" ? (
             <form onSubmit={handleSignInSubmit} className="space-y-4">
+              {/* Quick Demo Credentials 1-Click Fill */}
+              <div className="p-3 bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider">
+                    Quick Demo Credentials
+                  </span>
+                  <span className="text-[10px] text-[#716D67] dark:text-[#A8A29E]">Click to Auto-Fill</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail("teacher@aegeus.edu");
+                      setPassword("securepassword");
+                    }}
+                    className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                      email === "teacher@aegeus.edu"
+                        ? "border-[#C84B18] bg-[#C84B18]/10 text-[#C84B18] dark:border-[#EA580C] dark:text-[#EA580C]"
+                        : "border-[#E5E0D8] dark:border-[#292524] bg-white dark:bg-[#1C1A17] text-[#716D67] hover:text-[#242321] dark:hover:text-white"
+                    }`}
+                  >
+                    <div className="text-[11px] font-bold">👨‍🏫 Instructor</div>
+                    <div className="text-[9px] font-mono opacity-80 truncate">teacher@aegeus.edu</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail("student@aegeus.edu");
+                      setPassword("securepassword");
+                    }}
+                    className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                      email === "student@aegeus.edu"
+                        ? "border-emerald-600 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-500"
+                        : "border-[#E5E0D8] dark:border-[#292524] bg-white dark:bg-[#1C1A17] text-[#716D67] hover:text-[#242321] dark:hover:text-white"
+                    }`}
+                  >
+                    <div className="text-[11px] font-bold">🎓 Candidate</div>
+                    <div className="text-[9px] font-mono opacity-80 truncate">student@aegeus.edu</div>
+                  </button>
+                </div>
+              </div>
+
               {/* Email Field */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-[#57534E] dark:text-[#A8A29E] uppercase tracking-wider">

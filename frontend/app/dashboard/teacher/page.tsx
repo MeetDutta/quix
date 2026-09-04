@@ -111,6 +111,9 @@ export default function TeacherDashboard() {
     const handleCustom = (e: any) => {
       if (e.detail) {
         setActiveSectionTab(e.detail);
+        setTimeout(() => {
+          document.getElementById(e.detail)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 50);
       }
     };
     window.addEventListener("hashchange", handleHash);
@@ -1634,7 +1637,7 @@ export default function TeacherDashboard() {
       {/* ═══════ SECTION 5: STUDENT DIRECTORY MANAGER ═══════ */}
       {(activeSectionTab === "all" || activeSectionTab === "students") && (
       <section id="students" className="scroll-mt-16 space-y-4">
-        <StudentDirectoryManager />
+        <StudentDirectoryManager token={token} />
       </section>
       )}
 
