@@ -30,6 +30,7 @@ export default function ExamPortal() {
   const isTeacherPreviewMode = searchParams.get("mode") === "teacher_preview" || searchParams.get("preview") === "true";
 
   const examStore = useExamStore();
+  const [mounted, setMounted] = useState(false);
 
   // Exam status state (pre-login)
   const [examStatus, setExamStatus] = useState<ExamStatus>("loading");
@@ -62,6 +63,7 @@ export default function ExamPortal() {
 
   // Check exam status on load OR auto-launch teacher preview simulation
   useEffect(() => {
+    setMounted(true);
     const initExamPortal = async () => {
       // 1. If Teacher Simulation Mode
       if (isTeacherPreviewMode && authToken && (authRole === "teacher" || authRole === "inst_admin" || authRole === "super_admin")) {
@@ -505,7 +507,7 @@ export default function ExamPortal() {
           )}
 
           {/* 1-Click Direct Start for Authenticated User */}
-          {authToken && (
+          {mounted && authToken && (
             <div className="p-3.5 sm:p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
@@ -537,7 +539,7 @@ export default function ExamPortal() {
             </div>
           )}
 
-          {authToken && (
+          {mounted && authToken && (
             <div className="relative flex items-center justify-center">
               <div className="border-t border-[#E5E0D8] dark:border-[#292524] w-full" />
               <span className="bg-white dark:bg-[#171615] px-3 text-[10px] font-bold text-[#716D67] uppercase tracking-wider shrink-0">

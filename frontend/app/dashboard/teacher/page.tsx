@@ -88,6 +88,7 @@ export default function TeacherDashboard() {
   const { token, fullName } = useAuthStore();
   const { showToast } = useToast();
   
+  const [mounted, setMounted] = useState(false);
   const [activeSectionTab, setActiveSectionTab] = useState<string>("all");
 
   const switchSectionTab = (tab: string) => {
@@ -99,6 +100,7 @@ export default function TeacherDashboard() {
   };
 
   useEffect(() => {
+    setMounted(true);
     const handleHash = () => {
       const hash = window.location.hash.replace("#", "");
       if (hash) {
@@ -529,7 +531,7 @@ export default function TeacherDashboard() {
             Teacher Command Center
           </h1>
           <p className="text-xs text-[#716D67] dark:text-[#A8A29E] mt-0.5">
-            Welcome, <b>{fullName || "Instructor"}</b>. Autonomous AI assessment synthesis & proctoring sandbox.
+            Welcome, <b>{mounted && fullName ? fullName : "Instructor"}</b>. Autonomous AI assessment synthesis & proctoring sandbox.
           </p>
         </div>
 

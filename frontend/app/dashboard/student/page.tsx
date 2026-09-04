@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 export default function StudentDashboard() {
   const router = useRouter();
   const { token, fullName, role } = useAuthStore();
+  const [mounted, setMounted] = useState(false);
   
   // Data States
   const [assignedExams, setAssignedExams] = useState<any[]>([]);
@@ -95,6 +96,7 @@ export default function StudentDashboard() {
   };
 
   useEffect(() => {
+    setMounted(true);
     const storedToken = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (token || storedToken) {
       fetchData();
@@ -156,7 +158,7 @@ export default function StudentDashboard() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold text-[#242321] dark:text-[#F5F5F4]">
-                  {fullName || (isTeacher ? "Instructor Portal" : "Student Candidate")}
+                  {mounted && fullName ? fullName : (isTeacher ? "Instructor Portal" : "Student Candidate")}
                 </h1>
                 {isTeacher ? (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">

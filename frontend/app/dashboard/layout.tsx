@@ -556,17 +556,17 @@ export default function DashboardLayout({
             <div className={`flex items-center gap-2.5 overflow-hidden ${sidebarCollapsed ? "justify-center" : ""}`}>
               <div 
                 className="h-9 w-9 rounded-xl bg-[#C84B18] dark:bg-[#EA580C] text-white flex items-center justify-center font-bold text-xs shadow-sm shrink-0 cursor-pointer"
-                title={fullName || "User Account"}
+                title={mounted && fullName ? fullName : "User Account"}
               >
-                {fullName ? fullName.charAt(0).toUpperCase() : "T"}
+                {mounted && fullName ? fullName.charAt(0).toUpperCase() : "U"}
               </div>
               {!sidebarCollapsed && (
                 <div className="overflow-hidden">
                   <div className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] truncate">
-                    {fullName || "Dr. Sarah Jenkins"}
+                    {mounted && fullName ? fullName : "User Account"}
                   </div>
                   <div className="text-[10px] text-[#716D67] dark:text-[#A8A29E] font-medium capitalize truncate">
-                    {role || "Teacher"} · EduQuizX
+                    {mounted && role ? role : "Teacher"} · EduQuizX
                   </div>
                 </div>
               )}
@@ -802,8 +802,8 @@ export default function DashboardLayout({
 
             <div className="space-y-4 text-xs">
               <div className="space-y-1.5 p-4 rounded-xl bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524]">
-                <div className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4]">{fullName || "Dr. Sarah Jenkins"}</div>
-                <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E] font-medium">Role: <span className="font-bold text-[#C84B18] uppercase">{role || "TEACHER"}</span></div>
+                <div className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4]">{mounted && fullName ? fullName : "User Account"}</div>
+                <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E] font-medium">Role: <span className="font-bold text-[#C84B18] uppercase">{mounted && role ? role : "TEACHER"}</span></div>
                 <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">Institution: EduQuizX Academy</div>
               </div>
 
