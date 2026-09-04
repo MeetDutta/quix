@@ -197,7 +197,7 @@ export default function StudentDirectoryManager() {
         )
       );
     } catch (err: any) {
-      alert(err.message || 'Failed to import CSV');
+      alert(err.message || 'Failed to upload student roster');
     } finally {
       setCsvImportLoading(false);
     }
@@ -303,10 +303,10 @@ export default function StudentDirectoryManager() {
                   setIsCsvModalOpen(true);
                 }}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-[#F0ECE4] dark:bg-[#292524] text-[#242321] dark:text-[#F5F5F4] hover:bg-[#E5E0D8] dark:hover:bg-[#3E3A36] text-xs font-medium rounded-xl border border-[#E5E0D8] dark:border-[#3E3A36] transition-colors cursor-pointer shadow-2xs"
-                title="Import student roster from Excel (.xlsx, .xls) or CSV (.csv, .tsv)"
+                title="Upload student roster from Excel (.xlsx, .xls) or CSV (.csv, .tsv)"
               >
                 <UploadCloud className="w-3.5 h-3.5 text-[#C84B18]" />
-                <span>Import Excel / CSV</span>
+                <span>Upload Excel</span>
               </button>
 
               <button
@@ -363,14 +363,14 @@ export default function StudentDirectoryManager() {
                 </div>
                 <p className="text-sm font-semibold text-[#242321] dark:text-[#F5F5F4]">No students in this directory yet</p>
                 <p className="text-xs text-[#716D67] dark:text-[#A8A29E] mt-1 max-w-sm mx-auto">
-                  Add students manually or import a class roster CSV file to target them in assessments.
+                  Add students manually or upload an Excel class roster file to target them in assessments.
                 </p>
                 <div className="mt-4 flex items-center justify-center gap-3">
                   <button
                     onClick={() => setIsCsvModalOpen(true)}
                     className="px-4 py-2 text-xs font-semibold bg-[#C84B18] hover:bg-[#B33F12] text-white rounded-xl cursor-pointer shadow-sm"
                   >
-                    Import CSV Roster
+                    Upload Excel
                   </button>
                   <button
                     onClick={() => setIsAddStudentModalOpen(true)}
@@ -625,7 +625,7 @@ export default function StudentDirectoryManager() {
               <div className="flex items-center gap-2.5">
                 <UploadCloud className="w-5 h-5 text-[#C84B18]" />
                 <div>
-                  <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">Import Student Roster (Excel / CSV)</h3>
+                  <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">Upload Student Roster (Excel / CSV)</h3>
                   <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">Universal spreadsheet support with auto header mapping</p>
                 </div>
               </div>
@@ -753,7 +753,7 @@ export default function StudentDirectoryManager() {
                   onClick={handleImportCsv}
                   className="px-4 py-2 text-xs font-semibold bg-[#C84B18] hover:bg-[#B33F12] disabled:opacity-50 text-white rounded-xl shadow-sm transition-colors cursor-pointer"
                 >
-                  {csvImportLoading ? 'Importing Roster...' : 'Upload & Import Roster'}
+                  {csvImportLoading ? 'Uploading Roster...' : 'Upload Excel Roster'}
                 </button>
               </div>
             </div>

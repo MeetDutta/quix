@@ -89,7 +89,7 @@ export default function CSVImportModal({ onClose, onSuccess }: CSVImportModalPro
             </div>
             <div>
               <h3 className="font-bold text-base text-[#242321] dark:text-[#F5F5F4]">
-                Import Student Roster (CSV)
+                Upload Student Roster (Excel / CSV)
               </h3>
               <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">
                 Bulk enroll students and automatically dispatch authorization invites.
@@ -145,7 +145,7 @@ export default function CSVImportModal({ onClose, onSuccess }: CSVImportModalPro
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv"
+              accept=".csv, .xlsx, .xls, .tsv, .txt, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
               onChange={handleFileChange}
               className="hidden"
             />
@@ -162,7 +162,7 @@ export default function CSVImportModal({ onClose, onSuccess }: CSVImportModalPro
               <div className="space-y-2">
                 <Upload className="h-8 w-8 text-[#716D67] mx-auto" />
                 <div className="text-xs font-semibold text-[#242321] dark:text-[#F5F5F4]">
-                  Drag & drop your roster <code className="font-mono text-[#C84B18]">.csv</code> file here
+                  Drag & drop your roster <code className="font-mono text-[#C84B18]">.xlsx / .csv</code> file here
                 </div>
                 <div className="text-[11px] text-[#716D67]">or click to browse from your device</div>
               </div>

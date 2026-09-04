@@ -196,7 +196,7 @@ export default function CreateDirectoryModal({
                   <UploadCloud className="w-5 h-5" />
                 </div>
                 <div className="text-xs text-[#242321] dark:text-[#F5F5F4]">
-                  <span className="text-[#C84B18] font-medium hover:underline">Click to upload Excel or CSV</span> or drag and drop
+                  <span className="text-[#C84B18] font-medium hover:underline">Click to upload Excel</span> or drag and drop
                 </div>
                 <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">
                   Supports .xlsx, .xls, .csv, and .tsv with automatic column detection
