@@ -77,7 +77,8 @@ class AIService:
         question_type: str, 
         difficulty: str, 
         count: int, 
-        topic: Optional[str] = None
+        topic: Optional[str] = None,
+        custom_instructions: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Generates structured questions from vector context chunks using RAG.
@@ -130,6 +131,8 @@ class AIService:
             "]"
         )
         
+        custom_instr_section = f"\n        Teacher's Special Instructions & Formulation Directives:\n        {custom_instructions.strip()}\n" if custom_instructions and custom_instructions.strip() else ""
+
         prompt = f"""
         Retrieved Knowledge Base Context:
         {context_str}
@@ -137,7 +140,7 @@ class AIService:
         Task:
         Generate exactly {count} distinct academic-grade examination questions of type '{question_type}' with difficulty level '{difficulty}'.
         Target Topic/Concept: '{topic if topic else "general domain concepts from context"}'.
-
+        {custom_instr_section}
         adhere strictly to specifications for '{question_type}':
         - 'mcq': return 4 distinct technical domain options, correct_answer must be the exact matching option string. Randomize correct answer positions across questions.
         - 'true_false': options must be ["True", "False"], correct_answer must be either 'True' or 'False'.

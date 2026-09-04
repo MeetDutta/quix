@@ -191,12 +191,15 @@ def generate_exam_from_kb(
     if total_count <= 0:
         total_count = 5
 
+    custom_instr = req.custom_instructions or (req.blueprint.get("custom_instructions") if req.blueprint else None)
+
     raw_questions = ai_service.generate_questions(
         context_chunks=chunks,
         question_type=req.question_type or "mcq",
         difficulty=req.difficulty or "medium",
         count=total_count,
-        topic=req.topic or "General"
+        topic=req.topic or "General",
+        custom_instructions=custom_instr
     )
 
     if not raw_questions or len(raw_questions) == 0:

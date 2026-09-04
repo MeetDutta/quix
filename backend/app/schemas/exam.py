@@ -80,6 +80,8 @@ class ExamGenerateKBRequest(BaseModel):
     num_subjective: Optional[int] = 0
     question_type: Optional[str] = "mcq"
     difficulty: Optional[str] = "medium"
+    custom_instructions: Optional[str] = None
+    blueprint: Optional[Dict[str, Any]] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
 

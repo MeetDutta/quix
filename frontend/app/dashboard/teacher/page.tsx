@@ -8,7 +8,8 @@ import {
   Plus, BookOpen, Calendar, ChevronRight, ChevronDown, Check,
   Users, BarChart3, GraduationCap, Clock, 
   Sparkles, ArrowRight, ArrowLeft, Radio, FileSpreadsheet,
-  UploadCloud, FileUp, FileText, Loader2, CheckCircle2, X
+  UploadCloud, FileUp, FileText, Loader2, CheckCircle2, X,
+  Lightbulb, HelpCircle
 } from "lucide-react";
 
 import StudentDirectoryManager from "./_components/StudentDirectoryManager";
@@ -22,6 +23,66 @@ import GradebookAnalytics from "./_components/GradebookAnalytics";
 import UploadKBModal from "./_components/UploadKBModal";
 import { fetchStudentDirectories } from "@/lib/api/studentDirectories";
 import { StudentDirectory } from "@/types/studentDirectory";
+
+interface ReadyMadePrompt {
+  id: string;
+  title: string;
+  icon: string;
+  badge: string;
+  description: string;
+  prompt: string;
+}
+
+const READY_MADE_PROMPTS: ReadyMadePrompt[] = [
+  {
+    id: "code-debugging",
+    title: "Code & Bug Hunt",
+    icon: "💻",
+    badge: "Coding / STEM",
+    description: "Embed code snippets & edge cases",
+    prompt: "Include concise Python or JavaScript code snippets in questions. Ask students to predict terminal output, trace variable states, or identify subtle syntax and logical errors.",
+  },
+  {
+    id: "numerical-calc",
+    title: "Numerical Calculations",
+    icon: "🧮",
+    badge: "Math & Physics",
+    description: "Multi-step quantitative calculations",
+    prompt: "Focus on multi-step numerical calculations. Provide explicit input variables and formulas, requiring students to calculate exact numerical solutions.",
+  },
+  {
+    id: "case-scenario",
+    title: "Workplace Case Studies",
+    icon: "🏢",
+    badge: "Applied / Business",
+    description: "Real-world dilemmas & diagnosis",
+    prompt: "Frame questions as realistic workplace scenarios. Require students to analyze the situation, evaluate architectural trade-offs, and recommend optimal decisions.",
+  },
+  {
+    id: "critical-theory",
+    title: "Deep Concepts (Anti-Guessing)",
+    icon: "🧠",
+    badge: "Conceptual",
+    description: "Deep theory with plausible distractors",
+    prompt: "Strictly avoid trivial definitions or rote memorization. Craft plausible distractors reflecting common student misconceptions to evaluate deep understanding.",
+  },
+  {
+    id: "assertion-reason",
+    title: "Assertion & Reason",
+    icon: "⚖️",
+    badge: "Analytical Reasoning",
+    description: "Logical causality & truth values",
+    prompt: "Formulate Assertion and Reason pairs. Test whether Assertion and Reason are true independently, and whether the Reason correctly explains the Assertion.",
+  },
+  {
+    id: "foundational-clear",
+    title: "Foundational & Clear",
+    icon: "🎯",
+    badge: "Introductory",
+    description: "Accessible language with zero jargon",
+    prompt: "Keep questions straightforward, direct, and unambiguous. Focus on fundamental principles with clear, educational explanations for each option.",
+  },
+];
 
 export default function TeacherDashboard() {
   const { token, fullName } = useAuthStore();
@@ -96,6 +157,7 @@ export default function TeacherDashboard() {
   const [diffMedPct, setDiffMedPct] = useState(50);
   const [diffHardPct, setDiffHardPct] = useState(20);
   const [customPromptInstructions, setCustomPromptInstructions] = useState("");
+  const [showPromptGuide, setShowPromptGuide] = useState(false);
   const [examStartDate, setExamStartDate] = useState("");
   const [examEndDate, setExamEndDate] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -307,6 +369,7 @@ export default function TeacherDashboard() {
         start_time: examStartDate ? new Date(examStartDate).toISOString() : null,
         end_time: examEndDate ? new Date(examEndDate).toISOString() : null,
         student_directory_id: selectedDirectoryId || null,
+        custom_instructions: customPromptInstructions,
         blueprint: blueprint,
         enable_ai_paper: true,
       };
@@ -1138,17 +1201,125 @@ export default function TeacherDashboard() {
                       </div>
                     </div>
 
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase">
-                        Teacher Instructions to AI Generator
-                      </label>
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-[#C84B18]" />
+                          <span>Teacher Instructions to AI Generator</span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowPromptGuide((prev) => !prev)}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-[#C84B18] dark:text-[#EA580C] hover:underline cursor-pointer"
+                          >
+                            <Lightbulb className="w-3 h-3" />
+                            <span>{showPromptGuide ? "Hide Guide" : "Formulation Guide"}</span>
+                          </button>
+                          {customPromptInstructions && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCustomPromptInstructions("");
+                                showToast("Custom instructions cleared", "info");
+                              }}
+                              className="text-[11px] text-[#716D67] hover:text-red-500 transition-colors cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Formulation Guide Collapsible */}
+                      {showPromptGuide && (
+                        <div className="p-3 bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl text-xs space-y-2 animate-fadeIn">
+                          <div className="flex items-center gap-1.5 font-bold text-[#242321] dark:text-[#F5F5F4] text-[11px]">
+                            <HelpCircle className="w-3.5 h-3.5 text-[#C84B18]" />
+                            <span>How to Formulate an Effective Prompt for AI Question Generation</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-[#716D67] dark:text-[#A8A29E]">
+                            <div className="p-2 rounded-lg bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524]">
+                              <p className="font-semibold text-[#242321] dark:text-[#F5F5F4] mb-0.5">1. Target Concepts</p>
+                              <p>Pinpoint subtopics: &quot;Focus on concurrency, deadlocks, and thread safety rather than general OS definitions.&quot;</p>
+                            </div>
+                            <div className="p-2 rounded-lg bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524]">
+                              <p className="font-semibold text-[#242321] dark:text-[#F5F5F4] mb-0.5">2. Practical Format</p>
+                              <p>Request specific forms: &quot;Include a 4-line Python code block with tricky indexing and ask for stdout.&quot;</p>
+                            </div>
+                            <div className="p-2 rounded-lg bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524]">
+                              <p className="font-semibold text-[#242321] dark:text-[#F5F5F4] mb-0.5">3. Negative Constraints</p>
+                              <p>Eliminate weak questions: &quot;No trivia, no questions on history or year numbers, no &apos;All of the above&apos;.&quot;</p>
+                            </div>
+                            <div className="p-2 rounded-lg bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524]">
+                              <p className="font-semibold text-[#242321] dark:text-[#F5F5F4] mb-0.5">4. Plausible Distractors</p>
+                              <p>Prevent guessing: &quot;Ensure all 4 options look mathematically valid and target common conceptual misconceptions.&quot;</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       <textarea
-                        rows={2}
+                        rows={3}
                         value={customPromptInstructions}
                         onChange={(e) => setCustomPromptInstructions(e.target.value)}
-                        placeholder="e.g. Include Python code snippets, focus on numerical calculations, avoid trivial definitions..."
-                        className="w-full bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-lg p-2 text-xs text-[#242321] dark:text-[#F5F5F4] focus:outline-none focus:ring-1 focus:ring-[#C84B18]"
+                        placeholder="e.g. Include Python code snippets, focus on numerical calculations, avoid trivial definitions... or click any ready-made sample below!"
+                        className="w-full bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-2.5 text-xs text-[#242321] dark:text-[#F5F5F4] focus:outline-none focus:ring-1 focus:ring-[#C84B18] shadow-xs"
                       />
+
+                      {/* Ready-made sample prompt pills */}
+                      <div className="space-y-1.5 pt-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#716D67] dark:text-[#A8A29E] flex items-center gap-1.5">
+                            <Sparkles className="w-3 h-3 text-[#C84B18]" />
+                            <span>Ready-Made Sample Prompts (Click to Insert)</span>
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {READY_MADE_PROMPTS.map((item) => {
+                            const isSelected = customPromptInstructions.includes(item.prompt);
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setCustomPromptInstructions((prev) =>
+                                      prev.replace(item.prompt, "").replace(/\n\n+/g, "\n").trim()
+                                    );
+                                    showToast(`Removed "${item.title}" prompt`, "info");
+                                  } else {
+                                    setCustomPromptInstructions((prev) =>
+                                      prev ? `${prev.trim()}\n\n${item.prompt}` : item.prompt
+                                    );
+                                    showToast(`Inserted "${item.title}" prompt!`, "success");
+                                  }
+                                }}
+                                className={`text-left p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-1 group ${
+                                  isSelected
+                                    ? "bg-[#C84B18]/10 dark:bg-[#EA580C]/15 border-[#C84B18] dark:border-[#EA580C] shadow-xs"
+                                    : "bg-[#FAF8F5] dark:bg-[#1C1A17] hover:bg-[#F0ECE4] dark:hover:bg-[#292524] border-[#E5E0D8] dark:border-[#292524] hover:border-[#C84B18]/40"
+                                }`}
+                                title={item.prompt}
+                              >
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <span className="flex items-center gap-1.5 text-xs font-bold text-[#242321] dark:text-[#F5F5F4]">
+                                    <span>{item.icon}</span>
+                                    <span className="group-hover:text-[#C84B18] transition-colors">{item.title}</span>
+                                  </span>
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#E5E0D8]/60 dark:bg-[#292524] text-[#716D67] dark:text-[#A8A29E] font-medium shrink-0">
+                                    {item.badge}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E] line-clamp-2 leading-relaxed">
+                                  {item.description}
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
