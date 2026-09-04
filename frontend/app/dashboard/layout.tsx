@@ -590,7 +590,7 @@ export default function DashboardLayout({
          ══════════════════════════════════════════════════════ */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Top App Navigation Header */}
-        <header className="h-16 border-b border-[#E5E0D8] dark:border-[#292524] bg-[#FFFFFF] dark:bg-[#171615] px-4 md:px-6 flex items-center justify-between shrink-0 shadow-xs">
+        <header className="h-16 border-b border-[#E5E0D8] dark:border-[#292524] bg-[#FFFFFF] dark:bg-[#171615] px-3 sm:px-4 md:px-6 flex items-center justify-between shrink-0 shadow-xs">
           
           {/* Left Breadcrumb & Mobile Menu Toggle */}
           <div className="flex items-center gap-3">
@@ -771,7 +771,7 @@ export default function DashboardLayout({
         </header>
 
         {/* Main Content Body */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#FAF8F5] dark:bg-[#0F0E0D]">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 bg-[#FAF8F5] dark:bg-[#0F0E0D]">
           {children}
         </main>
       </div>
@@ -780,8 +780,8 @@ export default function DashboardLayout({
           SETTINGS MODAL
          ══════════════════════════════════════════════════════ */}
       {settingsModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] rounded-xl border border-[#C84B18]/20">

@@ -136,7 +136,7 @@ export default function PaperStudioModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 animate-fadeIn">
-      <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-4xl w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[92dvh] flex flex-col">
+      <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-4xl w-full mx-2 sm:mx-auto p-3.5 sm:p-6 shadow-2xl space-y-4 max-h-[92dvh] flex flex-col">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E0D8] dark:border-[#292524] pb-3 sm:pb-4 shrink-0">
           <div className="min-w-0">
@@ -182,7 +182,7 @@ export default function PaperStudioModal({
 
         {/* Questions Scrollable Body */}
         <div className="overflow-y-auto flex-1 space-y-4 pr-1">
-          <div className="flex items-center justify-between text-xs font-semibold text-[#716D67] dark:text-[#A8A29E]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold text-[#716D67] dark:text-[#A8A29E]">
             <span>{editedQuestions.length} Examination Questions</span>
             <div className="flex items-center gap-3">
               <span>Total: {editedQuestions.reduce((acc, q) => acc + (parseFloat(q.marks) || 0), 0)} Marks</span>
@@ -402,21 +402,22 @@ export default function PaperStudioModal({
           )}
         </div>
 
-        {/* Modal Footer Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#E5E0D8] dark:border-[#292524] shrink-0">
-          <div className="flex items-center gap-2">
+        {/* Footer Actions */}
+        <div className="border-t border-[#E5E0D8] dark:border-[#292524] pt-3 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               disabled={isAuditing}
               onClick={handleAuditPaper}
-              className="px-3 py-2 rounded-md bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] hover:bg-[#C84B18]/20 border border-[#C84B18]/20 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-2 rounded-md bg-[#C84B18]/10 text-[#C84B18] hover:bg-[#C84B18]/20 font-bold text-xs flex items-center gap-1.5 transition-all shadow-2xs"
+              title="Run AI Quality & Answer Balance Audit"
             >
               <Sparkles className="h-3.5 w-3.5" />
-              <span>{isAuditing ? "Auditing..." : "Audit Paper with AI"}</span>
+              <span>{isAuditing ? "Auditing Paper..." : "AI Paper Audit"}</span>
             </button>
 
             <a
-              href={`${API_V1}/exams/${exam.id}/pdf/question-paper`}
+              href={`${API_V1}/exams/${exam.id}/pdf/printable`}
               target="_blank"
               rel="noreferrer"
               className="px-3 py-2 rounded-md border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] text-xs font-medium flex items-center gap-1.5 hover:bg-[#E5E0D8]/40"
@@ -448,7 +449,7 @@ export default function PaperStudioModal({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 justify-end">
             <button
               type="button"
               onClick={onClose}
@@ -501,8 +502,8 @@ export default function PaperStudioModal({
 
       {/* ═══════ AI PAPER QUALITY & FAIRNESS AUDIT REPORT MODAL ═══════ */}
       {auditModalData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4 relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-lg w-full mx-3 sm:mx-auto p-4 sm:p-6 shadow-2xl space-y-4 relative max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setAuditModalData(null)}
               className="absolute top-4 right-4 text-[#716D67] hover:text-[#242321] p-1 rounded-md"

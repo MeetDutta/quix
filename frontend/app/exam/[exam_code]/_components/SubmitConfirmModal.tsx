@@ -28,8 +28,8 @@ export default function SubmitConfirmModal({
   const unansweredCount = questions.length - answeredCount;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-      <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-fadeIn">
+      <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-3">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-[#C84B18]/10 text-[#C84B18]">

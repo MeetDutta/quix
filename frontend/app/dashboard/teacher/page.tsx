@@ -713,30 +713,30 @@ export default function TeacherDashboard() {
                     </div>
 
                     {/* Mode Toggle Switcher */}
-                    <div className="flex p-1 bg-[#F0ECE4]/60 dark:bg-[#1D1B19] rounded-xl border border-[#E5E0D8] dark:border-[#292524]">
+                    <div className="flex flex-col sm:flex-row p-1 bg-[#F0ECE4]/60 dark:bg-[#1D1B19] rounded-xl border border-[#E5E0D8] dark:border-[#292524] gap-1 sm:gap-0">
                       <button
                         type="button"
                         onClick={() => setStep1SourceMode("select")}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                           step1SourceMode === "select"
                             ? "bg-white dark:bg-[#292524] text-[#242321] dark:text-[#F5F5F4] shadow-xs"
                             : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-white"
                         }`}
                       >
-                        <BookOpen className="h-3.5 w-3.5" />
-                        <span>Existing Knowledge Base</span>
+                        <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">Existing Knowledge Base</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setStep1SourceMode("upload")}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                           step1SourceMode === "upload"
                             ? "bg-[#C84B18] dark:bg-[#EA580C] text-white shadow-xs"
                             : "text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-white"
                         }`}
                       >
-                        <UploadCloud className="h-3.5 w-3.5" />
-                        <span>Upload New Document Now</span>
+                        <UploadCloud className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">Upload New Document Now</span>
                       </button>
                     </div>
 
@@ -996,7 +996,7 @@ export default function TeacherDashboard() {
               {/* Step 2 Body */}
               {createStep === 2 && (
                 <div className="p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-4 max-w-xl animate-fadeIn">
-                  <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-2">
                     <div className="space-y-1.5">
                       <label className={labelCls}>Question Format</label>
                       <select
@@ -1074,7 +1074,7 @@ export default function TeacherDashboard() {
                   )}
 
                   {questionType === "mixed" && (
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div className="space-y-1.5">
                         <label className={labelCls}>No. of MCQs</label>
                         <input
@@ -1214,7 +1214,7 @@ export default function TeacherDashboard() {
               {/* Step 3 Body */}
               {createStep === 3 && (
                 <div className="p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-4 max-w-xl animate-fadeIn">
-                  <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-2">
                     <div className="space-y-1.5">
                       <label className={labelCls}>Duration (Minutes)</label>
                       <input
@@ -1346,7 +1346,7 @@ export default function TeacherDashboard() {
                 <div className="p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-5 max-w-xl animate-fadeIn">
                   {/* Student Directory Selector with + Create Directory button */}
                   <div className="pt-2 space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <label className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] uppercase tracking-wider flex items-center gap-1.5">
                         <Users className="h-3.5 w-3.5 text-[#C84B18]" />
                         <span>Target Student Directory</span>
@@ -1354,7 +1354,7 @@ export default function TeacherDashboard() {
                       <button
                         type="button"
                         onClick={() => setIsCreateDirModalOpen(true)}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold text-[#C84B18] hover:text-[#A0360D] dark:text-[#EA580C] dark:hover:text-[#F97316] transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-[#C84B18] hover:text-[#A0360D] dark:text-[#EA580C] dark:hover:text-[#F97316] transition-colors cursor-pointer self-start sm:self-auto"
                       >
                         <Plus className="h-3.5 w-3.5" />
                         <span>Create New Student Directory</span>
@@ -1398,7 +1398,7 @@ export default function TeacherDashboard() {
                     <h4 className="font-bold text-[#242321] dark:text-[#F5F5F4] text-xs uppercase tracking-wider">
                       Assessment Synthesis Summary
                     </h4>
-                    <div className="grid grid-cols-2 gap-2 text-[#716D67] dark:text-[#A8A29E]">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[#716D67] dark:text-[#A8A29E]">
                       <div>Title: <b className="text-[#242321] dark:text-[#F5F5F4]">{examName || "Untitled Assessment"}</b></div>
                       <div>Source: <b className="text-[#242321] dark:text-[#F5F5F4]">{examSubject || "General"}</b></div>
                       <div>Questions: <b className="text-[#242321] dark:text-[#F5F5F4]">{parseInt(numMcq) + parseInt(numSubjective)} Total ({numMcq} MCQ)</b></div>

@@ -101,10 +101,10 @@ export default function UploadKBModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white dark:bg-[#171615] rounded-2xl border border-[#E5E0D8] dark:border-[#292524] p-6 max-w-lg w-full shadow-2xl space-y-5 relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+      <div className="bg-white dark:bg-[#171615] rounded-2xl border border-[#E5E0D8] dark:border-[#292524] p-4 sm:p-6 max-w-lg w-full mx-3 sm:mx-auto shadow-2xl space-y-4 sm:space-y-5 relative max-h-[92vh] flex flex-col overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-3">
+        <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-3 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] rounded-xl">
               <UploadCloud className="h-5 w-5" />
@@ -219,7 +219,7 @@ export default function UploadKBModal({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-2 pt-2">
+          <div className="flex flex-col-reverse sm:flex-row gap-2 pt-2">
             <button
               type="button"
               onClick={onClose}

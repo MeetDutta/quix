@@ -732,8 +732,8 @@ function LoginContent() {
 
       {/* ═══════ FORGOT PASSWORD MODAL ═══════ */}
       {forgotModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-4 sm:p-6 max-w-md w-full shadow-2xl space-y-4 relative max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setForgotModalOpen(false)}
               className="absolute top-4 right-4 text-[#716D67] hover:text-[#242321] dark:hover:text-white p-1 rounded-lg hover:bg-[#F0ECE4]/50 dark:hover:bg-[#292524]"

@@ -227,7 +227,7 @@ export default function StudentDirectoryManager() {
   return (
     <div className="space-y-6">
       {/* Top Header Card */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#FFFFFF] dark:bg-[#171615] p-6 rounded-2xl border border-[#E5E0D8] dark:border-[#292524] shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#FFFFFF] dark:bg-[#171615] p-4 sm:p-6 rounded-2xl border border-[#E5E0D8] dark:border-[#292524] shadow-sm">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2.5 rounded-xl bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20">
@@ -263,7 +263,7 @@ export default function StudentDirectoryManager() {
         /* DETAIL ROSTER VIEW */
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Breadcrumb / Back Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-[#FFFFFF] dark:bg-[#171615] rounded-2xl border border-[#E5E0D8] dark:border-[#292524] shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 bg-[#FFFFFF] dark:bg-[#171615] rounded-2xl border border-[#E5E0D8] dark:border-[#292524] shadow-sm">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => {
@@ -287,7 +287,7 @@ export default function StudentDirectoryManager() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
               <button
                 onClick={() => {
                   setCsvFile(null);
@@ -366,32 +366,32 @@ export default function StudentDirectoryManager() {
                 <table className="w-full text-left text-xs text-[#242321] dark:text-[#F5F5F4]">
                   <thead className="bg-[#F7F4EF] dark:bg-[#1C1A17] text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider font-semibold border-b border-[#E5E0D8] dark:border-[#292524] text-[10px]">
                     <tr>
-                      <th className="px-6 py-3.5">Student Name</th>
-                      <th className="px-6 py-3.5">Email Address</th>
-                      <th className="px-6 py-3.5">Roll / ID</th>
-                      <th className="px-6 py-3.5">Phone Number</th>
-                      <th className="px-6 py-3.5">Status</th>
-                      <th className="px-6 py-3.5 text-right">Actions</th>
+                      <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Student Name</th>
+                      <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Email Address</th>
+                      <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Roll / ID</th>
+                      <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Phone Number</th>
+                      <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Status</th>
+                      <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E5E0D8] dark:divide-[#292524]">
                     {filteredStudents.map((s) => (
                       <tr key={s.id} className="hover:bg-[#FAF8F5] dark:hover:bg-[#1C1A17] transition-colors">
-                        <td className="px-6 py-3.5 font-medium text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20 flex items-center justify-center text-xs font-bold">
+                        <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap font-medium text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20 flex items-center justify-center text-xs font-bold shrink-0">
                             {s.name.charAt(0).toUpperCase()}
                           </div>
-                          <span>{s.name}</span>
+                          <span className="truncate">{s.name}</span>
                         </td>
-                        <td className="px-6 py-3.5 text-[#716D67] dark:text-[#A8A29E]">{s.email}</td>
-                        <td className="px-6 py-3.5 text-[#716D67] dark:text-[#A8A29E]">{s.roll_number || '—'}</td>
-                        <td className="px-6 py-3.5 text-[#716D67] dark:text-[#A8A29E]">{s.phone || '—'}</td>
-                        <td className="px-6 py-3.5">
+                        <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E]">{s.email}</td>
+                        <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E]">{s.roll_number || '—'}</td>
+                        <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E]">{s.phone || '—'}</td>
+                        <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                             Active
                           </span>
                         </td>
-                        <td className="px-6 py-3.5 text-right">
+                        <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-right">
                           <button
                             onClick={() => handleRemoveStudent(s.id)}
                             className="p-1.5 text-[#716D67] dark:text-[#A8A29E] hover:text-red-500 rounded-lg hover:bg-[#F0ECE4] dark:hover:bg-[#292524] transition-colors cursor-pointer"
@@ -502,9 +502,9 @@ export default function StudentDirectoryManager() {
 
       {/* ADD STUDENT MODAL */}
       {isAddStudentModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-md bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E0D8] dark:border-[#292524] bg-[#FAF8F5] dark:bg-[#141312]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md mx-3 sm:mx-auto bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 sm:py-5 border-b border-[#E5E0D8] dark:border-[#292524] bg-[#FAF8F5] dark:bg-[#141312] shrink-0">
               <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">Add Student to Directory</h3>
               <button
                 onClick={() => setIsAddStudentModalOpen(false)}
@@ -550,7 +550,7 @@ export default function StudentDirectoryManager() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-[#57534E] dark:text-[#A8A29E] mb-1.5">
                     Roll / ID
@@ -600,9 +600,9 @@ export default function StudentDirectoryManager() {
 
       {/* CSV IMPORT MODAL */}
       {isCsvModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-lg bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E0D8] dark:border-[#292524] bg-[#FAF8F5] dark:bg-[#141312]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-lg mx-3 sm:mx-auto bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 sm:py-5 border-b border-[#E5E0D8] dark:border-[#292524] bg-[#FAF8F5] dark:bg-[#141312] shrink-0">
               <div className="flex items-center gap-2.5">
                 <UploadCloud className="w-5 h-5 text-[#C84B18]" />
                 <h3 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4]">Import Student Roster CSV</h3>

@@ -87,7 +87,7 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
   return (
     <div className="space-y-6">
       {/* Top Bar: Quiz Selector & 1-Click CSV Export */}
-      <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-5 shadow-xs space-y-4">
+      <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 sm:p-5 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2">
@@ -146,7 +146,7 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
       ) : reportAnalytics ? (
         <div className="space-y-6">
           {/* ════ Generalized Summary Metric KPI Cards ════ */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-4">
             <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 shadow-xs">
               <div className="text-[11px] font-medium text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider">
                 Attendance
@@ -205,7 +205,7 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
           {/* ════ Score Distribution & Topic Difficulty Analysis ════ */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Score Distribution Brackets */}
-            <div className="lg:col-span-6 bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-5 space-y-4 shadow-xs">
+            <div className="lg:col-span-6 bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 sm:p-5 space-y-4 shadow-xs">
               <h3 className="text-sm font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-[#C84B18]" />
                 <span>Cohort Score Distribution</span>
@@ -257,7 +257,7 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
             </div>
 
             {/* Topic Difficulty & Error Trends */}
-            <div className="lg:col-span-6 bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-5 space-y-4 shadow-xs">
+            <div className="lg:col-span-6 bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 sm:p-5 space-y-4 shadow-xs">
               <h3 className="text-sm font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2">
                 <BookOpen className="h-4 w-4 text-[#C84B18]" />
                 <span>Topic Difficulty & Accuracy Trends</span>
@@ -308,7 +308,7 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
           </div>
 
           {/* ════ Student Performance Roster Table ════ */}
-          <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-5 space-y-4 shadow-xs">
+          <div className="bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 sm:p-5 space-y-4 shadow-xs">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2">
@@ -325,7 +325,7 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs border-collapse min-w-[620px]">
                 <thead>
                   <tr className="border-b border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E]">
                     <th className="py-2.5 px-3 font-semibold">Rank</th>
@@ -403,9 +403,9 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
 
       {/* ═══════ STUDENT ANSWER SHEET INSPECTION MODAL ═══════ */}
       {studentAnswerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-3 shrink-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-2 sm:p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-3xl w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] flex flex-col">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E0D8] dark:border-[#292524] pb-3 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] rounded-lg">
                   <FileText className="h-5 w-5" />
@@ -503,7 +503,7 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
               )}
             </div>
 
-            <div className="pt-3 border-t border-[#E5E0D8] dark:border-[#292524] flex justify-between items-center shrink-0">
+            <div className="pt-3 border-t border-[#E5E0D8] dark:border-[#292524] flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 sm:gap-0 shrink-0">
               <a
                 href={`${API_V1}/reports/submission-detail/${studentAnswerModal.submission_id}/printable`}
                 target="_blank"

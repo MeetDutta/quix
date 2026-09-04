@@ -124,7 +124,7 @@ export default function QuestionBankManager() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-auto">
+        <div className="flex items-center gap-2 justify-between sm:justify-end w-full sm:w-auto">
           <button
             type="button"
             onClick={(e) => {
@@ -148,7 +148,7 @@ export default function QuestionBankManager() {
         <div className="p-5 pt-0 space-y-5 border-t border-[#E5E0D8] dark:border-[#292524] animate-in fade-in slide-in-from-top-2 duration-200">
           
           {/* Filter Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 pt-3 sm:pt-4">
             <input
               type="text"
               value={bankSearch}
@@ -247,13 +247,13 @@ export default function QuestionBankManager() {
 
       {/* Add Bank Question Modal */}
       {showAddBankModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4">
+          <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-lg w-full mx-3 sm:mx-auto p-4 sm:p-6 space-y-4 shadow-2xl max-h-[92vh] flex flex-col overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-3 shrink-0">
               <h3 className="text-sm font-bold text-[#242321] dark:text-[#F5F5F4]">Add Custom Question to Bank</h3>
               <button
                 onClick={() => setShowAddBankModal(false)}
-                className="text-[#716D67] hover:text-[#242321]"
+                className="text-[#716D67] hover:text-[#242321] p-1"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -272,7 +272,7 @@ export default function QuestionBankManager() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-2">
                 <div>
                   <label className="block font-semibold mb-1">Type</label>
                   <select

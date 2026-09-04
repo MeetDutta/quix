@@ -33,3 +33,4 @@ frontend/.env
 .DS_Store
 .vscode/
 .idea/
+client_secret*.json

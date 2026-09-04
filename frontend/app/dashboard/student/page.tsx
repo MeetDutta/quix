@@ -617,14 +617,14 @@ export default function StudentDashboard() {
                       </h2>
                     </div>
 
-                    <div className="flex items-center gap-3 bg-[#F0ECE4]/60 dark:bg-[#1D1B19] px-4 py-2.5 rounded-xl border border-[#E5E0D8] dark:border-[#292524] self-start sm:self-auto">
+                    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 bg-[#F0ECE4]/60 dark:bg-[#1D1B19] px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-[#E5E0D8] dark:border-[#292524] self-start sm:self-auto">
                       <div>
                         <div className="text-[10px] text-[#716D67] uppercase font-bold">Earned Score</div>
                         <div className="text-xl font-extrabold text-[#C84B18] dark:text-[#EA580C]">
                           {selectedSubDetail.score} <span className="text-xs font-normal text-[#716D67]">/ {selectedSubDetail.max_score}</span>
                         </div>
                       </div>
-                      <div className="h-8 w-px bg-[#E5E0D8] dark:bg-[#292524]" />
+                      <div className="h-8 w-px bg-[#E5E0D8] dark:border-[#292524] hidden xs:block" />
                       <div>
                         <div className="text-[10px] text-[#716D67] uppercase font-bold">Accuracy</div>
                         <div className="text-xl font-extrabold text-[#242321] dark:text-[#F5F5F4]">
@@ -633,7 +633,7 @@ export default function StudentDashboard() {
                       </div>
                       {selectedSubDetail.rank && (
                         <>
-                          <div className="h-8 w-px bg-[#E5E0D8] dark:bg-[#292524]" />
+                          <div className="h-8 w-px bg-[#E5E0D8] dark:border-[#292524] hidden xs:block" />
                           <div>
                             <div className="text-[10px] text-[#716D67] uppercase font-bold">Class Rank</div>
                             <div className="text-xl font-extrabold text-amber-600 dark:text-amber-400">
@@ -647,22 +647,22 @@ export default function StudentDashboard() {
 
                   {/* AI Learning Critique & Roadmap */}
                   {selectedSubDetail.ai_feedback && (
-                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 space-y-1.5">
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3.5 sm:p-4 space-y-1.5">
                       <div className="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-300">
                         <Sparkles className="h-4 w-4 text-[#C84B18] shrink-0" />
                         <span>AI Learning Diagnosis & Recommendations</span>
                       </div>
-                      <p className="text-xs text-amber-900 dark:text-amber-200/90 leading-relaxed pl-6">
+                      <p className="text-xs text-amber-900 dark:text-amber-200/90 leading-relaxed pl-2 sm:pl-6">
                         {selectedSubDetail.ai_feedback}
                       </p>
                     </div>
                   )}
 
                   {/* Navigation Tabs (Questions / Topics / Leaderboard) */}
-                  <div className="flex gap-2 border-b border-[#E5E0D8] dark:border-[#292524] pb-2">
+                  <div className="flex gap-2 border-b border-[#E5E0D8] dark:border-[#292524] pb-2 overflow-x-auto no-scrollbar flex-nowrap">
                     <button
                       onClick={() => setActiveViewTab("questions")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                         activeViewTab === "questions"
                           ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
                           : "text-[#716D67] hover:text-[#242321]"
@@ -674,7 +674,7 @@ export default function StudentDashboard() {
 
                     <button
                       onClick={() => setActiveViewTab("topics")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                         activeViewTab === "topics"
                           ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
                           : "text-[#716D67] hover:text-[#242321]"
@@ -686,7 +686,7 @@ export default function StudentDashboard() {
 
                     <button
                       onClick={() => setActiveViewTab("leaderboard")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                         activeViewTab === "leaderboard"
                           ? "bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]"
                           : "text-[#716D67] hover:text-[#242321]"
@@ -706,40 +706,37 @@ export default function StudentDashboard() {
                           return (
                             <div
                               key={idx}
-                              className={`p-4 rounded-xl border transition-all text-xs space-y-3 ${
+                              className={`p-3.5 sm:p-4 rounded-xl border transition-all text-xs space-y-3 ${
                                 isCorrect
-                                  ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50"
-                                  : "bg-rose-50/40 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50"
+                                  ? "bg-emerald-50/20 border-emerald-200 dark:border-emerald-800/40"
+                                  : "bg-rose-50/20 border-rose-200 dark:border-rose-800/40"
                               }`}
                             >
                               <div className="flex items-start justify-between gap-3">
-                                <div className="flex items-start gap-2">
-                                  <span className="font-bold text-[#716D67] font-mono">Q{idx + 1}.</span>
-                                  <div>
-                                    <div className="font-semibold text-[#242321] dark:text-[#F5F5F4] text-xs leading-relaxed">
-                                      <MathText text={q.question_text || q.question || ""} />
-                                    </div>
-                                    {q.topic && (
-                                      <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] bg-[#E5E0D8]/60 dark:bg-[#292524] text-[#716D67] dark:text-[#A8A29E] font-medium">
-                                        Topic: {q.topic}
-                                      </span>
-                                    )}
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-[#716D67]">Q{idx + 1}.</span>
+                                    <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-[#F0ECE4] dark:bg-[#1D1B19] text-[#716D67]">
+                                      {q.question_type || "MCQ"}
+                                    </span>
+                                  </div>
+                                  <div className="font-semibold text-xs sm:text-sm text-[#242321] dark:text-[#F5F5F4] leading-relaxed">
+                                    <MathText text={q.question_text || q.text || ""} />
                                   </div>
                                 </div>
 
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 flex items-center gap-1 ${
-                                  isCorrect 
-                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300"
-                                    : "bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-300"
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                                  isCorrect
+                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                    : "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
                                 }`}>
-                                  {isCorrect ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                                  <span>{q.score_awarded ?? (isCorrect ? q.marks : 0)} / {q.marks || 1} Marks</span>
+                                  {isCorrect ? `+${q.awarded_marks ?? q.marks ?? 1} Marks` : `0 / ${q.marks ?? 1} Marks`}
                                 </span>
                               </div>
 
                               {/* Options Breakdown with KaTeX */}
                               {q.options && typeof q.options === "object" && Object.keys(q.options).length > 0 && (
-                                <div className="space-y-1.5 pl-6">
+                                <div className="space-y-1.5 pl-2 sm:pl-6">
                                   {Object.entries(q.options).map(([optKey, optVal]: [string, any]) => {
                                     const isUserChoice = String(q.user_answer) === optKey;
                                     const isActualCorrect = String(q.correct_answer) === optKey;
@@ -747,7 +744,7 @@ export default function StudentDashboard() {
                                     return (
                                       <div
                                         key={optKey}
-                                        className={`p-2 rounded-lg border text-xs flex items-center justify-between ${
+                                        className={`p-2 rounded-lg border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 ${
                                           isActualCorrect
                                             ? "bg-emerald-100/60 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 font-semibold"
                                             : isUserChoice
@@ -759,7 +756,7 @@ export default function StudentDashboard() {
                                           <span className="font-mono font-bold uppercase">{optKey}.</span>
                                           <span><MathText text={String(optVal)} /></span>
                                         </div>
-                                        <div className="text-[10px] font-bold">
+                                        <div className="text-[10px] font-bold self-end sm:self-auto shrink-0">
                                           {isActualCorrect && <span className="text-emerald-700 dark:text-emerald-300">✓ Correct Answer</span>}
                                           {isUserChoice && !isActualCorrect && <span className="text-rose-700 dark:text-rose-300">✗ Your Choice</span>}
                                         </div>
@@ -771,7 +768,7 @@ export default function StudentDashboard() {
 
                               {/* Subjective / Written Response Display */}
                               {(!q.options || (typeof q.options === "object" && Object.keys(q.options).length === 0)) && (
-                                <div className="space-y-2 pl-6">
+                                <div className="space-y-2 pl-2 sm:pl-6">
                                   <div className="p-3 rounded-lg bg-neutral-50 dark:bg-[#1D1B19] border border-[#E5E0D8] dark:border-[#292524] space-y-1">
                                     <div className="text-[10px] font-bold uppercase text-[#716D67]">Your Written Response:</div>
                                     <div className="text-xs text-[#242321] dark:text-[#F5F5F4] whitespace-pre-wrap">
@@ -789,7 +786,7 @@ export default function StudentDashboard() {
 
                               {/* Explanation / Critique with KaTeX */}
                               {q.explanation && (
-                                <div className="pl-6 pt-1 text-[11px] text-[#716D67] dark:text-[#A8A29E] leading-relaxed border-t border-[#E5E0D8]/40 dark:border-[#292524]/60">
+                                <div className="pl-2 sm:pl-6 pt-1 text-[11px] text-[#716D67] dark:text-[#A8A29E] leading-relaxed border-t border-[#E5E0D8]/40 dark:border-[#292524]/60">
                                   <span className="font-semibold text-[#242321] dark:text-[#F5F5F4]">Explanation: </span>
                                   <MathText text={q.explanation} />
                                 </div>

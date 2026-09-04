@@ -135,7 +135,7 @@ export default function KnowledgeBaseManager({ documents, token, onRefresh }: Kn
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       
       {/* ─── LEFT: UPLOAD & INDEXING FORM ─── */}
-      <div className="lg:col-span-5 bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 space-y-4 shadow-sm">
+      <div className="lg:col-span-5 bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-4 sm:p-6 space-y-4 shadow-sm">
         <div className="border-b border-[#E5E0D8] dark:border-[#292524] pb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] rounded-lg">
@@ -262,7 +262,7 @@ export default function KnowledgeBaseManager({ documents, token, onRefresh }: Kn
       </div>
 
       {/* ─── RIGHT: INDEXED DOCUMENTS LIST ─── */}
-      <div className="lg:col-span-7 bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-6 space-y-4 shadow-sm">
+      <div className="lg:col-span-7 bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl p-4 sm:p-6 space-y-4 shadow-sm">
         <div className="flex items-center justify-between border-b border-[#E5E0D8] dark:border-[#292524] pb-3">
           <div className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-[#C84B18]" />
@@ -288,27 +288,30 @@ export default function KnowledgeBaseManager({ documents, token, onRefresh }: Kn
             documents.map((doc) => (
               <div 
                 key={doc.id} 
-                className="p-3.5 flex items-center justify-between text-xs hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1C1A17] transition-colors gap-3"
+                className="p-3 sm:p-3.5 flex items-center justify-between text-xs hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1C1A17] transition-colors gap-2.5 sm:gap-3"
               >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
                   <div className="p-2 rounded-lg bg-[#C84B18]/10 text-[#C84B18] shrink-0">
                     <FileText className="h-4 w-4" />
                   </div>
-                  <div className="truncate flex-1">
+                  <div className="truncate flex-1 min-w-0">
                     <div className="font-bold text-[#242321] dark:text-[#F5F5F4] truncate">{doc.title}</div>
-                    <div className="text-[10px] text-[#716D67] flex items-center gap-2 mt-0.5">
-                      <span className="font-mono">{doc.filename}</span>
+                    <div className="text-[10px] text-[#716D67] flex items-center gap-1.5 mt-0.5 truncate">
+                      <span className="font-mono truncate">{doc.filename}</span>
                       <span>•</span>
-                      <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 font-bold uppercase text-[9px]">
+                      <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 font-bold uppercase text-[9px] shrink-0">
                         {doc.subject_id || "General"}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
                     Vector Indexed
+                  </span>
+                  <span className="sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
+                    Indexed
                   </span>
 
                   <button
