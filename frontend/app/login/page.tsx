@@ -147,6 +147,27 @@ function LoginContent() {
     }
   };
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Intercept GSI_LOGGER origin mismatch to prevent Next.js dev overlay from interrupting local testing
+    const originalConsoleError = console.error;
+    console.error = (...args: any[]) => {
+      if (
+        typeof args[0] === "string" &&
+        args[0].includes("[GSI_LOGGER]")
+      ) {
+        console.warn("[GSI Notice - Google Origin Whitelist Required]:", ...args);
+        return;
+      }
+      originalConsoleError.apply(console, args);
+    };
+
+    return () => {
+      console.error = originalConsoleError;
+    };
+  }, []);
+
   const initGoogleGIS = () => {
     setGisLoaded(true);
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "716730043675-rq3tq97avgrrbtjoup3hjdhteg4k7pql.apps.googleusercontent.com";
@@ -172,10 +193,12 @@ function LoginContent() {
               logo_alignment: "left",
             });
           }
-          // Optional One-Tap prompt
-          try {
-            (window as any).google.accounts.id.prompt();
-          } catch {}
+          // Only prompt One-Tap outside of localhost or if origin is known valid
+          if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+            try {
+              (window as any).google.accounts.id.prompt();
+            } catch {}
+          }
         } catch (err) {
           console.warn("GIS button initialization notice:", err);
         }
