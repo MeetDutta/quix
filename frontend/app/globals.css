@@ -35,6 +35,8 @@ html.dark, html[data-theme="dark"], .dark {
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background-color: var(--bg-main) !important;
+  background-image: radial-gradient(rgba(36, 35, 33, 0.055) 1px, transparent 1px);
+  background-size: 20px 20px;
   color: var(--text-primary) !important;
   transition: background-color 0.15s ease, color 0.15s ease;
   font-size: 14px;
@@ -47,7 +49,50 @@ body {
 /* Clean Theme System */
 html.dark body {
   background-color: var(--bg-main);
+  background-image: radial-gradient(rgba(245, 245, 244, 0.065) 1px, transparent 1px);
+  background-size: 20px 20px;
   color: var(--text-primary);
+}
+
+/* Tactile Paper, Dot Grid & Subtle Mesh Texture Utilities */
+.bg-texture-dots {
+  background-image: radial-gradient(rgba(36, 35, 33, 0.06) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+html.dark .bg-texture-dots,
+.dark .bg-texture-dots {
+  background-image: radial-gradient(rgba(245, 245, 244, 0.07) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.bg-texture-grid {
+  background-image: 
+    linear-gradient(to right, rgba(200, 75, 24, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(200, 75, 24, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+html.dark .bg-texture-grid,
+.dark .bg-texture-grid {
+  background-image: 
+    linear-gradient(to right, rgba(234, 88, 12, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(234, 88, 12, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.bg-texture-paper {
+  background-color: var(--bg-main);
+  background-image: 
+    radial-gradient(rgba(200, 75, 24, 0.04) 1px, transparent 1px),
+    linear-gradient(to right, rgba(36, 35, 33, 0.02) 1px, transparent 1px);
+  background-size: 20px 20px, 40px 40px;
+}
+html.dark .bg-texture-paper,
+.dark .bg-texture-paper {
+  background-color: var(--bg-main);
+  background-image: 
+    radial-gradient(rgba(234, 88, 12, 0.06) 1px, transparent 1px),
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 20px 20px, 40px 40px;
 }
 
 /* Custom Scrollbar */

@@ -242,9 +242,16 @@ def generate_exam_from_kb(
     # Strictly limit to exact requested count
     raw_questions = raw_questions[:total_count]
 
-    # Format questions list
+    # Format questions list with custom marks distribution support
+    dist = req.marks_distribution or (req.blueprint.get("marks_distribution") if isinstance(req.blueprint, dict) else None) or {}
+    dist_mode = dist.get("mode") or "equal"
+    by_type_map = dist.get("by_type") or {}
+    by_diff_map = dist.get("by_difficulty") or {}
+    custom_marks_list = dist.get("custom_marks") or []
+
+    base_equal_marks = round((req.total_marks or 50.0) / max(len(raw_questions), 1), 2)
+
     compiled = []
-    marks_per_q = round((req.total_marks or 50.0) / max(len(raw_questions), 1), 2)
     for idx, q in enumerate(raw_questions, start=1):
         q_type_str = str(q.get("question_type") or "mcq").lower()
         if "mcq" in q_type_str or "choice" in q_type_str:
@@ -256,17 +263,43 @@ def generate_exam_from_kb(
         else:
             norm_type = "mcq" if q.get("options") else "subjective"
 
+        q_diff = str(q.get("difficulty") or req.difficulty or "medium").lower()
+        if "easy" in q_diff:
+            norm_diff = "easy"
+        elif "hard" in q_diff:
+            norm_diff = "hard"
+        else:
+            norm_diff = "medium"
+
+        # Calculate marks based on distribution mode
+        if dist_mode == "by_type" and by_type_map:
+            q_marks = float(by_type_map.get(norm_type) or by_type_map.get("mcq") or base_equal_marks)
+        elif dist_mode == "by_difficulty" and by_diff_map:
+            q_marks = float(by_diff_map.get(norm_diff) or by_diff_map.get("medium") or base_equal_marks)
+        elif dist_mode == "custom" and idx - 1 < len(custom_marks_list):
+            try:
+                q_marks = float(custom_marks_list[idx - 1])
+            except (ValueError, TypeError):
+                q_marks = base_equal_marks
+        else:
+            q_marks = base_equal_marks
+
         compiled.append({
             "id": q.get("id") or str(uuid.uuid4()),
             "question_text": q.get("question_text") or f"Question {idx} on {req.topic}",
             "question_type": norm_type,
+            "difficulty": norm_diff,
             "options": q.get("options"),
             "correct_answer": q.get("correct_answer") or "Option A",
             "explanation": q.get("explanation") or "Standard concept explanation.",
-            "marks": marks_per_q,
+            "marks": q_marks,
             "estimated_time_seconds": int(q.get("estimated_time_seconds", 60)),
             "topic": req.topic or "General"
         })
+
+    # Auto-calculate exact total marks from compiled questions
+    calc_total = sum(float(q.get("marks", 1.0)) for q in compiled)
+    computed_total_marks = round(calc_total, 2) if calc_total > 0 else (req.total_marks or 50.0)
 
     # Auto-provision subject matching req.subject_id
     subj_id = req.subject_id or "general_101"
@@ -290,13 +323,14 @@ def generate_exam_from_kb(
         created_by=current_user.id,
         student_directory_id=req.student_directory_id,
         duration_minutes=req.duration_minutes or 30,
-        total_marks=req.total_marks or 50.0,
+        total_marks=int(round(computed_total_marks)),
         negative_marking=req.negative_marking or 0.0,
-        passing_marks=req.passing_marks or 20.0,
+        passing_marks=min(req.passing_marks or 20.0, computed_total_marks),
         start_time=exam_start,
         end_time=exam_end,
         exam_code=exam_code,
         is_published=False,
+        blueprint_json=json.dumps(req.blueprint) if req.blueprint else None,
         questions_json=json.dumps(compiled)
     )
     db.add(exam)

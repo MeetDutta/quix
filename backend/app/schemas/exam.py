@@ -82,6 +82,7 @@ class ExamGenerateKBRequest(BaseModel):
     difficulty: Optional[str] = "medium"
     custom_instructions: Optional[str] = None
     blueprint: Optional[Dict[str, Any]] = None
+    marks_distribution: Optional[Dict[str, Any]] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
 

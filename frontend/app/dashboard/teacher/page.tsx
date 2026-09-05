@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuthStore } from "../../../store/authStore";
 import { useToast } from "../../../components/Toast";
 import { apiFetch, API_V1, getWebSocketUrl } from "../../../lib/api";
@@ -9,7 +9,7 @@ import {
   Users, BarChart3, GraduationCap, Clock, 
   Sparkles, ArrowRight, ArrowLeft, Radio, FileSpreadsheet,
   UploadCloud, FileUp, FileText, Loader2, CheckCircle2, X,
-  Lightbulb, HelpCircle
+  Lightbulb, HelpCircle, Sliders, Scale, Layers, Calculator
 } from "lucide-react";
 
 import StudentDirectoryManager from "./_components/StudentDirectoryManager";
@@ -172,6 +172,90 @@ export default function TeacherDashboard() {
   const [selectedDirectoryId, setSelectedDirectoryId] = useState<string>("");
   const [isCreateDirModalOpen, setIsCreateDirModalOpen] = useState(false);
   const [workspaceName, setWorkspaceName] = useState<string>("");
+
+  // Custom Marks Distribution state
+  const [marksDistMode, setMarksDistMode] = useState<"equal" | "by_type" | "by_difficulty" | "custom">("equal");
+  const [marksByType, setMarksByType] = useState<{ mcq: number; subjective: number; tf: number }>({
+    mcq: 2,
+    subjective: 5,
+    tf: 1,
+  });
+  const [marksByDiff, setMarksByDiff] = useState<{ easy: number; medium: number; hard: number }>({
+    easy: 1,
+    medium: 2,
+    hard: 4,
+  });
+  const [customSlotMarks, setCustomSlotMarks] = useState<number[]>([]);
+
+  // Computed total question count across modes
+  const computedQuestionCount = useMemo(() => {
+    if (questionType === "mixed") {
+      return (parseInt(numMcq) || 0) + (parseInt(numSubjective) || 0);
+    } else if (questionType === "subjective") {
+      return parseInt(numSubjective) || 5;
+    } else {
+      return parseInt(numMcq) || 5;
+    }
+  }, [questionType, numMcq, numSubjective]);
+
+  // Keep custom slot marks length aligned with question count
+  useEffect(() => {
+    const count = Math.max(1, computedQuestionCount);
+    setCustomSlotMarks((prev) => {
+      if (prev.length === count) return prev;
+      const initialVal = Math.max(1, Math.round((parseFloat(examMarks) || 50) / count));
+      const next = [...prev];
+      if (next.length < count) {
+        while (next.length < count) {
+          next.push(initialVal);
+        }
+      } else {
+        next.length = count;
+      }
+      return next;
+    });
+  }, [computedQuestionCount]);
+
+  // Dynamically calculate total marks based on active distribution mode
+  const calculatedTotalMarks = useMemo(() => {
+    const totalQ = Math.max(1, computedQuestionCount);
+    if (marksDistMode === "equal") {
+      return parseFloat(examMarks) || 50;
+    }
+    if (marksDistMode === "by_type") {
+      if (questionType === "mixed") {
+        const mcqs = parseInt(numMcq) || 0;
+        const subjs = parseInt(numSubjective) || 0;
+        return (mcqs * (marksByType.mcq || 2)) + (subjs * (marksByType.subjective || 5));
+      } else if (questionType === "subjective") {
+        return totalQ * (marksByType.subjective || 5);
+      } else if (questionType === "tf") {
+        return totalQ * (marksByType.tf || 1);
+      } else {
+        return totalQ * (marksByType.mcq || 2);
+      }
+    }
+    if (marksDistMode === "by_difficulty") {
+      const easyCount = Math.round(totalQ * (diffEasyPct / 100));
+      const hardCount = Math.round(totalQ * (diffHardPct / 100));
+      const medCount = Math.max(0, totalQ - easyCount - hardCount);
+      return (easyCount * (marksByDiff.easy || 1)) + (medCount * (marksByDiff.medium || 2)) + (hardCount * (marksByDiff.hard || 4));
+    }
+    if (marksDistMode === "custom") {
+      if (!customSlotMarks || customSlotMarks.length === 0) {
+        return parseFloat(examMarks) || 50;
+      }
+      return customSlotMarks.slice(0, totalQ).reduce((acc, curr) => acc + (Number(curr) || 0), 0);
+    }
+    return parseFloat(examMarks) || 50;
+  }, [marksDistMode, examMarks, computedQuestionCount, questionType, numMcq, numSubjective, marksByType, marksByDiff, diffEasyPct, diffMedPct, diffHardPct, customSlotMarks]);
+
+  // Auto-sync total marks helper
+  const syncTotalMarks = (overrideVal?: number) => {
+    const val = overrideVal !== undefined ? overrideVal : calculatedTotalMarks;
+    setExamMarks(String(val));
+    setExamPass(String(Math.max(1, Math.round(val * 0.4))));
+  };
 
   // Load initial data
   const fetchData = async () => {
@@ -344,11 +428,28 @@ export default function TeacherDashboard() {
     }
     setIsGenerating(true);
     try {
-      const totalMarksNum = parseFloat(examMarks) || 50;
-      const numQuestions = questionType === "mixed" 
-        ? (parseInt(numMcq) || 5) + (parseInt(numSubjective) || 2)
-        : (parseInt(numMcq) || 5);
+      const totalMarksNum = marksDistMode === "equal"
+        ? (parseFloat(examMarks) || 50)
+        : (calculatedTotalMarks || parseFloat(examMarks) || 50);
+      const numQuestions = computedQuestionCount || 5;
       const marksPerQ = Math.max(1, Math.round(totalMarksNum / (numQuestions || 1)));
+
+      const distributionPayload = {
+        mode: marksDistMode,
+        by_type: {
+          mcq: Number(marksByType.mcq) || 2,
+          subjective: Number(marksByType.subjective) || 5,
+          true_false: Number(marksByType.tf) || 1,
+        },
+        by_difficulty: {
+          easy: Number(marksByDiff.easy) || 1,
+          medium: Number(marksByDiff.medium) || 2,
+          hard: Number(marksByDiff.hard) || 4,
+        },
+        custom_marks: marksDistMode === "custom" && customSlotMarks.length > 0
+          ? customSlotMarks.slice(0, numQuestions).map((m) => Number(m) || 1)
+          : undefined,
+      };
 
       const blueprint = {
         topic: examTopic || "General",
@@ -358,6 +459,7 @@ export default function TeacherDashboard() {
         marks_per_question: marksPerQ,
         cognitive_target: cognitiveTarget,
         custom_instructions: customPromptInstructions,
+        marks_distribution: distributionPayload,
         distribution: {
           easy_pct: diffEasyPct,
           medium_pct: diffMedPct,
@@ -370,8 +472,9 @@ export default function TeacherDashboard() {
         subject_id: examSubject,
         duration_minutes: parseInt(examDuration) || 30,
         total_marks: totalMarksNum,
-        passing_marks: parseFloat(examPass) || 20,
+        passing_marks: parseFloat(examPass) || Math.max(1, Math.round(totalMarksNum * 0.4)),
         negative_marking: parseFloat(examNegative) || 0,
+        marks_distribution: distributionPayload,
         start_time: examStartDate ? new Date(examStartDate).toISOString() : null,
         end_time: examEndDate ? new Date(examEndDate).toISOString() : null,
         student_directory_id: selectedDirectoryId || null,
@@ -1542,7 +1645,7 @@ export default function TeacherDashboard() {
                       03. Duration, Marks & Schedule Window
                     </h3>
                     <p className="text-xs text-[#716D67] dark:text-[#A8A29E] break-words line-clamp-2 mt-0.5">
-                      {examDuration} Minutes • {examMarks} Total Marks
+                      {examDuration} min • {examMarks} pts • Strategy: {marksDistMode === "equal" ? "Equal" : marksDistMode === "by_type" ? "By Type" : marksDistMode === "by_difficulty" ? "By Difficulty" : "Custom Slots"}
                     </p>
                   </div>
                 </div>
@@ -1558,6 +1661,7 @@ export default function TeacherDashboard() {
               {/* Step 3 Body */}
               {expandedStep === 3 && (
                 <div className="p-4 sm:p-5 pt-1 border-t border-[#E5E0D8] dark:border-[#292524] space-y-4 max-w-3xl animate-fadeIn">
+                  {/* Duration & Total Marks */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-2">
                     <div className="space-y-1.5">
                       <label className={labelCls}>Duration (Minutes)</label>
@@ -1565,15 +1669,410 @@ export default function TeacherDashboard() {
                         type="number"
                         value={examDuration}
                         onChange={(e) => setExamDuration(e.target.value)}
+                        min="1"
                         className={inputCls}
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className={labelCls}>Total Marks</label>
+                      <div className="flex items-center justify-between">
+                        <label className={labelCls}>Total Marks</label>
+                        {marksDistMode !== "equal" && (
+                          <span className="text-[10px] text-[#C84B18] dark:text-[#EA580C] font-semibold">
+                            Auto-sync from {marksDistMode === "by_type" ? "types" : marksDistMode === "by_difficulty" ? "tiers" : "slots"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={examMarks}
+                          onChange={(e) => setExamMarks(e.target.value)}
+                          min="1"
+                          className={inputCls}
+                        />
+                        {marksDistMode !== "equal" && examMarks !== String(calculatedTotalMarks) && (
+                          <button
+                            type="button"
+                            onClick={() => syncTotalMarks()}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded text-[10px] font-bold bg-[#C84B18] text-white hover:bg-[#A0360D] transition-colors cursor-pointer"
+                            title="Click to synchronize total marks with calculated strategy sum"
+                          >
+                            Sync ({calculatedTotalMarks})
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ════ Marks Distribution Strategy Card ════ */}
+                  <div className="p-4 rounded-xl bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] space-y-3.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Sliders className="h-4 w-4 text-[#C84B18] dark:text-[#EA580C]" />
+                        <span className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] uppercase tracking-wider">
+                          Marks Distribution Strategy
+                        </span>
+                      </div>
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524] text-[11px] font-semibold text-[#242321] dark:text-[#F5F5F4] shadow-2xs self-start sm:self-auto">
+                        <span className="text-[#716D67]">Calculated:</span>
+                        <span className="text-[#C84B18] font-bold">{calculatedTotalMarks} pts</span>
+                        {examMarks !== String(calculatedTotalMarks) && (
+                          <button
+                            type="button"
+                            onClick={() => syncTotalMarks()}
+                            className="ml-1 text-[10px] text-[#C84B18] hover:underline font-bold cursor-pointer"
+                          >
+                            (Sync)
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Mode Selector Segmented Tabs */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524] rounded-xl">
+                      {[
+                        { id: "equal", label: "Equal", icon: "=", desc: "Flat per question" },
+                        { id: "by_type", label: "By Format", icon: "🎯", desc: "MCQ vs Subj" },
+                        { id: "by_difficulty", label: "By Difficulty", icon: "⚡", desc: "Easy/Med/Hard" },
+                        { id: "custom", label: "Custom Slots", icon: "✏️", desc: "Individual Qs" },
+                      ].map((mode) => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => {
+                            setMarksDistMode(mode.id as any);
+                            if (mode.id !== "equal") {
+                              setTimeout(() => syncTotalMarks(), 50);
+                            }
+                          }}
+                          className={`p-2 rounded-lg text-left transition-all cursor-pointer flex flex-col justify-between ${
+                            marksDistMode === mode.id
+                              ? "bg-[#C84B18] text-white shadow-xs"
+                              : "hover:bg-[#F7F4EF] dark:hover:bg-[#242321] text-[#716D67] dark:text-[#A8A29E]"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 font-bold text-xs">
+                            <span className="text-xs">{mode.icon}</span>
+                            <span className={marksDistMode === mode.id ? "text-white" : "text-[#242321] dark:text-[#F5F5F4]"}>
+                              {mode.label}
+                            </span>
+                          </div>
+                          <span className={`text-[10px] mt-0.5 truncate ${marksDistMode === mode.id ? "text-white/80" : "text-[#716D67]"}`}>
+                            {mode.desc}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* MODE 1: EQUAL */}
+                    {marksDistMode === "equal" && (
+                      <div className="p-3 bg-white dark:bg-[#1C1A17] rounded-xl border border-[#E5E0D8] dark:border-[#292524] space-y-2 text-xs">
+                        <div className="flex items-center justify-between flex-wrap gap-2 text-[#716D67] dark:text-[#A8A29E]">
+                          <span>
+                            Total <b className="text-[#242321] dark:text-[#F5F5F4]">{examMarks} pts</b> divided equally across <b className="text-[#242321] dark:text-[#F5F5F4]">{computedQuestionCount} questions</b>.
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-[#C84B18]/10 text-[#C84B18] font-bold text-[11px]">
+                            ~{(parseFloat(examMarks) / Math.max(1, computedQuestionCount)).toFixed(2)} pts / question
+                          </span>
+                        </div>
+                        <div className="pt-1 flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-semibold text-[#716D67] uppercase">Quick Presets:</span>
+                          {[1, 2, 4, 5].map((pts) => {
+                            const total = computedQuestionCount * pts;
+                            return (
+                              <button
+                                key={pts}
+                                type="button"
+                                onClick={() => syncTotalMarks(total)}
+                                className="px-2 py-1 rounded-md text-[11px] font-medium border border-[#E5E0D8] dark:border-[#292524] bg-[#FAF8F5] dark:bg-[#141312] hover:border-[#C84B18] transition-colors cursor-pointer"
+                              >
+                                {pts} pt/Q ({total} pts)
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MODE 2: BY QUESTION TYPE / FORMAT */}
+                    {marksDistMode === "by_type" && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                          {/* MCQ Weight */}
+                          {(questionType === "mcq" || questionType === "mixed") && (
+                            <div className="p-3 bg-white dark:bg-[#1C1A17] rounded-xl border border-[#E5E0D8] dark:border-[#292524] space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-1">
+                                  <span>🔘</span> MCQ Marks
+                                </span>
+                                <span className="text-[10px] text-[#716D67]">{numMcq} questions</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="0.5"
+                                  step="0.5"
+                                  value={marksByType.mcq}
+                                  onChange={(e) => {
+                                    const val = Math.max(0.5, parseFloat(e.target.value) || 1);
+                                    setMarksByType((prev) => ({ ...prev, mcq: val }));
+                                  }}
+                                  className="w-full bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-lg p-2 text-xs font-bold text-[#242321] dark:text-[#F5F5F4] focus:ring-1 focus:ring-[#C84B18]"
+                                />
+                                <span className="text-xs font-semibold text-[#716D67]">pts</span>
+                              </div>
+                              <div className="text-[10px] text-[#716D67]">
+                                Subtotal: <b className="text-[#242321] dark:text-[#F5F5F4]">{(parseInt(numMcq) || 0) * marksByType.mcq} pts</b>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Subjective Weight */}
+                          {(questionType === "subjective" || questionType === "mixed") && (
+                            <div className="p-3 bg-white dark:bg-[#1C1A17] rounded-xl border border-[#E5E0D8] dark:border-[#292524] space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-1">
+                                  <span>📝</span> Subjective Marks
+                                </span>
+                                <span className="text-[10px] text-[#716D67]">{numSubjective || 2} questions</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={marksByType.subjective}
+                                  onChange={(e) => {
+                                    const val = Math.max(1, parseFloat(e.target.value) || 1);
+                                    setMarksByType((prev) => ({ ...prev, subjective: val }));
+                                  }}
+                                  className="w-full bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-lg p-2 text-xs font-bold text-[#242321] dark:text-[#F5F5F4] focus:ring-1 focus:ring-[#C84B18]"
+                                />
+                                <span className="text-xs font-semibold text-[#716D67]">pts</span>
+                              </div>
+                              <div className="text-[10px] text-[#716D67]">
+                                Subtotal: <b className="text-[#242321] dark:text-[#F5F5F4]">{(parseInt(numSubjective) || 2) * marksByType.subjective} pts</b>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* True/False Weight */}
+                          {questionType === "tf" && (
+                            <div className="p-3 bg-white dark:bg-[#1C1A17] rounded-xl border border-[#E5E0D8] dark:border-[#292524] space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-1">
+                                  <span>⚖️</span> True/False Marks
+                                </span>
+                                <span className="text-[10px] text-[#716D67]">{numMcq} questions</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="0.5"
+                                  step="0.5"
+                                  value={marksByType.tf}
+                                  onChange={(e) => {
+                                    const val = Math.max(0.5, parseFloat(e.target.value) || 1);
+                                    setMarksByType((prev) => ({ ...prev, tf: val }));
+                                  }}
+                                  className="w-full bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-lg p-2 text-xs font-bold text-[#242321] dark:text-[#F5F5F4] focus:ring-1 focus:ring-[#C84B18]"
+                                />
+                                <span className="text-xs font-semibold text-[#716D67]">pts</span>
+                              </div>
+                              <div className="text-[10px] text-[#716D67]">
+                                Subtotal: <b className="text-[#242321] dark:text-[#F5F5F4]">{(parseInt(numMcq) || 5) * marksByType.tf} pts</b>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="p-2.5 bg-white dark:bg-[#1C1A17] rounded-xl border border-[#E5E0D8] dark:border-[#292524] flex items-center justify-between text-xs">
+                          <span className="text-[#716D67] dark:text-[#A8A29E]">Formula Total:</span>
+                          <span className="font-bold text-[#C84B18]">{calculatedTotalMarks} pts</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MODE 3: BY DIFFICULTY TIER */}
+                    {marksDistMode === "by_difficulty" && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                          {/* Easy */}
+                          <div className="p-3 bg-white dark:bg-[#1C1A17] rounded-xl border border-[#E5E0D8] dark:border-[#292524] space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4]">🟢 Easy Tier</span>
+                              <span className="text-[10px] text-[#716D67]">{diffEasyPct}% blend</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0.5"
+                                step="0.5"
+                                value={marksByDiff.easy}
+                                onChange={(e) => {
+                                  const val = Math.max(0.5, parseFloat(e.target.value) || 1);
+                                  setMarksByDiff((prev) => ({ ...prev, easy: val }));
+                                }}
+                                className="w-full bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-lg p-2 text-xs font-bold text-[#242321] dark:text-[#F5F5F4] focus:ring-1 focus:ring-[#C84B18]"
+                              />
+                              <span className="text-xs font-semibold text-[#716D67]">pts</span>
+                            </div>
+                            <div className="text-[10px] text-[#716D67]">
+                              Count: ~{Math.round(computedQuestionCount * (diffEasyPct / 100))} Qs
+                            </div>
+                          </div>
+
+                          {/* Medium */}
+                          <div className="p-3 bg-white dark:bg-[#1C1A17] rounded-xl border border-[#E5E0D8] dark:border-[#292524] space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4]">🟡 Medium Tier</span>
+                              <span className="text-[10px] text-[#716D67]">{diffMedPct}% blend</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0.5"
+                                step="0.5"
+                                value={marksByDiff.medium}
+                                onChange={(e) => {
+                                  const val = Math.max(0.5, parseFloat(e.target.value) || 1);
+                                  setMarksByDiff((prev) => ({ ...prev, medium: val }));
+                                }}
+                                className="w-full bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-lg p-2 text-xs font-bold text-[#242321] dark:text-[#F5F5F4] focus:ring-1 focus:ring-[#C84B18]"
+                              />
+                              <span className="text-xs font-semibold text-[#716D67]">pts</span>
+                            </div>
+                            <div className="text-[10px] text-[#716D67]">
+                              Count: ~{Math.max(0, computedQuestionCount - Math.round(computedQuestionCount * (diffEasyPct / 100)) - Math.round(computedQuestionCount * (diffHardPct / 100)))} Qs
+                            </div>
+                          </div>
+
+                          {/* Hard */}
+                          <div className="p-3 bg-white dark:bg-[#1C1A17] rounded-xl border border-[#E5E0D8] dark:border-[#292524] space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4]">🔴 Hard Tier</span>
+                              <span className="text-[10px] text-[#716D67]">{diffHardPct}% blend</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0.5"
+                                step="0.5"
+                                value={marksByDiff.hard}
+                                onChange={(e) => {
+                                  const val = Math.max(0.5, parseFloat(e.target.value) || 1);
+                                  setMarksByDiff((prev) => ({ ...prev, hard: val }));
+                                }}
+                                className="w-full bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-lg p-2 text-xs font-bold text-[#242321] dark:text-[#F5F5F4] focus:ring-1 focus:ring-[#C84B18]"
+                              />
+                              <span className="text-xs font-semibold text-[#716D67]">pts</span>
+                            </div>
+                            <div className="text-[10px] text-[#716D67]">
+                              Count: ~{Math.round(computedQuestionCount * (diffHardPct / 100))} Qs
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 bg-white dark:bg-[#1C1A17] rounded-xl border border-[#E5E0D8] dark:border-[#292524] flex items-center justify-between text-xs">
+                          <span className="text-[#716D67] dark:text-[#A8A29E]">Difficulty-Weighted Total:</span>
+                          <span className="font-bold text-[#C84B18]">{calculatedTotalMarks} pts</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MODE 4: CUSTOM QUESTION SLOTS */}
+                    {marksDistMode === "custom" && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
+                          <span className="text-[#716D67] dark:text-[#A8A29E]">
+                            Assign individual mark weights for each of the {computedQuestionCount} questions:
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const even = Math.max(1, Math.round((parseFloat(examMarks) || 50) / computedQuestionCount));
+                                setCustomSlotMarks(Array(computedQuestionCount).fill(even));
+                              }}
+                              className="px-2 py-1 rounded bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524] text-[11px] font-semibold text-[#716D67] hover:text-[#C84B18] transition-colors cursor-pointer"
+                            >
+                              Auto-Balance
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCustomSlotMarks(Array(computedQuestionCount).fill(2))}
+                              className="px-2 py-1 rounded bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524] text-[11px] font-semibold text-[#716D67] hover:text-[#C84B18] transition-colors cursor-pointer"
+                            >
+                              Set All to 2
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Interactive Slots Grid */}
+                        <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-56 overflow-y-auto p-1.5 bg-white dark:bg-[#1C1A17] rounded-xl border border-[#E5E0D8] dark:border-[#292524]">
+                          {Array.from({ length: computedQuestionCount }).map((_, idx) => {
+                            const val = customSlotMarks[idx] !== undefined ? customSlotMarks[idx] : 2;
+                            return (
+                              <div
+                                key={idx}
+                                className="p-2 rounded-lg bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] flex flex-col items-center gap-1 text-center"
+                              >
+                                <span className="text-[10px] font-bold text-[#716D67]">Q{idx + 1}</span>
+                                <input
+                                  type="number"
+                                  min="0.5"
+                                  step="0.5"
+                                  value={val}
+                                  onChange={(e) => {
+                                    const next = [...customSlotMarks];
+                                    next[idx] = Math.max(0.5, parseFloat(e.target.value) || 1);
+                                    setCustomSlotMarks(next);
+                                  }}
+                                  className="w-14 text-center bg-white dark:bg-[#1C1A17] border border-[#E5E0D8] dark:border-[#292524] rounded p-1 text-xs font-bold text-[#242321] dark:text-[#F5F5F4] focus:ring-1 focus:ring-[#C84B18]"
+                                />
+                                <span className="text-[9px] text-[#716D67]">pts</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="p-2.5 bg-white dark:bg-[#1C1A17] rounded-xl border border-[#E5E0D8] dark:border-[#292524] flex items-center justify-between text-xs">
+                          <span className="text-[#716D67] dark:text-[#A8A29E]">Sum of {computedQuestionCount} Question Slots:</span>
+                          <span className="font-bold text-[#C84B18]">{calculatedTotalMarks} pts</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Passing Marks & Negative Marking */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className={labelCls}>Passing Marks</label>
+                        <span className="text-[10px] text-[#716D67]">
+                          (~{Math.round(((parseFloat(examPass) || 0) / (parseFloat(examMarks) || 1)) * 100)}% threshold)
+                        </span>
+                      </div>
                       <input
                         type="number"
-                        value={examMarks}
-                        onChange={(e) => setExamMarks(e.target.value)}
+                        value={examPass}
+                        onChange={(e) => setExamPass(e.target.value)}
+                        min="1"
+                        max={examMarks}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className={labelCls}>Negative Marking (Penalty per Incorrect)</label>
+                        <span className="text-[10px] text-[#716D67]">0 = Disabled</span>
+                      </div>
+                      <input
+                        type="number"
+                        step="0.25"
+                        min="0"
+                        value={examNegative}
+                        onChange={(e) => setExamNegative(e.target.value)}
                         className={inputCls}
                       />
                     </div>
@@ -1761,17 +2260,50 @@ export default function TeacherDashboard() {
                     </p>
                   </div>
 
-                  <div className="bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 space-y-2.5 text-xs">
-                    <h4 className="font-bold text-[#242321] dark:text-[#F5F5F4] text-xs uppercase tracking-wider">
-                      Assessment Synthesis Summary
-                    </h4>
+                  <div className="bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-4 space-y-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-[#242321] dark:text-[#F5F5F4] text-xs uppercase tracking-wider">
+                        Assessment Synthesis Summary
+                      </h4>
+                      <span className="text-[11px] font-bold text-[#C84B18] dark:text-[#EA580C] bg-[#C84B18]/10 px-2 py-0.5 rounded-full">
+                        {marksDistMode === "equal" ? "Equal Marks" : marksDistMode === "by_type" ? "Format-Weighted" : marksDistMode === "by_difficulty" ? "Tier-Weighted" : "Custom Slot Weighted"}
+                      </span>
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[#716D67] dark:text-[#A8A29E]">
                       <div className="break-words">Title: <b className="text-[#242321] dark:text-[#F5F5F4]">{examName || "Untitled Assessment"}</b></div>
                       <div className="break-words">Source: <b className="text-[#242321] dark:text-[#F5F5F4]">{examSubject || "General"}</b></div>
-                      <div>Questions: <b className="text-[#242321] dark:text-[#F5F5F4]">{parseInt(numMcq) + parseInt(numSubjective)} Total ({numMcq} MCQ)</b></div>
+                      <div>Questions: <b className="text-[#242321] dark:text-[#F5F5F4]">{computedQuestionCount} Total ({questionType === "mixed" ? `${numMcq} MCQ + ${numSubjective} Subj` : questionType === "subjective" ? `${numSubjective} Subj` : `${numMcq} ${questionType === "tf" ? "T/F" : "MCQ"}`})</b></div>
                       <div>Duration: <b className="text-[#242321] dark:text-[#F5F5F4]">{examDuration} min</b></div>
-                      <div>Marks: <b className="text-[#242321] dark:text-[#F5F5F4]">{examMarks} pts</b></div>
+                      <div>Total Marks: <b className="text-[#242321] dark:text-[#F5F5F4]">{examMarks} pts</b> <span className="text-[11px] text-[#716D67]">(Pass: {examPass} pts)</span></div>
                       <div className="break-words">Directory: <b className="text-[#242321] dark:text-[#F5F5F4]">{studentDirectories.find(d => d.id === selectedDirectoryId)?.name || "Open / Unassigned"}</b></div>
+                    </div>
+
+                    {/* Marks Breakdown Pill */}
+                    <div className="pt-1.5 border-t border-[#E5E0D8]/60 dark:border-[#292524] flex items-center gap-2 flex-wrap text-[11px]">
+                      <span className="font-semibold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-1">
+                        <Sliders className="w-3 h-3 text-[#C84B18]" />
+                        <span>Weight Allocation:</span>
+                      </span>
+                      {marksDistMode === "equal" && (
+                        <span className="text-[#716D67] dark:text-[#A8A29E]">
+                          ~{(parseFloat(examMarks) / Math.max(1, computedQuestionCount)).toFixed(1)} pts per question
+                        </span>
+                      )}
+                      {marksDistMode === "by_type" && (
+                        <span className="text-[#716D67] dark:text-[#A8A29E]">
+                          MCQ: <b className="text-[#242321] dark:text-[#F5F5F4]">{marksByType.mcq} pts</b> | Subjective: <b className="text-[#242321] dark:text-[#F5F5F4]">{marksByType.subjective} pts</b> | T/F: <b className="text-[#242321] dark:text-[#F5F5F4]">{marksByType.tf} pts</b>
+                        </span>
+                      )}
+                      {marksDistMode === "by_difficulty" && (
+                        <span className="text-[#716D67] dark:text-[#A8A29E]">
+                          Easy: <b className="text-[#242321] dark:text-[#F5F5F4]">{marksByDiff.easy} pts</b> | Med: <b className="text-[#242321] dark:text-[#F5F5F4]">{marksByDiff.medium} pts</b> | Hard: <b className="text-[#242321] dark:text-[#F5F5F4]">{marksByDiff.hard} pts</b>
+                        </span>
+                      )}
+                      {marksDistMode === "custom" && (
+                        <span className="text-[#716D67] dark:text-[#A8A29E]">
+                          Custom slots: <b className="text-[#242321] dark:text-[#F5F5F4]">{customSlotMarks.slice(0, Math.min(8, computedQuestionCount)).join(", ")}{computedQuestionCount > 8 ? "..." : ""} pts</b>
+                        </span>
+                      )}
                     </div>
                   </div>
 

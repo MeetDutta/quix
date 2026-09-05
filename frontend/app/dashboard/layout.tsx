@@ -719,7 +719,7 @@ export default function DashboardLayout({
         </header>
 
         {/* Main Content Body */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 bg-[#FAF8F5] dark:bg-[#0F0E0D]">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 bg-[#FAF8F5] dark:bg-[#0F0E0D] bg-texture-dots">
           {children}
         </main>
       </div>
