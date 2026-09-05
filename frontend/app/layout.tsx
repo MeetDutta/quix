@@ -43,14 +43,7 @@ export default function RootLayout({
               (function() {
                 try {
                   var m = localStorage.getItem('theme_mode') || localStorage.getItem('theme');
-                  var isDark = false;
-                  if (m === 'dark') {
-                    isDark = true;
-                  } else if (m === 'system') {
-                    isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  } else {
-                    isDark = false;
-                  }
+                  var isDark = (m === 'dark');
                   if (isDark) {
                     document.documentElement.classList.add('dark');
                     document.documentElement.setAttribute('data-theme', 'dark');

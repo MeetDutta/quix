@@ -315,92 +315,191 @@ export default function LiveProctoringModal({
               No active candidates match your filter.
             </div>
           ) : (
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-[#F7F4EF] dark:bg-[#141312] border-b border-[#E5E0D8] dark:border-[#292524] sticky top-0 z-10">
-                <tr>
-                  <th className="py-2.5 px-4 font-bold text-[#716D67]">Candidate</th>
-                  <th className="py-2.5 px-4 font-bold text-[#716D67]">Username / Roll</th>
-                  <th className="py-2.5 px-4 font-bold text-[#716D67]">Status</th>
-                  <th className="py-2.5 px-4 font-bold text-[#716D67]">Proctoring</th>
-                  <th className="py-2.5 px-4 font-bold text-[#716D67]">Progress</th>
-                  <th className="py-2.5 px-4 font-bold text-[#716D67] text-right">Score</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E5E0D8] dark:divide-[#292524]">
+            <>
+              {/* Mobile Stacked Cards (< 768px): All specifications visible at a single glance without horizontal scrolling */}
+              <div className="block md:hidden divide-y divide-[#E5E0D8] dark:divide-[#292524]">
                 {filteredCandidates.map((c: any) => {
                   const progressPct = c.total_questions > 0 ? (c.answered_count / c.total_questions) * 100 : 0;
                   return (
-                    <tr key={c.credential_id} className="hover:bg-[#F7F4EF]/60 dark:hover:bg-[#1D1B19]/50 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-1.5">
-                          <span>{c.name}</span>
-                          {c.status === "in_progress" && (
-                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                          )}
+                    <div key={c.credential_id} className="p-3.5 space-y-2.5">
+                      {/* Candidate Name, Testing Dot & Status Badge */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-bold text-xs text-[#242321] dark:text-[#F5F5F4] flex items-center gap-1.5 truncate">
+                            <span className="truncate">{c.name}</span>
+                            {c.status === "in_progress" && (
+                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                            )}
+                          </div>
+                          <div className="text-[10px] text-[#716D67] truncate">{c.email}</div>
                         </div>
-                        <div className="text-[11px] text-[#716D67]">{c.email}</div>
-                      </td>
 
-                      <td className="py-3 px-4">
-                        <div className="font-mono text-[#242321] dark:text-[#F5F5F4] text-[11px] font-bold">{c.username}</div>
-                        <div className="text-[11px] text-[#716D67]">Roll: {c.roll_number}</div>
-                      </td>
-
-                      <td className="py-3 px-4">
                         {c.status === "submitted" ? (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 w-fit">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
                             <CheckCircle2 className="h-3 w-3" />
                             <span>Submitted</span>
                           </span>
                         ) : c.status === "in_progress" ? (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold text-[10px] flex items-center gap-1 w-fit">
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
                             <Radio className="h-3 w-3 animate-pulse" />
                             <span>Testing Now</span>
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 font-medium text-[10px]">
+                          <span className="px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 font-medium text-[10px] shrink-0">
                             Not Started
                           </span>
                         )}
-                      </td>
+                      </div>
 
-                      <td className="py-3 px-4">
-                        {c.proctor_flags_count > 0 ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold text-[10px] border border-rose-200 dark:border-rose-900">
-                            <ShieldAlert className="h-3 w-3 text-rose-600" />
-                            <span>{c.proctor_flags_count} flags</span>
+                      {/* Metadata specs: Username, Roll, Proctor Flags, Score */}
+                      <div className="grid grid-cols-2 gap-2 bg-[#F7F4EF]/70 dark:bg-[#141312] p-2.5 rounded-xl border border-[#E5E0D8]/70 dark:border-[#292524] text-[11px]">
+                        <div>
+                          <span className="text-[10px] text-[#716D67] block">Exam Username</span>
+                          <span className="font-mono text-[#242321] dark:text-[#F5F5F4] font-bold break-all">
+                            {c.username}
                           </span>
-                        ) : (
-                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3" />
-                            <span>Clean</span>
-                          </span>
-                        )}
-                      </td>
+                        </div>
 
-                      <td className="py-3 px-4">
-                        <div className="w-36 space-y-1">
-                          <div className="flex justify-between text-[10px] text-[#716D67]">
-                            <span>{c.answered_count} / {c.total_questions} Questions</span>
-                            <span>{Math.round(progressPct)}%</span>
+                        <div>
+                          <span className="text-[10px] text-[#716D67] block">Roll Number</span>
+                          <span className="font-mono text-[#716D67] dark:text-[#A8A29E] break-all">
+                            {c.roll_number || "N/A"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between col-span-2 pt-1.5 border-t border-[#E5E0D8]/50 dark:border-[#292524]">
+                          <div>
+                            <span className="text-[10px] text-[#716D67] block">Proctor Telemetry</span>
+                            {c.proctor_flags_count > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold text-[10px] border border-rose-200 dark:border-rose-900">
+                                <ShieldAlert className="h-3 w-3 text-rose-600" />
+                                <span>{c.proctor_flags_count} flags</span>
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span>Clean</span>
+                              </span>
+                            )}
                           </div>
-                          <div className="w-full h-1.5 bg-[#E5E0D8] dark:bg-[#292524] rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-[#C84B18] transition-all"
-                              style={{ width: `${progressPct}%` }}
-                            ></div>
+
+                          <div className="text-right">
+                            <span className="text-[10px] text-[#716D67] block">Current Score</span>
+                            <span className="font-bold text-xs text-[#242321] dark:text-[#F5F5F4]">
+                              {c.score !== null ? `${c.score} pts` : "—"}
+                            </span>
                           </div>
                         </div>
-                      </td>
+                      </div>
 
-                      <td className="py-3 px-4 text-right font-bold text-[#242321] dark:text-[#F5F5F4]">
-                        {c.score !== null ? `${c.score} pts` : "—"}
-                      </td>
-                    </tr>
+                      {/* Progress Bar */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px] text-[#716D67]">
+                          <span>Progress: {c.answered_count} / {c.total_questions} Questions</span>
+                          <span className="font-bold text-[#C84B18]">{Math.round(progressPct)}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-[#E5E0D8] dark:bg-[#292524] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-[#C84B18] transition-all"
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+
+              {/* Desktop Table View (>= 768px) */}
+              <div className="hidden md:block">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-[#F7F4EF] dark:bg-[#141312] border-b border-[#E5E0D8] dark:border-[#292524] sticky top-0 z-10">
+                    <tr>
+                      <th className="py-2.5 px-4 font-bold text-[#716D67]">Candidate</th>
+                      <th className="py-2.5 px-4 font-bold text-[#716D67]">Username / Roll</th>
+                      <th className="py-2.5 px-4 font-bold text-[#716D67]">Status</th>
+                      <th className="py-2.5 px-4 font-bold text-[#716D67]">Proctoring</th>
+                      <th className="py-2.5 px-4 font-bold text-[#716D67]">Progress</th>
+                      <th className="py-2.5 px-4 font-bold text-[#716D67] text-right">Score</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E5E0D8] dark:divide-[#292524]">
+                    {filteredCandidates.map((c: any) => {
+                      const progressPct = c.total_questions > 0 ? (c.answered_count / c.total_questions) * 100 : 0;
+                      return (
+                        <tr key={c.credential_id} className="hover:bg-[#F7F4EF]/60 dark:hover:bg-[#1D1B19]/50 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-1.5">
+                              <span>{c.name}</span>
+                              {c.status === "in_progress" && (
+                                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-[#716D67]">{c.email}</div>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div className="font-mono text-[#242321] dark:text-[#F5F5F4] text-[11px] font-bold">{c.username}</div>
+                            <div className="text-[11px] text-[#716D67]">Roll: {c.roll_number}</div>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {c.status === "submitted" ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 w-fit">
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span>Submitted</span>
+                              </span>
+                            ) : c.status === "in_progress" ? (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold text-[10px] flex items-center gap-1 w-fit">
+                                <Radio className="h-3 w-3 animate-pulse" />
+                                <span>Testing Now</span>
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 font-medium text-[10px]">
+                                Not Started
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {c.proctor_flags_count > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold text-[10px] border border-rose-200 dark:border-rose-900">
+                                <ShieldAlert className="h-3 w-3 text-rose-600" />
+                                <span>{c.proctor_flags_count} flags</span>
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span>Clean</span>
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div className="w-36 space-y-1">
+                              <div className="flex justify-between text-[10px] text-[#716D67]">
+                                <span>{c.answered_count} / {c.total_questions} Questions</span>
+                                <span>{Math.round(progressPct)}%</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-[#E5E0D8] dark:bg-[#292524] rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-[#C84B18] transition-all"
+                                  style={{ width: `${progressPct}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4 text-right font-bold text-[#242321] dark:text-[#F5F5F4]">
+                            {c.score !== null ? `${c.score} pts` : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
 

@@ -151,33 +151,33 @@ export default function StudentDashboard() {
       {/* ═══════ TOP HEADER & SUMMARY BANNER ═══════ */}
       <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-5 md:p-6 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] flex items-center justify-center font-bold text-lg border border-[#C84B18]/20">
+          <div className="flex items-start sm:items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
+            <div className="w-12 h-12 rounded-xl bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] flex items-center justify-center font-bold text-lg border border-[#C84B18]/20 shrink-0">
               <GraduationCap className="h-6 w-6" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-[#242321] dark:text-[#F5F5F4]">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h1 className="text-lg sm:text-xl font-bold text-[#242321] dark:text-[#F5F5F4] break-all sm:break-words">
                   {mounted && fullName ? fullName : (isTeacher ? "Instructor Portal" : "Student Candidate")}
                 </h1>
                 {isTeacher ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1 shrink-0">
                     <User className="h-3 w-3" />
                     <span>Teacher / Staff View</span>
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 shrink-0">
                     <CheckCircle2 className="h-3 w-3" />
                     <span>Verified Student</span>
                   </span>
                 )}
                 {liveExamsCount > 0 && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/30 animate-pulse">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/30 animate-pulse shrink-0">
                     {liveExamsCount} Live Test{liveExamsCount > 1 ? "s" : ""} Ready
                   </span>
                 )}
               </div>
-              <p className="text-xs text-[#716D67] dark:text-[#A8A29E] mt-0.5">
+              <p className="text-xs text-[#716D67] dark:text-[#A8A29E] mt-1 break-words">
                 {isTeacher 
                   ? "Instructor Preview: Inspect student assessments, passcodes & performance records."
                   : "Access active assessment rooms, view security credentials, and review grading analytics."}
@@ -185,14 +185,14 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <div className="flex items-center gap-2.5 self-start sm:self-auto shrink-0">
             {isTeacher && studentsList.length > 0 && (
               <div className="flex items-center gap-1.5 bg-[#F0ECE4]/60 dark:bg-[#1D1B19] px-3 py-1.5 rounded-lg border border-[#E5E0D8] dark:border-[#292524] text-xs">
                 <span className="text-[#716D67] font-semibold">Filter:</span>
                 <select
                   value={selectedStudentFilter}
                   onChange={(e) => setSelectedStudentFilter(e.target.value)}
-                  className="bg-transparent text-xs font-semibold text-[#242321] dark:text-[#F5F5F4] focus:outline-none cursor-pointer"
+                  className="bg-transparent text-xs font-semibold text-[#242321] dark:text-[#F5F5F4] focus:outline-none cursor-pointer max-w-[140px] truncate"
                 >
                   <option value="">All Students Submissions</option>
                   {studentsList.map((st) => (
@@ -207,7 +207,7 @@ export default function StudentDashboard() {
             <button
               onClick={() => fetchData(true)}
               disabled={isRefreshing}
-              className="px-3.5 py-1.5 rounded-lg border border-[#E5E0D8] dark:border-[#292524] hover:bg-[#F0ECE4]/60 dark:hover:bg-[#292524] text-xs font-semibold text-[#716D67] dark:text-[#A8A29E] flex items-center gap-1.5 transition-all shadow-xs"
+              className="px-3.5 py-1.5 rounded-lg border border-[#E5E0D8] dark:border-[#292524] hover:bg-[#F0ECE4]/60 dark:hover:bg-[#292524] text-xs font-semibold text-[#716D67] dark:text-[#A8A29E] flex items-center gap-1.5 transition-all shadow-xs shrink-0"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-[#C84B18]" : ""}`} />
               <span>{isRefreshing ? "Refreshing..." : "Refresh Portal"}</span>
@@ -216,41 +216,44 @@ export default function StudentDashboard() {
         </div>
 
         {/* Portal View Switcher Tabs */}
-        <div className="flex items-center gap-2 pt-3 border-t border-[#E5E0D8] dark:border-[#292524] overflow-x-auto pb-1 no-scrollbar">
+        <div className="flex items-center gap-2 pt-3 border-t border-[#E5E0D8] dark:border-[#292524] overflow-x-auto pb-1 scrollbar-none touch-pan-x">
           <button
             onClick={() => setActivePortalTab("assigned")}
-            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 sm:gap-2 shrink-0 cursor-pointer ${
               activePortalTab === "assigned"
                 ? "bg-[#C84B18] text-white dark:bg-[#EA580C] shadow-xs"
                 : "bg-[#F0ECE4]/60 dark:bg-[#1D1B19] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
             }`}
           >
             <Play className="h-3.5 w-3.5" />
-            <span>Assigned & Live Tests ({assignedExams.length})</span>
+            <span className="sm:hidden">Assigned ({assignedExams.length})</span>
+            <span className="hidden sm:inline">Assigned & Live Tests ({assignedExams.length})</span>
           </button>
 
           <button
             onClick={() => setActivePortalTab("submissions")}
-            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 sm:gap-2 shrink-0 cursor-pointer ${
               activePortalTab === "submissions"
                 ? "bg-[#C84B18] text-white dark:bg-[#EA580C] shadow-xs"
                 : "bg-[#F0ECE4]/60 dark:bg-[#1D1B19] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
             }`}
           >
             <Trophy className="h-3.5 w-3.5" />
-            <span>Past Submissions & Analytics ({submissions.length})</span>
+            <span className="sm:hidden">Submissions ({submissions.length})</span>
+            <span className="hidden sm:inline">Past Submissions & Analytics ({submissions.length})</span>
           </button>
 
           <button
             onClick={() => setActivePortalTab("progress")}
-            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 sm:gap-2 shrink-0 cursor-pointer ${
               activePortalTab === "progress"
                 ? "bg-[#C84B18] text-white dark:bg-[#EA580C] shadow-xs"
                 : "bg-[#F0ECE4]/60 dark:bg-[#1D1B19] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
             }`}
           >
             <TrendingUp className="h-3.5 w-3.5" />
-            <span>Learning Trends & Mastery</span>
+            <span className="sm:hidden">Mastery</span>
+            <span className="hidden sm:inline">Learning Trends & Mastery</span>
           </button>
         </div>
 
@@ -661,7 +664,7 @@ export default function StudentDashboard() {
                   )}
 
                   {/* Navigation Tabs (Questions / Topics / Leaderboard) */}
-                  <div className="flex gap-2 border-b border-[#E5E0D8] dark:border-[#292524] pb-2 overflow-x-auto no-scrollbar flex-nowrap">
+                  <div className="flex gap-2 border-b border-[#E5E0D8] dark:border-[#292524] pb-2 overflow-x-auto scrollbar-none touch-pan-x flex-nowrap">
                     <button
                       onClick={() => setActiveViewTab("questions")}
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
@@ -671,7 +674,8 @@ export default function StudentDashboard() {
                       }`}
                     >
                       <HelpCircle className="h-3.5 w-3.5" />
-                      <span>Question-by-Question Review</span>
+                      <span className="sm:hidden">Questions</span>
+                      <span className="hidden sm:inline">Question-by-Question Review</span>
                     </button>
 
                     <button
@@ -683,7 +687,8 @@ export default function StudentDashboard() {
                       }`}
                     >
                       <BarChart3 className="h-3.5 w-3.5" />
-                      <span>Topic Mastery Breakdown</span>
+                      <span className="sm:hidden">Topics</span>
+                      <span className="hidden sm:inline">Topic Mastery Breakdown</span>
                     </button>
 
                     <button
@@ -695,7 +700,8 @@ export default function StudentDashboard() {
                       }`}
                     >
                       <Trophy className="h-3.5 w-3.5" />
-                      <span>Cohort Leaderboard</span>
+                      <span className="sm:hidden">Leaderboard</span>
+                      <span className="hidden sm:inline">Cohort Leaderboard</span>
                     </button>
                   </div>
 

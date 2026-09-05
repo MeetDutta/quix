@@ -396,49 +396,104 @@ export default function StudentDirectoryManager({ token: propToken }: StudentDir
                 </div>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-[#242321] dark:text-[#F5F5F4]">
-                  <thead className="bg-[#F7F4EF] dark:bg-[#1C1A17] text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider font-semibold border-b border-[#E5E0D8] dark:border-[#292524] text-[10px]">
-                    <tr>
-                      <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Student Name</th>
-                      <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Email Address</th>
-                      <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Roll / ID</th>
-                      <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Phone Number</th>
-                      <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Status</th>
-                      <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E5E0D8] dark:divide-[#292524]">
-                    {filteredStudents.map((s) => (
-                      <tr key={s.id} className="hover:bg-[#FAF8F5] dark:hover:bg-[#1C1A17] transition-colors">
-                        <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap font-medium text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20 flex items-center justify-center text-xs font-bold shrink-0">
+              <>
+                {/* Mobile Stacked Card View (< 768px): All student info at a single glance without horizontal scrolling */}
+                <div className="block md:hidden divide-y divide-[#E5E0D8] dark:divide-[#292524]">
+                  {filteredStudents.map((s) => (
+                    <div key={s.id} className="p-3.5 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20 flex items-center justify-center text-xs font-bold shrink-0">
                             {s.name.charAt(0).toUpperCase()}
                           </div>
-                          <span className="truncate">{s.name}</span>
-                        </td>
-                        <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E]">{s.email}</td>
-                        <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E]">{s.roll_number || '—'}</td>
-                        <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E]">{s.phone || '—'}</td>
-                        <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">
+                          <div className="min-w-0">
+                            <div className="font-bold text-xs text-[#242321] dark:text-[#F5F5F4] truncate">
+                              {s.name}
+                            </div>
+                            <div className="text-[10px] text-[#716D67] dark:text-[#A8A29E] truncate">
+                              {s.email}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                             Active
                           </span>
-                        </td>
-                        <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-right">
                           <button
+                            type="button"
                             onClick={() => handleRemoveStudent(s.id)}
-                            className="p-1.5 text-[#716D67] dark:text-[#A8A29E] hover:text-red-500 rounded-lg hover:bg-[#F0ECE4] dark:hover:bg-[#292524] transition-colors cursor-pointer"
+                            className="p-1.5 text-[#716D67] hover:text-red-500 rounded-lg hover:bg-[#F0ECE4] dark:hover:bg-[#292524] transition-colors cursor-pointer"
                             title="Remove student"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        </td>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 bg-[#F7F4EF]/70 dark:bg-[#141312] p-2 rounded-lg border border-[#E5E0D8]/60 dark:border-[#292524] text-[11px]">
+                        <div>
+                          <span className="text-[10px] text-[#716D67] block">Roll / ID</span>
+                          <span className="font-mono text-[#242321] dark:text-[#F5F5F4] font-medium break-all">
+                            {s.roll_number || '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-[#716D67] block">Phone</span>
+                          <span className="text-[#242321] dark:text-[#F5F5F4] break-all">
+                            {s.phone || '—'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop Table View (>= 768px) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left text-xs text-[#242321] dark:text-[#F5F5F4]">
+                    <thead className="bg-[#F7F4EF] dark:bg-[#1C1A17] text-[#716D67] dark:text-[#A8A29E] uppercase tracking-wider font-semibold border-b border-[#E5E0D8] dark:border-[#292524] text-[10px]">
+                      <tr>
+                        <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Student Name</th>
+                        <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Email Address</th>
+                        <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Roll / ID</th>
+                        <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Phone Number</th>
+                        <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Status</th>
+                        <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-right">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-[#E5E0D8] dark:divide-[#292524]">
+                      {filteredStudents.map((s) => (
+                        <tr key={s.id} className="hover:bg-[#FAF8F5] dark:hover:bg-[#1C1A17] transition-colors">
+                          <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap font-medium text-[#242321] dark:text-[#F5F5F4] flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-full bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20 flex items-center justify-center text-xs font-bold shrink-0">
+                              {s.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="truncate">{s.name}</span>
+                          </td>
+                          <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E]">{s.email}</td>
+                          <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E]">{s.roll_number || '—'}</td>
+                          <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E]">{s.phone || '—'}</td>
+                          <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              Active
+                            </span>
+                          </td>
+                          <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-right">
+                            <button
+                              onClick={() => handleRemoveStudent(s.id)}
+                              className="p-1.5 text-[#716D67] dark:text-[#A8A29E] hover:text-red-500 rounded-lg hover:bg-[#F0ECE4] dark:hover:bg-[#292524] transition-colors cursor-pointer"
+                              title="Remove student"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </div>

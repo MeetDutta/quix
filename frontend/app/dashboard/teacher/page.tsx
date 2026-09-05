@@ -625,88 +625,95 @@ export default function TeacherDashboard() {
       </div>
 
       {/* View Switcher Pill Bar */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-[#E5E0D8] dark:border-[#292524] no-scrollbar">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-[#E5E0D8] dark:border-[#292524] scrollbar-none touch-pan-x">
         <button
           onClick={() => switchSectionTab("all")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+          className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
             activeSectionTab === "all"
               ? "bg-[#C84B18] text-white shadow-xs"
               : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
           }`}
         >
-          All Overview
+          <span className="sm:hidden">All</span>
+          <span className="hidden sm:inline">All Overview</span>
         </button>
 
         <button
           onClick={() => switchSectionTab("exams")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+          className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeSectionTab === "exams"
               ? "bg-[#C84B18] text-white shadow-xs"
               : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
           }`}
         >
           <GraduationCap className="h-3.5 w-3.5" />
-          <span>Assessments ({exams.length})</span>
+          <span className="sm:hidden">Exams ({exams.length})</span>
+          <span className="hidden sm:inline">Assessments ({exams.length})</span>
         </button>
 
         <button
           onClick={() => switchSectionTab("create")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+          className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeSectionTab === "create"
               ? "bg-[#C84B18] text-white shadow-xs"
               : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
           }`}
         >
           <Plus className="h-3.5 w-3.5" />
-          <span>Create Quiz Wizard</span>
+          <span className="sm:hidden">Create</span>
+          <span className="hidden sm:inline">Create Quiz Wizard</span>
         </button>
 
         <button
           onClick={() => switchSectionTab("bank")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+          className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeSectionTab === "bank"
               ? "bg-[#C84B18] text-white shadow-xs"
               : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
           }`}
         >
           <Sparkles className="h-3.5 w-3.5" />
-          <span>Question Bank</span>
+          <span className="sm:hidden">Bank</span>
+          <span className="hidden sm:inline">Question Bank</span>
         </button>
 
         <button
           onClick={() => switchSectionTab("kb")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+          className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeSectionTab === "kb"
               ? "bg-[#C84B18] text-white shadow-xs"
               : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
           }`}
         >
           <BookOpen className="h-3.5 w-3.5" />
-          <span>Knowledge Base ({documents.length})</span>
+          <span className="sm:hidden">KB ({documents.length})</span>
+          <span className="hidden sm:inline">Knowledge Base ({documents.length})</span>
         </button>
 
         <button
           onClick={() => switchSectionTab("students")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+          className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeSectionTab === "students"
               ? "bg-[#C84B18] text-white shadow-xs"
               : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
           }`}
         >
           <Users className="h-3.5 w-3.5" />
-          <span>Student Directory ({studentDirectories.length})</span>
+          <span className="sm:hidden">Students ({studentDirectories.length})</span>
+          <span className="hidden sm:inline">Student Directory ({studentDirectories.length})</span>
         </button>
 
         <button
           onClick={() => switchSectionTab("reports")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+          className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeSectionTab === "reports"
               ? "bg-[#C84B18] text-white shadow-xs"
               : "bg-[#FFFFFF] dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] hover:text-[#242321] dark:hover:text-[#F5F5F4]"
           }`}
         >
           <BarChart3 className="h-3.5 w-3.5" />
-          <span>Gradebook Analytics</span>
+          <span className="sm:hidden">Analytics</span>
+          <span className="hidden sm:inline">Gradebook Analytics</span>
         </button>
       </div>
 
@@ -862,7 +869,7 @@ export default function TeacherDashboard() {
                 }}
                 className="w-full p-4 flex items-center justify-between text-left cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1D1B19]/50 transition-colors focus:outline-none"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                     createStep > 1
                       ? "bg-emerald-600 text-white"
@@ -872,11 +879,11 @@ export default function TeacherDashboard() {
                   }`}>
                     {createStep > 1 ? <Check className="h-4 w-4" /> : "1"}
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] truncate">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] break-words leading-snug">
                       01. Knowledge Source & Assessment Details
                     </h3>
-                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E] truncate">
+                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E] break-words line-clamp-2 mt-0.5">
                       {examName ? `${examName} • ${examSubject || "General"}` : "Select curriculum domain and title"}
                     </p>
                   </div>
@@ -1176,7 +1183,7 @@ export default function TeacherDashboard() {
                 }}
                 className="w-full p-4 flex items-center justify-between text-left cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1D1B19]/50 transition-colors focus:outline-none"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                     createStep > 2
                       ? "bg-emerald-600 text-white"
@@ -1186,11 +1193,11 @@ export default function TeacherDashboard() {
                   }`}>
                     {createStep > 2 ? <Check className="h-4 w-4" /> : "2"}
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] truncate">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] break-words leading-snug">
                       02. Question Format, Difficulty & AI Blueprint
                     </h3>
-                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E] truncate">
+                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E] break-words line-clamp-2 mt-0.5">
                       {numMcq} MCQ • {numSubjective} Subjective • Difficulty: {difficulty.toUpperCase()}
                     </p>
                   </div>
@@ -1520,7 +1527,7 @@ export default function TeacherDashboard() {
                 }}
                 className="w-full p-4 flex items-center justify-between text-left cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1D1B19]/50 transition-colors focus:outline-none"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                     createStep > 3
                       ? "bg-emerald-600 text-white"
@@ -1530,11 +1537,11 @@ export default function TeacherDashboard() {
                   }`}>
                     {createStep > 3 ? <Check className="h-4 w-4" /> : "3"}
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] truncate">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] break-words leading-snug">
                       03. Duration, Marks & Schedule Window
                     </h3>
-                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E] truncate">
+                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E] break-words line-clamp-2 mt-0.5">
                       {examDuration} Minutes • {examMarks} Total Marks
                     </p>
                   </div>
@@ -1675,7 +1682,7 @@ export default function TeacherDashboard() {
                 }}
                 className="w-full p-4 flex items-center justify-between text-left cursor-pointer hover:bg-[#F7F4EF]/50 dark:hover:bg-[#1D1B19]/50 transition-colors focus:outline-none"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                     createStep === 4
                       ? "bg-[#C84B18] text-white"
@@ -1683,11 +1690,11 @@ export default function TeacherDashboard() {
                   }`}>
                     4
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] truncate">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-sm text-[#242321] dark:text-[#F5F5F4] break-words leading-snug">
                       04. Final Blueprint Review & AI Paper Synthesis
                     </h3>
-                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E] truncate">
+                    <p className="text-xs text-[#716D67] dark:text-[#A8A29E] break-words line-clamp-2 mt-0.5">
                       Confirm blueprint specs and generate assessment
                     </p>
                   </div>
@@ -1759,12 +1766,12 @@ export default function TeacherDashboard() {
                       Assessment Synthesis Summary
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[#716D67] dark:text-[#A8A29E]">
-                      <div>Title: <b className="text-[#242321] dark:text-[#F5F5F4]">{examName || "Untitled Assessment"}</b></div>
-                      <div>Source: <b className="text-[#242321] dark:text-[#F5F5F4]">{examSubject || "General"}</b></div>
+                      <div className="break-words">Title: <b className="text-[#242321] dark:text-[#F5F5F4]">{examName || "Untitled Assessment"}</b></div>
+                      <div className="break-words">Source: <b className="text-[#242321] dark:text-[#F5F5F4]">{examSubject || "General"}</b></div>
                       <div>Questions: <b className="text-[#242321] dark:text-[#F5F5F4]">{parseInt(numMcq) + parseInt(numSubjective)} Total ({numMcq} MCQ)</b></div>
                       <div>Duration: <b className="text-[#242321] dark:text-[#F5F5F4]">{examDuration} min</b></div>
                       <div>Marks: <b className="text-[#242321] dark:text-[#F5F5F4]">{examMarks} pts</b></div>
-                      <div>Directory: <b className="text-[#242321] dark:text-[#F5F5F4]">{studentDirectories.find(d => d.id === selectedDirectoryId)?.name || "Open / Unassigned"}</b></div>
+                      <div className="break-words">Directory: <b className="text-[#242321] dark:text-[#F5F5F4]">{studentDirectories.find(d => d.id === selectedDirectoryId)?.name || "Open / Unassigned"}</b></div>
                     </div>
                   </div>
 

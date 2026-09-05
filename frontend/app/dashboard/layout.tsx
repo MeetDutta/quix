@@ -19,7 +19,6 @@ import {
   HelpCircle,
   Sun,
   Moon,
-  Laptop,
   Layers,
   FileText,
   Users,
@@ -45,7 +44,7 @@ export default function DashboardLayout({
   const [mounted, setMounted] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("light");
+  const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [currentTab, setCurrentTab] = useState<string>("exams");
@@ -94,8 +93,8 @@ export default function DashboardLayout({
       }
     }
     setMounted(true);
-    const saved = localStorage.getItem("theme_mode") as "light" | "dark" | "system" | null;
-    const mode = saved || "light";
+    const saved = (localStorage.getItem("theme_mode") || localStorage.getItem("theme")) as "light" | "dark" | null;
+    const mode = saved === "dark" ? "dark" : "light";
     setThemeMode(mode);
     applyTheme(mode);
     
@@ -104,28 +103,23 @@ export default function DashboardLayout({
     return () => clearInterval(interval);
   }, [token]);
 
-  const applyTheme = (mode: "light" | "dark" | "system") => {
-    let isDark = false;
-    if (mode === "system") {
-      isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    } else {
-      isDark = mode === "dark";
-    }
-
-    if (isDark) {
+  const applyTheme = (mode: "light" | "dark") => {
+    if (mode === "dark") {
       document.documentElement.classList.add("dark");
       document.documentElement.setAttribute("data-theme", "dark");
       localStorage.setItem("theme", "dark");
+      localStorage.setItem("theme_mode", "dark");
     } else {
       document.documentElement.classList.remove("dark");
       document.documentElement.setAttribute("data-theme", "light");
       localStorage.setItem("theme", "light");
+      localStorage.setItem("theme_mode", "light");
     }
   };
 
-  const handleThemeChange = (nextMode: "light" | "dark" | "system") => {
+  const toggleTheme = () => {
+    const nextMode = themeMode === "light" ? "dark" : "light";
     setThemeMode(nextMode);
-    localStorage.setItem("theme_mode", nextMode);
     applyTheme(nextMode);
   };
 
@@ -137,16 +131,7 @@ export default function DashboardLayout({
     }
   };
 
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => {
-      if (themeMode === "system") {
-        applyTheme("system");
-      }
-    };
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, [themeMode]);
+
 
   useEffect(() => {
     if (mounted) {
@@ -237,41 +222,38 @@ export default function DashboardLayout({
           SIDEBAR NAVIGATION (Expanded: 260px | Collapsed: 72px)
          ══════════════════════════════════════════════════════ */}
       <aside 
-        className={`fixed md:static inset-y-0 left-0 z-50 bg-[#FFFFFF] dark:bg-[#171615] border-r border-[#E5E0D8] dark:border-[#292524] flex flex-col shrink-0 transition-all duration-300 ease-in-out shadow-sm md:shadow-none ${
+        className={`fixed md:static inset-y-0 left-0 z-50 bg-[#FFFFFF] dark:bg-[#171615] border-r border-[#E5E0D8] dark:border-[#292524] flex flex-col shrink-0 transition-all duration-300 ease-in-out shadow-lg md:shadow-none w-72 max-w-[85vw] ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-        } ${sidebarCollapsed ? "w-[72px]" : "w-64"}`}
+        } ${sidebarCollapsed ? "md:!w-[72px]" : "md:w-64"}`}
       >
         {/* Brand Header */}
         <div className="h-16 px-4 border-b border-[#E5E0D8] dark:border-[#292524] flex items-center justify-between shrink-0 bg-[#FFFFFF] dark:bg-[#171615]">
-          <div className={`flex items-center gap-3 overflow-hidden ${sidebarCollapsed ? "justify-center w-full" : ""}`}>
+          <div className={`flex items-center gap-3 overflow-hidden ${sidebarCollapsed ? "md:justify-center md:w-full" : ""}`}>
             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#C84B18] to-[#EA580C] text-white flex items-center justify-center shadow-md shadow-[#C84B18]/20 shrink-0">
               <School className="h-5 w-5" />
             </div>
-            {!sidebarCollapsed && (
-              <div className="truncate">
-                <div className="flex items-center gap-1.5">
-                  <h1 className="font-extrabold text-sm text-[#242321] dark:text-[#F5F5F4] tracking-tight truncate">EduQuizX</h1>
-                  <span className="px-1.5 py-0.2 text-[9px] font-bold bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] rounded">PRO</span>
-                </div>
-                <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E] mt-0.5 font-medium truncate">Academic Studio</p>
+            <div className={`truncate ${sidebarCollapsed ? "md:hidden" : ""}`}>
+              <div className="flex items-center gap-1.5">
+                <h1 className="font-extrabold text-sm text-[#242321] dark:text-[#F5F5F4] tracking-tight truncate">EduQuizX</h1>
+                <span className="px-1.5 py-0.2 text-[9px] font-bold bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] rounded">PRO</span>
               </div>
-            )}
+              <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E] mt-0.5 font-medium truncate">Academic Studio</p>
+            </div>
           </div>
           
-          {!sidebarCollapsed && (
-            <button 
-              onClick={toggleSidebarCollapsed}
-              className="hidden md:flex p-1.5 rounded-lg text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A] transition-colors cursor-pointer"
-              title="Collapse Sidebar"
-            >
-              <PanelLeftClose className="h-4 w-4" />
-            </button>
-          )}
+          <button 
+            onClick={toggleSidebarCollapsed}
+            className={`hidden md:flex p-1.5 rounded-lg text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A] transition-colors cursor-pointer ${sidebarCollapsed ? "md:hidden" : ""}`}
+            title="Collapse Sidebar"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
 
           {/* Mobile Close Button */}
           <button 
             onClick={() => setSidebarOpen(false)}
             className="md:hidden p-1.5 rounded-lg text-[#716D67] hover:text-[#242321] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A] cursor-pointer"
+            aria-label="Close Sidebar"
           >
             <X className="h-5 w-5" />
           </button>
@@ -294,12 +276,11 @@ export default function DashboardLayout({
         <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto overflow-x-hidden">
           {/* SECTION: CREATOR STUDIO OR STUDENT PORTAL */}
           <div className="space-y-1.5">
-            {!sidebarCollapsed ? (
-              <div className="text-[10px] font-bold text-[#8C827A] dark:text-[#8C827A] px-3 mb-2 uppercase tracking-widest">
-                {pathname === "/dashboard/teacher" ? "Creator Studio" : "Student Portal"}
-              </div>
-            ) : (
-              <div className="w-6 h-0.5 bg-[#E5E0D8] dark:bg-[#292524] mx-auto mb-2 rounded" />
+            <div className={`text-[10px] font-bold text-[#8C827A] dark:text-[#8C827A] px-3 mb-2 uppercase tracking-widest ${sidebarCollapsed ? "md:hidden" : ""}`}>
+              {pathname === "/dashboard/teacher" ? "Creator Studio" : "Student Portal"}
+            </div>
+            {sidebarCollapsed && (
+              <div className="hidden md:block w-6 h-0.5 bg-[#E5E0D8] dark:bg-[#292524] mx-auto mb-2 rounded" />
             )}
 
             <div className="space-y-1">
@@ -309,7 +290,7 @@ export default function DashboardLayout({
                   <button 
                     onClick={() => navToTab("exams")}
                     className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      sidebarCollapsed ? "justify-center px-0" : ""
+                      sidebarCollapsed ? "md:justify-center md:px-0" : ""
                     } ${
                       currentTab === "exams"
                         ? "bg-[#C84B18] text-white shadow-sm shadow-[#C84B18]/25"
@@ -317,9 +298,9 @@ export default function DashboardLayout({
                     }`}
                   >
                     <GraduationCap className={`h-4.5 w-4.5 shrink-0 ${currentTab === "exams" ? "text-white" : "text-[#716D67] group-hover:text-[#C84B18]"}`} />
-                    {!sidebarCollapsed && <span>Assessments</span>}
+                    <span className={sidebarCollapsed ? "md:hidden" : ""}>Assessments</span>
                     {sidebarCollapsed && (
-                      <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                      <span className="hidden md:block absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
                         Assessments
                       </span>
                     )}
@@ -329,7 +310,7 @@ export default function DashboardLayout({
                   <button 
                     onClick={() => navToTab("create")}
                     className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      sidebarCollapsed ? "justify-center px-0" : ""
+                      sidebarCollapsed ? "md:justify-center md:px-0" : ""
                     } ${
                       currentTab === "create"
                         ? "bg-[#C84B18] text-white shadow-sm shadow-[#C84B18]/25"
@@ -337,9 +318,9 @@ export default function DashboardLayout({
                     }`}
                   >
                     <FileText className={`h-4.5 w-4.5 shrink-0 ${currentTab === "create" ? "text-white" : "text-[#716D67] group-hover:text-[#C84B18]"}`} />
-                    {!sidebarCollapsed && <span>Create Quiz</span>}
+                    <span className={sidebarCollapsed ? "md:hidden" : ""}>Create Quiz</span>
                     {sidebarCollapsed && (
-                      <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                      <span className="hidden md:block absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
                         Create Quiz Wizard
                       </span>
                     )}
@@ -349,7 +330,7 @@ export default function DashboardLayout({
                   <button 
                     onClick={() => navToTab("bank")}
                     className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      sidebarCollapsed ? "justify-center px-0" : ""
+                      sidebarCollapsed ? "md:justify-center md:px-0" : ""
                     } ${
                       currentTab === "bank"
                         ? "bg-[#C84B18] text-white shadow-sm shadow-[#C84B18]/25"
@@ -357,9 +338,9 @@ export default function DashboardLayout({
                     }`}
                   >
                     <Layers className={`h-4.5 w-4.5 shrink-0 ${currentTab === "bank" ? "text-white" : "text-[#716D67] group-hover:text-[#C84B18]"}`} />
-                    {!sidebarCollapsed && <span>Question Bank</span>}
+                    <span className={sidebarCollapsed ? "md:hidden" : ""}>Question Bank</span>
                     {sidebarCollapsed && (
-                      <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                      <span className="hidden md:block absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
                         Question Bank
                       </span>
                     )}
@@ -369,7 +350,7 @@ export default function DashboardLayout({
                   <button 
                     onClick={() => navToTab("kb")}
                     className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      sidebarCollapsed ? "justify-center px-0" : ""
+                      sidebarCollapsed ? "md:justify-center md:px-0" : ""
                     } ${
                       currentTab === "kb"
                         ? "bg-[#C84B18] text-white shadow-sm shadow-[#C84B18]/25"
@@ -377,9 +358,9 @@ export default function DashboardLayout({
                     }`}
                   >
                     <BookOpen className={`h-4.5 w-4.5 shrink-0 ${currentTab === "kb" ? "text-white" : "text-[#716D67] group-hover:text-[#C84B18]"}`} />
-                    {!sidebarCollapsed && <span>Knowledge Base</span>}
+                    <span className={sidebarCollapsed ? "md:hidden" : ""}>Knowledge Base</span>
                     {sidebarCollapsed && (
-                      <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                      <span className="hidden md:block absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
                         Knowledge Base (RAG)
                       </span>
                     )}
@@ -389,7 +370,7 @@ export default function DashboardLayout({
                   <button 
                     onClick={() => navToTab("students")}
                     className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      sidebarCollapsed ? "justify-center px-0" : ""
+                      sidebarCollapsed ? "md:justify-center md:px-0" : ""
                     } ${
                       currentTab === "students"
                         ? "bg-[#C84B18] text-white shadow-sm shadow-[#C84B18]/25"
@@ -397,9 +378,9 @@ export default function DashboardLayout({
                     }`}
                   >
                     <Users className={`h-4.5 w-4.5 shrink-0 ${currentTab === "students" ? "text-white" : "text-[#716D67] group-hover:text-[#C84B18]"}`} />
-                    {!sidebarCollapsed && <span>Student Directory</span>}
+                    <span className={sidebarCollapsed ? "md:hidden" : ""}>Student Directory</span>
                     {sidebarCollapsed && (
-                      <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                      <span className="hidden md:block absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
                         Student Directories & Cohorts
                       </span>
                     )}
@@ -410,13 +391,13 @@ export default function DashboardLayout({
                   href="/dashboard/student"
                   onClick={closeSidebarMobile}
                   className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20 transition-all ${
-                    sidebarCollapsed ? "justify-center px-0" : ""
+                    sidebarCollapsed ? "md:justify-center md:px-0" : ""
                   }`}
                 >
                   <UserCheck className="h-4.5 w-4.5 shrink-0" />
-                  {!sidebarCollapsed && <span>Student Portal</span>}
+                  <span className={sidebarCollapsed ? "md:hidden" : ""}>Student Portal</span>
                   {sidebarCollapsed && (
-                    <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                    <span className="hidden md:block absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
                       Student Exam Portal
                     </span>
                   )}
@@ -428,19 +409,18 @@ export default function DashboardLayout({
           {/* SECTION: ANALYTICS (Creator Mode Only) */}
           {pathname === "/dashboard/teacher" && (
             <div className="space-y-1.5">
-              {!sidebarCollapsed ? (
-                <div className="text-[10px] font-bold text-[#8C827A] dark:text-[#8C827A] px-3 mb-2 uppercase tracking-widest">
-                  Analytics & Reports
-                </div>
-              ) : (
-                <div className="w-6 h-0.5 bg-[#E5E0D8] dark:bg-[#292524] mx-auto mb-2 rounded" />
+              <div className={`text-[10px] font-bold text-[#8C827A] dark:text-[#8C827A] px-3 mb-2 uppercase tracking-widest ${sidebarCollapsed ? "md:hidden" : ""}`}>
+                Analytics & Reports
+              </div>
+              {sidebarCollapsed && (
+                <div className="hidden md:block w-6 h-0.5 bg-[#E5E0D8] dark:bg-[#292524] mx-auto mb-2 rounded" />
               )}
               
               <div className="space-y-1">
                 <button 
                   onClick={() => navToTab("reports")}
                   className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                    sidebarCollapsed ? "justify-center px-0" : ""
+                    sidebarCollapsed ? "md:justify-center md:px-0" : ""
                   } ${
                     currentTab === "reports"
                       ? "bg-[#C84B18] text-white shadow-sm shadow-[#C84B18]/25"
@@ -448,9 +428,9 @@ export default function DashboardLayout({
                   }`}
                 >
                   <BarChart2 className={`h-4.5 w-4.5 shrink-0 ${currentTab === "reports" ? "text-white" : "text-[#716D67] group-hover:text-[#C84B18]"}`} />
-                  {!sidebarCollapsed && <span>Results & Gradebook</span>}
+                  <span className={sidebarCollapsed ? "md:hidden" : ""}>Results & Gradebook</span>
                   {sidebarCollapsed && (
-                    <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                    <span className="hidden md:block absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
                       Results & Gradebook Analytics
                     </span>
                   )}
@@ -461,25 +441,24 @@ export default function DashboardLayout({
 
           {/* SECTION: SYSTEM & PREFERENCES */}
           <div className="space-y-1.5">
-            {!sidebarCollapsed ? (
-              <div className="text-[10px] font-bold text-[#8C827A] dark:text-[#8C827A] px-3 mb-2 uppercase tracking-widest">
-                Preferences
-              </div>
-            ) : (
-              <div className="w-6 h-0.5 bg-[#E5E0D8] dark:bg-[#292524] mx-auto mb-2 rounded" />
+            <div className={`text-[10px] font-bold text-[#8C827A] dark:text-[#8C827A] px-3 mb-2 uppercase tracking-widest ${sidebarCollapsed ? "md:hidden" : ""}`}>
+              Preferences
+            </div>
+            {sidebarCollapsed && (
+              <div className="hidden md:block w-6 h-0.5 bg-[#E5E0D8] dark:bg-[#292524] mx-auto mb-2 rounded" />
             )}
 
             <div className="space-y-1">
               <button 
                 onClick={() => { closeSidebarMobile(); setSettingsModalOpen(true); }}
                 className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-[#57534E] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A] transition-all cursor-pointer ${
-                  sidebarCollapsed ? "justify-center px-0" : ""
+                  sidebarCollapsed ? "md:justify-center md:px-0" : ""
                 }`}
               >
                 <Sliders className="h-4.5 w-4.5 shrink-0 text-[#716D67] group-hover:text-[#C84B18]" />
-                {!sidebarCollapsed && <span>Settings & Profile</span>}
+                <span className={sidebarCollapsed ? "md:hidden" : ""}>Settings & Profile</span>
                 {sidebarCollapsed && (
-                  <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
+                  <span className="hidden md:block absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
                     System & Profile Settings
                   </span>
                 )}
@@ -492,20 +471,17 @@ export default function DashboardLayout({
             <button 
               onClick={() => setDevToolsOpen(!devToolsOpen)} 
               className={`w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] rounded-lg hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A] transition-colors cursor-pointer ${
-                sidebarCollapsed ? "justify-center px-0" : ""
+                sidebarCollapsed ? "md:justify-center md:px-0" : ""
               }`}
               title="Developer Tools"
             >
-              {!sidebarCollapsed ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    <Layers className="h-3.5 w-3.5" />
-                    <span>Developer Sandbox</span>
-                  </div>
-                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${devToolsOpen ? "rotate-180" : ""}`} />
-                </>
-              ) : (
-                <div className="group relative">
+              <div className={`flex items-center gap-2 ${sidebarCollapsed ? "md:hidden" : ""}`}>
+                <Layers className="h-3.5 w-3.5" />
+                <span>Developer Sandbox</span>
+              </div>
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${devToolsOpen ? "rotate-180" : ""} ${sidebarCollapsed ? "md:hidden" : ""}`} />
+              {sidebarCollapsed && (
+                <div className="hidden md:block group relative">
                   <Layers className="h-4 w-4" />
                   <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
                     Developer Tools
@@ -514,8 +490,8 @@ export default function DashboardLayout({
               )}
             </button>
 
-            {devToolsOpen && !sidebarCollapsed && (
-              <div className="mt-1 space-y-1 pl-4 border-l border-[#E5E0D8] dark:border-[#292524] ml-3 text-[11px]">
+            {devToolsOpen && (
+              <div className={`mt-1 space-y-1 pl-4 border-l border-[#E5E0D8] dark:border-[#292524] ml-3 text-[11px] ${sidebarCollapsed ? "md:hidden" : ""}`}>
                 <a 
                   href={`${API_BASE}/static/index.html`} 
                   target="_blank" 
@@ -552,30 +528,28 @@ export default function DashboardLayout({
             BOTTOM PROFILE & LOGOUT CARD
            ══════════════════════════════════════════════════════ */}
         <div className="p-3 border-t border-[#E5E0D8] dark:border-[#292524] bg-[#FAF8F5] dark:bg-[#141312] shrink-0">
-          <div className={`flex items-center gap-3 ${sidebarCollapsed ? "flex-col justify-center" : "justify-between"}`}>
-            <div className={`flex items-center gap-2.5 overflow-hidden ${sidebarCollapsed ? "justify-center" : ""}`}>
+          <div className={`flex items-center gap-3 ${sidebarCollapsed ? "md:flex-col md:justify-center" : "justify-between"}`}>
+            <div className={`flex items-center gap-2.5 overflow-hidden ${sidebarCollapsed ? "md:justify-center" : ""}`}>
               <div 
                 className="h-9 w-9 rounded-xl bg-[#C84B18] dark:bg-[#EA580C] text-white flex items-center justify-center font-bold text-xs shadow-sm shrink-0 cursor-pointer"
                 title={mounted && fullName ? fullName : "User Account"}
               >
                 {mounted && fullName ? fullName.charAt(0).toUpperCase() : "U"}
               </div>
-              {!sidebarCollapsed && (
-                <div className="overflow-hidden">
-                  <div className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] truncate">
-                    {mounted && fullName ? fullName : "User Account"}
-                  </div>
-                  <div className="text-[10px] text-[#716D67] dark:text-[#A8A29E] font-medium capitalize truncate">
-                    {mounted && role ? role : "Teacher"} · EduQuizX
-                  </div>
+              <div className={`overflow-hidden ${sidebarCollapsed ? "md:hidden" : ""}`}>
+                <div className="text-xs font-bold text-[#242321] dark:text-[#F5F5F4] truncate">
+                  {mounted && fullName ? fullName : "User Account"}
                 </div>
-              )}
+                <div className="text-[10px] text-[#716D67] dark:text-[#A8A29E] font-medium capitalize truncate">
+                  {mounted && role ? role : "Teacher"} · EduQuizX
+                </div>
+              </div>
             </div>
 
             <button 
               onClick={() => { logout(); router.push("/login"); }}
               className={`p-2 rounded-xl text-[#716D67] dark:text-[#A8A29E] hover:text-red-500 hover:bg-[#F0ECE4] dark:hover:bg-[#201D1A] transition-colors cursor-pointer ${
-                sidebarCollapsed ? "mt-1" : ""
+                sidebarCollapsed ? "md:mt-1" : ""
               }`}
               title="Sign Out"
             >
@@ -725,48 +699,22 @@ export default function DashboardLayout({
               )}
             </div>
 
-            {/* Theme Toggle (Light / Dark / System) */}
-            <div className="flex items-center bg-[#FAF8F5] dark:bg-[#141312] p-1 rounded-xl text-[11px] font-semibold border border-[#E5E0D8] dark:border-[#292524]">
-              <button 
-                type="button"
-                onClick={() => handleThemeChange("light")}
-                className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-                  themeMode === "light" 
-                    ? "bg-white text-[#242321] shadow-xs" 
-                    : "text-[#716D67] hover:text-[#242321]"
+            {/* Dark / Light Theme Toggle (Home Screen Style) */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="w-11 h-6 rounded-full bg-[#E5E0D8] dark:bg-[#292524] border border-[#E5E0D8] dark:border-[#292524] p-0.5 flex items-center shadow-2xs cursor-pointer transition-colors duration-300 relative focus:outline-none shrink-0"
+              title={`Switch to ${themeMode === "light" ? "Dark" : "Light"} mode`}
+              aria-label="Toggle Theme"
+            >
+              <div
+                className={`w-5 h-5 rounded-full bg-white dark:bg-[#EA580C] shadow-2xs border border-[#E5E0D8] dark:border-transparent transform transition-transform duration-300 flex items-center justify-center ${
+                  themeMode === "dark" ? "translate-x-5 text-white" : "translate-x-0 text-[#C84B18]"
                 }`}
-                title="Light Mode"
               >
-                <Sun className="h-3.5 w-3.5 text-amber-500" />
-                <span className="hidden sm:inline">Light</span>
-              </button>
-              <button 
-                type="button"
-                onClick={() => handleThemeChange("dark")}
-                className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-                  themeMode === "dark" 
-                    ? "bg-[#24211E] text-[#F5F5F4] shadow-xs" 
-                    : "text-[#716D67] hover:text-[#F5F5F4]"
-                }`}
-                title="Dark Mode"
-              >
-                <Moon className="h-3.5 w-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">Dark</span>
-              </button>
-              <button 
-                type="button"
-                onClick={() => handleThemeChange("system")}
-                className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-                  themeMode === "system" 
-                    ? "bg-white dark:bg-[#24211E] text-[#242321] dark:text-[#F5F5F4] shadow-xs" 
-                    : "text-[#716D67] hover:text-[#242321]"
-                }`}
-                title="System Theme"
-              >
-                <Laptop className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">System</span>
-              </button>
-            </div>
+                {themeMode === "light" ? <Sun className="h-2.5 w-2.5" /> : <Moon className="h-2.5 w-2.5" />}
+              </div>
+            </button>
           </div>
         </header>
 
@@ -807,23 +755,28 @@ export default function DashboardLayout({
                 <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">Institution: EduQuizX Academy</div>
               </div>
 
-              <div className="space-y-2">
-                <label className="font-bold text-[#242321] dark:text-[#F5F5F4] uppercase tracking-wider text-[10px]">Theme Mode</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["light", "dark", "system"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => handleThemeChange(mode)}
-                      className={`p-2.5 rounded-xl border text-center font-semibold capitalize transition-all cursor-pointer ${
-                        themeMode === mode
-                          ? "bg-[#C84B18]/10 border-[#C84B18] text-[#C84B18] dark:bg-[#EA580C]/15 dark:border-[#EA580C] dark:text-[#EA580C] shadow-xs"
-                          : "border-[#E5E0D8] dark:border-[#292524] bg-[#FAF8F5] dark:bg-[#141312] text-[#716D67] hover:text-[#242321]"
-                      }`}
-                    >
-                      {mode}
-                    </button>
-                  ))}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#FAF8F5] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524]">
+                <div>
+                  <label className="font-bold text-[#242321] dark:text-[#F5F5F4] uppercase tracking-wider text-[10px] block">Appearance Theme</label>
+                  <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E] mt-0.5">
+                    Currently set to <span className="font-semibold capitalize text-[#C84B18] dark:text-[#EA580C]">{themeMode} mode</span>
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="w-11 h-6 rounded-full bg-[#E5E0D8] dark:bg-[#292524] border border-[#E5E0D8] dark:border-[#292524] p-0.5 flex items-center shadow-2xs cursor-pointer transition-colors duration-300 relative focus:outline-none shrink-0"
+                  title={`Switch to ${themeMode === "light" ? "Dark" : "Light"} mode`}
+                  aria-label="Toggle Theme"
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-white dark:bg-[#EA580C] shadow-2xs border border-[#E5E0D8] dark:border-transparent transform transition-transform duration-300 flex items-center justify-center ${
+                      themeMode === "dark" ? "translate-x-5 text-white" : "translate-x-0 text-[#C84B18]"
+                    }`}
+                  >
+                    {themeMode === "light" ? <Sun className="h-2.5 w-2.5" /> : <Moon className="h-2.5 w-2.5" />}
+                  </div>
+                </button>
               </div>
 
               <div className="pt-3 border-t border-[#E5E0D8] dark:border-[#292524] flex justify-between items-center">

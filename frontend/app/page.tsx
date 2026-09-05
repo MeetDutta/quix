@@ -427,10 +427,10 @@ export default function UnifiedHomePage() {
           </div>
 
           {/* Guide Tab Switcher */}
-          <div className="flex items-center justify-center gap-2 flex-wrap">
+          <div className="flex items-center justify-start sm:justify-center gap-2 overflow-x-auto pb-1 scrollbar-none touch-pan-x sm:flex-wrap">
             <button
               onClick={() => setActiveGuideTab("creator")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 whitespace-nowrap cursor-pointer ${
                 activeGuideTab === "creator"
                   ? "bg-[#C84B18] text-white shadow-xs"
                   : "bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321]"
@@ -442,7 +442,7 @@ export default function UnifiedHomePage() {
 
             <button
               onClick={() => setActiveGuideTab("student")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 whitespace-nowrap cursor-pointer ${
                 activeGuideTab === "student"
                   ? "bg-emerald-700 text-white shadow-xs"
                   : "bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321]"
@@ -454,7 +454,7 @@ export default function UnifiedHomePage() {
 
             <button
               onClick={() => setActiveGuideTab("proctor")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 whitespace-nowrap cursor-pointer ${
                 activeGuideTab === "proctor"
                   ? "bg-rose-600 text-white shadow-xs"
                   : "bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321]"
@@ -466,7 +466,7 @@ export default function UnifiedHomePage() {
 
             <button
               onClick={() => setActiveGuideTab("analytics")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 whitespace-nowrap cursor-pointer ${
                 activeGuideTab === "analytics"
                   ? "bg-blue-600 text-white shadow-xs"
                   : "bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321]"

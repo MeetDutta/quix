@@ -681,97 +681,174 @@ export default function LiveAssessmentsTable({
               </div>
             </div>
 
-            {/* Credentials Table Preview */}
+            {/* Credentials Preview (Mobile Cards + Desktop Table) */}
             <div className="overflow-x-auto overflow-y-auto flex-1 border border-[#E5E0D8] dark:border-[#292524] rounded-xl bg-[#F7F4EF]/40 dark:bg-[#141312]/40">
-              <table className="w-full text-xs text-left border-collapse">
-                <thead className="bg-[#E5E0D8]/60 dark:bg-[#292524] text-[#716D67] dark:text-[#A8A29E] uppercase font-bold sticky top-0 z-10">
-                  <tr>
-                    <th className="py-2.5 px-3">Candidate</th>
-                    <th className="py-2.5 px-3">Roll No.</th>
-                    <th className="py-2.5 px-3">Exam Username</th>
-                    <th className="py-2.5 px-3">Timed PIN</th>
-                    <th className="py-2.5 px-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E5E0D8] dark:divide-[#292524]">
-                  {filteredCreds.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-xs text-[#716D67]">
-                        {credsSearch ? "No credentials match your search." : "No credentials generated yet."}
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredCreds.map((c, idx) => {
+              {filteredCreds.length === 0 ? (
+                <div className="py-8 text-center text-xs text-[#716D67]">
+                  {credsSearch ? "No credentials match your search." : "No credentials generated yet."}
+                </div>
+              ) : (
+                <>
+                  {/* Mobile Stacked Card View (< 768px) */}
+                  <div className="block md:hidden divide-y divide-[#E5E0D8] dark:divide-[#292524]">
+                    {filteredCreds.map((c, idx) => {
                       const rowKey = `${c.username}_${idx}`;
                       const isCopied = copiedKey === rowKey;
                       const isSendingEmail = resendingStudentId === (c.student_id || c.student_name);
 
                       return (
-                        <tr key={idx} className="hover:bg-[#F0ECE4]/60 dark:hover:bg-[#1D1B19] transition-all">
-                          <td className="py-2.5 px-3">
-                            <div className="font-semibold text-[#242321] dark:text-[#F5F5F4]">
-                              {c.student_name || "Enrolled Student"}
+                        <div key={idx} className="p-3.5 space-y-2.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-bold text-xs text-[#242321] dark:text-[#F5F5F4] truncate">
+                                {c.student_name || "Enrolled Student"}
+                              </div>
+                              {c.email && (
+                                <div className="text-[10px] text-[#716D67] truncate font-mono">{c.email}</div>
+                              )}
                             </div>
-                            {c.email && (
-                              <div className="text-[10px] text-[#716D67] font-mono">{c.email}</div>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-[#716D67] text-[11px]">
-                            {c.roll_number || "—"}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono font-bold text-[#C84B18] text-[11px]">
-                            {c.username}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded px-2 py-0.5 text-xs">
-                              {c.password}
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#FAF8F5] dark:bg-[#201D1A] border border-[#E5E0D8] dark:border-[#292524] text-[#716D67] shrink-0">
+                              Roll: {c.roll_number || "—"}
                             </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {/* Resend Email Button */}
-                              <button
-                                type="button"
-                                disabled={isSendingEmail}
-                                onClick={() => handleResendSingleCredEmail(c.student_id, c.student_name, c.email)}
-                                className="px-2 py-1 rounded border border-[#E5E0D8] dark:border-[#292524] text-[11px] font-semibold text-[#716D67] hover:text-[#C84B18] hover:bg-white dark:hover:bg-[#292524] transition-all inline-flex items-center gap-1"
-                                title={`Resend passcode email to ${c.email || c.student_name}`}
-                              >
-                                {isSendingEmail ? (
-                                  <div className="w-3 h-3 border-2 border-[#C84B18] border-t-transparent rounded-full animate-spin" />
-                                ) : (
-                                  <Mail className="h-3 w-3" />
-                                )}
-                                <span className="hidden sm:inline">Send Email</span>
-                              </button>
+                          </div>
 
-                              {/* Copy Individual PIN */}
-                              <button
-                                type="button"
-                                onClick={() => handleCopySingleCred(`User: ${c.username}\nPIN: ${c.password}\nPortal: ${getFrontendBaseUrl()}/exam/${credsModalData.examCode}`, rowKey)}
-                                className="px-2 py-1 rounded border border-[#E5E0D8] dark:border-[#292524] text-[11px] font-semibold text-[#716D67] hover:text-[#C84B18] hover:bg-white dark:hover:bg-[#292524] transition-all inline-flex items-center gap-1"
-                                title="Copy candidate login credentials"
-                              >
-                                {isCopied ? (
-                                  <>
-                                    <Check className="h-3 w-3 text-emerald-600" />
-                                    <span className="text-emerald-600">Copied</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="h-3 w-3" />
-                                    <span>Copy</span>
-                                  </>
-                                )}
-                              </button>
+                          <div className="grid grid-cols-2 gap-2 bg-white dark:bg-[#171615] p-2.5 rounded-xl border border-[#E5E0D8] dark:border-[#292524] text-[11px]">
+                            <div>
+                              <span className="text-[10px] text-[#716D67] block">Exam Username</span>
+                              <span className="font-mono font-bold text-[#C84B18] text-xs break-all">
+                                {c.username}
+                              </span>
                             </div>
-                          </td>
-                        </tr>
+                            <div>
+                              <span className="text-[10px] text-[#716D67] block">Timed Passcode</span>
+                              <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded px-2 py-0.5 text-xs inline-block mt-0.5">
+                                {c.password}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={isSendingEmail}
+                              onClick={() => handleResendSingleCredEmail(c.student_id, c.student_name, c.email)}
+                              className="flex-1 py-1.5 px-2 rounded-lg border border-[#E5E0D8] dark:border-[#292524] text-xs font-semibold text-[#716D67] hover:text-[#C84B18] bg-white dark:bg-[#171615] hover:bg-[#FAF8F5] transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                            >
+                              {isSendingEmail ? (
+                                <div className="w-3 h-3 border-2 border-[#C84B18] border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <Mail className="h-3.5 w-3.5" />
+                              )}
+                              <span>Email Passcode</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleCopySingleCred(`User: ${c.username}\nPIN: ${c.password}\nPortal: ${getFrontendBaseUrl()}/exam/${credsModalData.examCode}`, rowKey)}
+                              className="flex-1 py-1.5 px-2 rounded-lg border border-[#E5E0D8] dark:border-[#292524] text-xs font-semibold text-[#716D67] hover:text-[#C84B18] bg-white dark:bg-[#171615] hover:bg-[#FAF8F5] transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                            >
+                              {isCopied ? (
+                                <>
+                                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                  <span className="text-emerald-600">Copied</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3.5 w-3.5" />
+                                  <span>Copy Login</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
                       );
-                    })
-                  )}
-                </tbody>
-              </table>
+                    })}
+                  </div>
+
+                  {/* Desktop Table View (>= 768px) */}
+                  <div className="hidden md:block">
+                    <table className="w-full text-xs text-left border-collapse">
+                      <thead className="bg-[#E5E0D8]/60 dark:bg-[#292524] text-[#716D67] dark:text-[#A8A29E] uppercase font-bold sticky top-0 z-10">
+                        <tr>
+                          <th className="py-2.5 px-3">Candidate</th>
+                          <th className="py-2.5 px-3">Roll No.</th>
+                          <th className="py-2.5 px-3">Exam Username</th>
+                          <th className="py-2.5 px-3">Timed PIN</th>
+                          <th className="py-2.5 px-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E5E0D8] dark:divide-[#292524]">
+                        {filteredCreds.map((c, idx) => {
+                          const rowKey = `${c.username}_${idx}`;
+                          const isCopied = copiedKey === rowKey;
+                          const isSendingEmail = resendingStudentId === (c.student_id || c.student_name);
+
+                          return (
+                            <tr key={idx} className="hover:bg-[#F0ECE4]/60 dark:hover:bg-[#1D1B19] transition-all">
+                              <td className="py-2.5 px-3">
+                                <div className="font-semibold text-[#242321] dark:text-[#F5F5F4]">
+                                  {c.student_name || "Enrolled Student"}
+                                </div>
+                                {c.email && (
+                                  <div className="text-[10px] text-[#716D67] font-mono">{c.email}</div>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 font-mono text-[#716D67] text-[11px]">
+                                {c.roll_number || "—"}
+                              </td>
+                              <td className="py-2.5 px-3 font-mono font-bold text-[#C84B18] text-[11px]">
+                                {c.username}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded px-2 py-0.5 text-xs">
+                                  {c.password}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    disabled={isSendingEmail}
+                                    onClick={() => handleResendSingleCredEmail(c.student_id, c.student_name, c.email)}
+                                    className="px-2 py-1 rounded border border-[#E5E0D8] dark:border-[#292524] text-[11px] font-semibold text-[#716D67] hover:text-[#C84B18] hover:bg-white dark:hover:bg-[#292524] transition-all inline-flex items-center gap-1"
+                                    title={`Resend passcode email to ${c.email || c.student_name}`}
+                                  >
+                                    {isSendingEmail ? (
+                                      <div className="w-3 h-3 border-2 border-[#C84B18] border-t-transparent rounded-full animate-spin" />
+                                    ) : (
+                                      <Mail className="h-3 w-3" />
+                                    )}
+                                    <span className="hidden sm:inline">Send Email</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopySingleCred(`User: ${c.username}\nPIN: ${c.password}\nPortal: ${getFrontendBaseUrl()}/exam/${credsModalData.examCode}`, rowKey)}
+                                    className="px-2 py-1 rounded border border-[#E5E0D8] dark:border-[#292524] text-[11px] font-semibold text-[#716D67] hover:text-[#C84B18] hover:bg-white dark:hover:bg-[#292524] transition-all inline-flex items-center gap-1"
+                                    title="Copy candidate login credentials"
+                                  >
+                                    {isCopied ? (
+                                      <>
+                                        <Check className="h-3 w-3 text-emerald-600" />
+                                        <span className="text-emerald-600">Copied</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="h-3 w-3" />
+                                        <span>Copy</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Modal Bottom Actions */}

@@ -380,21 +380,21 @@ function LoginContent() {
 
         <button
           onClick={toggleTheme}
-          className="w-13 h-7 rounded-full bg-[#E5E0D8] dark:bg-[#292524] border border-[#E5E0D8] dark:border-[#292524] p-1 flex items-center shadow-xs cursor-pointer transition-colors duration-300 relative focus:outline-none"
+          className="w-11 h-6 rounded-full bg-[#E5E0D8] dark:bg-[#292524] border border-[#E5E0D8] dark:border-[#292524] p-0.5 flex items-center shadow-2xs cursor-pointer transition-colors duration-300 relative focus:outline-none"
           title={`Switch to ${theme === "light" ? "Dark" : "Light"} mode`}
           aria-label="Toggle Theme"
         >
           <div
-            className={`w-5 h-5 rounded-full bg-white dark:bg-[#EA580C] shadow-xs border border-[#E5E0D8] dark:border-transparent transform transition-transform duration-300 flex items-center justify-center ${
-              theme === "dark" ? "translate-x-6 text-white" : "translate-x-0 text-[#C84B18]"
+            className={`w-5 h-5 rounded-full bg-white dark:bg-[#EA580C] shadow-2xs border border-[#E5E0D8] dark:border-transparent transform transition-transform duration-300 flex items-center justify-center ${
+              theme === "dark" ? "translate-x-5 text-white" : "translate-x-0 text-[#C84B18]"
             }`}
           >
-            {theme === "light" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+            {theme === "light" ? <Sun className="h-2.5 w-2.5" /> : <Moon className="h-2.5 w-2.5" />}
           </div>
         </button>
       </div>
 
-      <div className="w-full max-w-[460px] z-10 space-y-5 mt-8">
+      <div className="w-full max-w-[460px] z-10 space-y-5 mt-12 sm:mt-8 pt-4 sm:pt-0">
         
         {/* Logo & Platform Headline */}
         <div className="flex justify-center items-center gap-3">

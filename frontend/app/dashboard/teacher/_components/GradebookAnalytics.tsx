@@ -324,7 +324,90 @@ export default function GradebookAnalytics({ exams }: GradebookAnalyticsProps) {
               </span>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Stacked Card View (< 768px): 100% visible at a single glance without horizontal scrolling */}
+            <div className="block md:hidden divide-y divide-[#E5E0D8] dark:divide-[#292524]">
+              {reportAnalytics.submissions && reportAnalytics.submissions.length > 0 ? (
+                reportAnalytics.submissions.map((sub: any) => (
+                  <div key={sub.submission_id} className="py-3.5 space-y-2.5 first:pt-0 last:pb-0">
+                    {/* Top Row: Rank, Student Name, Status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono font-bold text-xs bg-[#FAF8F5] dark:bg-[#201D1A] border border-[#E5E0D8] dark:border-[#292524] px-2 py-0.5 rounded-md text-[#C84B18] dark:text-[#EA580C] shrink-0">
+                          #{sub.rank}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-bold text-xs text-[#242321] dark:text-[#F5F5F4] truncate">
+                            {sub.student_name}
+                          </div>
+                          <div className="text-[10px] text-[#716D67] dark:text-[#A8A29E] truncate">
+                            {sub.email}
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                          sub.is_passed
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                            : "bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-300 dark:border-rose-800"
+                        }`}
+                      >
+                        {sub.is_passed ? "PASSED" : "FAILED"}
+                      </span>
+                    </div>
+
+                    {/* Middle Row: Score, Percentage, Roll Number, Proctor Flags */}
+                    <div className="grid grid-cols-2 gap-2 bg-[#FAF8F5] dark:bg-[#141312] p-2.5 rounded-xl border border-[#E5E0D8]/70 dark:border-[#292524] text-[11px]">
+                      <div>
+                        <span className="text-[10px] text-[#716D67] dark:text-[#A8A29E] block">Score</span>
+                        <span className="font-bold text-[#242321] dark:text-[#F5F5F4]">
+                          {formatNum(sub.score)} / {formatNum(sub.max_score)}
+                        </span>{" "}
+                        <span className="font-bold text-[#C84B18] dark:text-[#EA580C]">
+                          ({formatNum(sub.percentage)}%)
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-[#716D67] dark:text-[#A8A29E] block">Roll Number</span>
+                        <span className="font-mono text-[#242321] dark:text-[#F5F5F4] break-all">
+                          {sub.roll_number || "N/A"}
+                        </span>
+                      </div>
+
+                      <div className="col-span-2 flex items-center justify-between pt-1.5 border-t border-[#E5E0D8]/50 dark:border-[#292524]">
+                        <span className="text-[10px] text-[#716D67] dark:text-[#A8A29E]">Proctor Audit:</span>
+                        {sub.proctor_alerts > 0 ? (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 text-[10px] font-semibold border border-rose-200">
+                            {sub.proctor_alerts} Incident{sub.proctor_alerts > 1 ? "s" : ""}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                            Clean Attempt
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Row */}
+                    <button
+                      type="button"
+                      onClick={() => inspectStudentAnswerSheet(sub.submission_id)}
+                      className="w-full py-2 px-3 rounded-lg border border-[#E5E0D8] dark:border-[#292524] bg-white dark:bg-[#171615] hover:bg-[#FAF8F5] text-[#716D67] hover:text-[#C84B18] text-xs font-semibold flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      <span>View Answer Sheet & Proctor Audit</span>
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-xs text-[#716D67]">
+                  No student attempts submitted for this quiz yet.
+                </div>
+              )}
+            </div>
+
+            {/* Desktop Table View (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse min-w-[620px]">
                 <thead>
                   <tr className="border-b border-[#E5E0D8] dark:border-[#292524] text-[#716D67] dark:text-[#A8A29E]">
