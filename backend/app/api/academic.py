@@ -42,6 +42,8 @@ def get_academic_sessions(
     query = db.query(AcademicSession).filter(AcademicSession.is_deleted == False)
     if current_user.institution_id:
         query = query.filter(AcademicSession.institution_id == current_user.institution_id)
+    elif current_user.role != "super_admin":
+        query = query.filter(AcademicSession.id == None)
     return query.order_by(AcademicSession.name.desc()).all()
 
 @router.post("/sessions")
@@ -51,7 +53,15 @@ def create_academic_session(
     db: Session = Depends(get_db)
 ):
     """Create a new academic session."""
-    inst_id = current_user.institution_id or "inst-aegeus-001"
+    inst_id = current_user.institution_id
+    if not inst_id:
+        from app.models.institution import Institution
+        personal_inst = Institution(name=f"{current_user.full_name}'s Institution")
+        db.add(personal_inst)
+        db.flush()
+        current_user.institution_id = personal_inst.id
+        inst_id = personal_inst.id
+
     session = AcademicSession(
         institution_id=inst_id,
         name=payload.name,
@@ -73,7 +83,11 @@ def get_cohorts(
     db: Session = Depends(get_db)
 ):
     """List cohorts with optional course/session filters."""
-    query = db.query(Cohort).filter(Cohort.is_deleted == False)
+    query = db.query(Cohort).join(AcademicSession).filter(Cohort.is_deleted == False)
+    if current_user.institution_id:
+        query = query.filter(AcademicSession.institution_id == current_user.institution_id)
+    elif current_user.role != "super_admin":
+        query = query.filter(Cohort.id == None)
     if course_id:
         query = query.filter(Cohort.course_id == course_id)
     if academic_session_id:

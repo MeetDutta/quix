@@ -39,6 +39,8 @@ def get_departments(
     query = db.query(Department).filter(Department.is_deleted == False)
     if current_user.institution_id:
         query = query.filter(Department.institution_id == current_user.institution_id)
+    elif current_user.role != "super_admin":
+        query = query.filter(Department.id == None)
     depts = query.all()
     res = []
     for d in depts:
@@ -60,11 +62,10 @@ def create_department(
     """Create a new academic department."""
     inst_id = current_user.institution_id
     if not inst_id:
-        inst = db.query(Institution).first()
-        if not inst:
-            inst = Institution(name="Main Campus Institution")
-            db.add(inst)
-            db.flush()
+        inst = Institution(name=f"{current_user.full_name}'s Institution")
+        db.add(inst)
+        db.flush()
+        current_user.institution_id = inst.id
         inst_id = inst.id
 
     # Check duplicate

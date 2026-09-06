@@ -27,6 +27,8 @@ def list_assessment_groups(
     query = db.query(AssessmentGroup).filter(AssessmentGroup.is_deleted == False, AssessmentGroup.is_active == True)
     if current_user.institution_id:
         query = query.filter(AssessmentGroup.institution_id == current_user.institution_id)
+    elif current_user.role != "super_admin":
+        query = query.filter(AssessmentGroup.created_by == current_user.id)
     if group_type:
         query = query.filter(AssessmentGroup.type == group_type)
         
@@ -61,7 +63,14 @@ def create_assessment_group(
     db: Session = Depends(get_db)
 ):
     """Creates a new reusable Assessment Group (Class / Group)."""
-    inst_id = current_user.institution_id or "inst-aegeus-001"
+    inst_id = current_user.institution_id
+    if not inst_id:
+        from app.models.institution import Institution
+        personal_inst = Institution(name=f"{current_user.full_name}'s Institution")
+        db.add(personal_inst)
+        db.flush()
+        current_user.institution_id = personal_inst.id
+        inst_id = personal_inst.id
     
     group = AssessmentGroup(
         institution_id=inst_id,

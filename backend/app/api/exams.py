@@ -26,7 +26,7 @@ from app.models.document import Document, DocumentChunk
 from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog
 from app.models.question import Question
 from app.models.institution import Subject, Institution, Department, Course
-from app.models.workspace import Workspace
+from app.models.workspace import Workspace, WorkspaceMember
 from app.models.student_directory import StudentDirectory, DirectoryStudent
 from app.models.candidate import ExamCandidate
 from app.schemas.exam import (
@@ -989,6 +989,16 @@ def export_credentials_csv(
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Could not validate credentials: {str(e)}")
             
+    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+        
+    # Multi-tenant ownership check
+    if user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()]
+        if not (exam.created_by == user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied to credentials for this exam")
+
     creds = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).all()
     candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam_id).all()
     
@@ -1485,6 +1495,12 @@ def get_exam_live_monitor(
     exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
+
+    # Multi-tenant ownership check
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied to monitor this exam")
 
     total_questions = 0
     if exam.questions_json:

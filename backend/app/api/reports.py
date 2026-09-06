@@ -1,5 +1,4 @@
-import json
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from app.database import get_db
@@ -7,8 +6,11 @@ from app.models.user import User, Student
 from app.models.exam import Exam, ExamSubmission, ExamCredential, ProctoringLog
 from app.models.candidate import ExamCandidate
 from app.models.institution import Department
+from app.models.workspace import Workspace, WorkspaceMember
 from app.utils.security import RoleChecker, get_current_user
 from app.services.ai_service import AIService
+from jose import jwt
+from app.config import settings
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
@@ -34,6 +36,12 @@ def get_exam_analytics(
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
+        
+    # Multi-tenant access check
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied to this exam's analytics")
         
     total_credentials = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).count()
     submissions = db.query(ExamSubmission).filter(
@@ -230,6 +238,12 @@ def export_exam_csv(
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
         
+    # Multi-tenant access check
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied to this exam's gradebook")
+        
     submissions = db.query(ExamSubmission).filter(
         ExamSubmission.exam_id == exam_id, 
         ExamSubmission.status.in_(["submitted", "auto_submitted"])
@@ -301,7 +315,7 @@ def get_my_progress(
     Returns aggregated learning progress, score trend history,
     topic accuracy breakdown, and weak-topic callouts for the student.
     """
-    # 1. Fetch student's submitted exam attempts
+    # 1. Fetch student's submitted exam attempts strictly for current_user
     student_records = db.query(Student).filter(
         (Student.user_id == current_user.id) |
         (Student.user.has(User.email == current_user.email))
@@ -314,9 +328,8 @@ def get_my_progress(
             ExamCredential.student_id.in_(student_ids)
         ).order_by(ExamSubmission.submitted_at.asc()).all()
     else:
-        submissions = db.query(ExamSubmission).filter(
-            ExamSubmission.status.in_(["submitted", "auto_submitted"])
-        ).order_by(ExamSubmission.submitted_at.asc()).all()
+        # Strict tenant isolation: new students with no submissions get an empty list
+        submissions = []
         
     if not submissions:
         return {
@@ -420,20 +433,31 @@ def get_my_submissions(
     valid_statuses = ["submitted", "auto_submitted"]
     
     if is_teacher and student_id:
-        submissions = db.query(ExamSubmission).join(ExamCredential).filter(
+        query = db.query(ExamSubmission).join(ExamCredential).join(Exam).filter(
             ExamSubmission.status.in_(valid_statuses),
             ExamCredential.student_id == student_id
-        ).order_by(ExamSubmission.submitted_at.desc()).all()
+        )
+        if current_user.role != "super_admin":
+            teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+            query = query.filter(
+                (Exam.workspace_id.in_(teacher_ws_ids)) | (Exam.created_by == current_user.id)
+            )
+        submissions = query.order_by(ExamSubmission.submitted_at.desc()).all()
     elif is_teacher:
-        submissions = db.query(ExamSubmission).filter(
+        query = db.query(ExamSubmission).join(Exam).filter(
             ExamSubmission.status.in_(valid_statuses)
-        ).order_by(ExamSubmission.submitted_at.desc()).all()
+        )
+        if current_user.role != "super_admin":
+            teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+            query = query.filter(
+                (Exam.workspace_id.in_(teacher_ws_ids)) | (Exam.created_by == current_user.id)
+            )
+        submissions = query.order_by(ExamSubmission.submitted_at.desc()).all()
     else:
-        # Find student records matching current_user
+        # Find student records strictly matching current_user ID or unique email
         student_records = db.query(Student).filter(
             (Student.user_id == current_user.id) |
-            (Student.user.has(User.email == current_user.email)) |
-            (Student.user.has(User.full_name == current_user.full_name))
+            (Student.user.has(User.email == current_user.email))
         ).all()
         
         student_ids = [s.id for s in student_records]
@@ -444,9 +468,8 @@ def get_my_submissions(
                 ExamCredential.student_id.in_(student_ids)
             ).order_by(ExamSubmission.submitted_at.desc()).all()
         else:
-            submissions = db.query(ExamSubmission).filter(
-                ExamSubmission.status.in_(valid_statuses)
-            ).order_by(ExamSubmission.submitted_at.desc()).all()
+            # Strict multi-tenant isolation: brand-new accounts have 0 submissions
+            submissions = []
         
     result = []
     for s in submissions:
@@ -507,9 +530,18 @@ def get_submission_detail(
         
     # Check permissions
     if current_user.role == "student":
-        if sub.credential and sub.credential.student and sub.credential.student.user_id:
-            if sub.credential.student.user_id != current_user.id and sub.credential.student.user.email != current_user.email:
-                raise HTTPException(status_code=403, detail="Access denied to this report")
+        student_owns = (
+            sub.credential and sub.credential.student and (
+                sub.credential.student.user_id == current_user.id or 
+                (sub.credential.student.user and sub.credential.student.user.email == current_user.email)
+            )
+        )
+        if not student_owns:
+            raise HTTPException(status_code=403, detail="Access denied to this report")
+    elif current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (sub.exam and (sub.exam.created_by == current_user.id or (sub.exam.workspace_id and sub.exam.workspace_id in teacher_ws_ids))):
+            raise HTTPException(status_code=403, detail="Access denied to this report")
             
     # Load detailed evaluation answers from answers_json
     answers_data = json.loads(sub.answers_json) if sub.answers_json else {}
@@ -669,15 +701,49 @@ from fastapi.responses import HTMLResponse
 @router.get("/submission-detail/{submission_id}/printable", response_class=HTMLResponse)
 def export_printable_submission_response(
     submission_id: str,
+    token: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """
     Exports full student exam response booklet with questions, selected answers, 
     correct answers, explanations, and scores as a printable HTML/PDF document.
     """
+    auth_token = token
+    if not auth_token and authorization and authorization.startswith("Bearer "):
+        auth_token = authorization.split(" ")[1]
+        
+    user = None
+    if auth_token:
+        try:
+            payload = jwt.decode(auth_token, settings.SECRET_KEY, algorithms=["HS256"])
+            user_id = payload.get("sub")
+            if user_id:
+                user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
+        except Exception:
+            pass
+
     sub = db.query(ExamSubmission).filter(ExamSubmission.id == submission_id).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
+        
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required to view this response sheet")
+        
+    # Check permissions
+    if user.role == "student":
+        student_owns = (
+            sub.credential and sub.credential.student and (
+                sub.credential.student.user_id == user.id or 
+                (sub.credential.student.user and sub.credential.student.user.email == user.email)
+            )
+        )
+        if not student_owns:
+            raise HTTPException(status_code=403, detail="Access denied to this response sheet")
+    elif user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()]
+        if not (sub.exam and (sub.exam.created_by == user.id or (sub.exam.workspace_id and sub.exam.workspace_id in teacher_ws_ids))):
+            raise HTTPException(status_code=403, detail="Access denied to this response sheet")
         
     student_name = sub.credential.student.user.full_name if (sub.credential and sub.credential.student and sub.credential.student.user) else "Student"
     roll_number = sub.credential.student.roll_number if (sub.credential and sub.credential.student) else "N/A"

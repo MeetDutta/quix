@@ -49,6 +49,22 @@ def list_students(
     )
     if current_user.institution_id:
         query = query.filter(User.institution_id == current_user.institution_id)
+    elif current_user.role != "super_admin":
+        # For instructors without institution_id (personal workspace):
+        # Only show students enrolled in directories of their workspace
+        from app.models.workspace import WorkspaceMember
+        from app.models.student_directory import StudentDirectory, DirectoryStudent
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        ws_student_emails = db.query(DirectoryStudent.email).join(StudentDirectory).filter(
+            StudentDirectory.workspace_id.in_(teacher_ws_ids),
+            DirectoryStudent.is_deleted == False
+        ).all()
+        allowed_emails = [e[0].lower() for e in ws_student_emails if e[0]]
+        if allowed_emails:
+            query = query.filter(User.email.in_(allowed_emails))
+        else:
+            # Fresh workspace with no student directories yet
+            query = query.filter(Student.id == None)
         
     if department_id:
         query = query.filter(Student.department_id == department_id)
@@ -392,9 +408,14 @@ def get_student_assigned_exams(
     
     # Fetch all published exams (or teacher's exams if teacher previewing)
     if is_teacher:
-        exams = db.query(Exam).filter(
-            Exam.is_deleted == False
-        ).order_by(Exam.created_at.desc()).all()
+        from app.models.workspace import WorkspaceMember
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        query = db.query(Exam).filter(Exam.is_deleted == False)
+        if current_user.role != "super_admin":
+            query = query.filter(
+                (Exam.workspace_id.in_(teacher_ws_ids)) | (Exam.created_by == current_user.id)
+            )
+        exams = query.order_by(Exam.created_at.desc()).all()
     else:
         exams = db.query(Exam).filter(
             Exam.is_published == True,
@@ -422,6 +443,21 @@ def get_student_assigned_exams(
     
     results = []
     for exam in exams:
+        # Check selective directory targeting: if exam is restricted to a student directory
+        if not is_teacher and exam.student_directory_id:
+            from app.models.candidate import ExamCandidate
+            is_cand = db.query(ExamCandidate).filter(
+                ExamCandidate.exam_id == exam.id,
+                (ExamCandidate.email_snapshot.ilike(current_user.email)) |
+                (ExamCandidate.roll_number_snapshot == getattr(student, "roll_number", ""))
+            ).first()
+            has_existing_cred = db.query(ExamCredential).filter(
+                ExamCredential.exam_id == exam.id,
+                ExamCredential.student_id == getattr(student, "id", None)
+            ).first()
+            if not is_cand and not has_existing_cred:
+                continue
+
         # Check selective targeting
         if student and exam.settings_json:
             try:
