@@ -45,7 +45,6 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
-  const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [currentTab, setCurrentTab] = useState<string>("exams");
   
@@ -464,63 +463,6 @@ export default function DashboardLayout({
                 )}
               </button>
             </div>
-          </div>
-
-          {/* SECTION: DEVELOPER TOOLS (Collapsible) */}
-          <div className="pt-2 border-t border-[#E5E0D8] dark:border-[#292524]">
-            <button 
-              onClick={() => setDevToolsOpen(!devToolsOpen)} 
-              className={`w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold text-[#716D67] dark:text-[#A8A29E] hover:text-[#242321] dark:hover:text-[#F5F5F4] rounded-lg hover:bg-[#F7F4EF] dark:hover:bg-[#201D1A] transition-colors cursor-pointer ${
-                sidebarCollapsed ? "md:justify-center md:px-0" : ""
-              }`}
-              title="Developer Tools"
-            >
-              <div className={`flex items-center gap-2 ${sidebarCollapsed ? "md:hidden" : ""}`}>
-                <Layers className="h-3.5 w-3.5" />
-                <span>Developer Sandbox</span>
-              </div>
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${devToolsOpen ? "rotate-180" : ""} ${sidebarCollapsed ? "md:hidden" : ""}`} />
-              {sidebarCollapsed && (
-                <div className="hidden md:block group relative">
-                  <Layers className="h-4 w-4" />
-                  <span className="absolute left-full ml-3 px-2.5 py-1 bg-[#1F1E1D] text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50">
-                    Developer Tools
-                  </span>
-                </div>
-              )}
-            </button>
-
-            {devToolsOpen && (
-              <div className={`mt-1 space-y-1 pl-4 border-l border-[#E5E0D8] dark:border-[#292524] ml-3 text-[11px] ${sidebarCollapsed ? "md:hidden" : ""}`}>
-                <a 
-                  href={`${API_BASE}/static/index.html`} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="flex items-center justify-between px-2 py-1 text-[#716D67] dark:text-[#A8A29E] hover:text-[#C84B18] rounded transition-colors"
-                >
-                  <span>Static Creator UI</span>
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-                <a 
-                  href={`${API_BASE}/static/exam.html`} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="flex items-center justify-between px-2 py-1 text-[#716D67] dark:text-[#A8A29E] hover:text-[#C84B18] rounded transition-colors"
-                >
-                  <span>Candidate Sandbox</span>
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-                <a 
-                  href={`${API_BASE}/docs`} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="flex items-center justify-between px-2 py-1 text-[#716D67] dark:text-[#A8A29E] hover:text-[#C84B18] rounded transition-colors"
-                >
-                  <span>FastAPI Swagger Docs</span>
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </div>
-            )}
           </div>
         </nav>
 

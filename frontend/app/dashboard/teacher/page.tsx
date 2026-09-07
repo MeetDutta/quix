@@ -670,7 +670,7 @@ export default function TeacherDashboard() {
             Teacher Command Center
           </h1>
           <p className="text-xs text-[#716D67] dark:text-[#A8A29E] mt-0.5">
-            Welcome, <b>{mounted && fullName ? fullName : "Instructor"}</b>. Autonomous AI assessment synthesis & proctoring sandbox.
+            Welcome, <b>{mounted && fullName ? fullName : "Instructor"}</b>. Autonomous AI assessment synthesis & proctoring platform.
           </p>
         </div>
 
