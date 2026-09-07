@@ -34,3 +34,4 @@ frontend/.env
 .vscode/
 .idea/
 client_secret*.json
+*.tsbuildinfo

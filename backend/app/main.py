@@ -1,6 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 import os
 from app.config import settings
 from app.database import engine, Base
@@ -264,6 +264,20 @@ else:
         expose_headers=["*"]
     )
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    origin = request.headers.get("origin", "*")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "error": str(exc)},
+        headers={
+            "Access-Control-Allow-Origin": origin if origin else "*",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Methods": "*",
+        }
+    )
+
 # Register routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(workspaces.router, prefix=settings.API_V1_STR)
@@ -277,11 +291,6 @@ app.include_router(notifications.router, prefix=settings.API_V1_STR)
 app.include_router(institutions.router, prefix=settings.API_V1_STR)
 app.include_router(academic.router, prefix=settings.API_V1_STR)
 app.include_router(assessment_groups.router, prefix=settings.API_V1_STR)
-
-# Serve static playground files
-static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
-if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 @app.get("/")
 def read_root():
