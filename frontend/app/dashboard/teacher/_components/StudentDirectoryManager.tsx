@@ -62,6 +62,8 @@ export default function StudentDirectoryManager({ token: propToken }: StudentDir
   const [newStudentEmail, setNewStudentEmail] = useState('');
   const [newStudentRoll, setNewStudentRoll] = useState('');
   const [newStudentPhone, setNewStudentPhone] = useState('');
+  const [newStudentDivision, setNewStudentDivision] = useState('');
+  const [newStudentDepartment, setNewStudentDepartment] = useState('');
   const [studentActionLoading, setStudentActionLoading] = useState(false);
   const [studentActionError, setStudentActionError] = useState<string | null>(null);
 
@@ -142,7 +144,9 @@ export default function StudentDirectoryManager({ token: propToken }: StudentDir
           name: newStudentName.trim(),
           email: newStudentEmail.trim().toLowerCase(),
           roll_number: newStudentRoll.trim() || undefined,
-          phone: newStudentPhone.trim() || undefined
+          phone: newStudentPhone.trim() || undefined,
+          division: newStudentDivision.trim() || undefined,
+          department: newStudentDepartment.trim() || undefined
         },
         token
       );
@@ -160,6 +164,8 @@ export default function StudentDirectoryManager({ token: propToken }: StudentDir
       setNewStudentEmail('');
       setNewStudentRoll('');
       setNewStudentPhone('');
+      setNewStudentDivision('');
+      setNewStudentDepartment('');
       setIsAddStudentModalOpen(false);
     } catch (err: any) {
       setStudentActionError(err.message || 'Failed to add student');
@@ -244,7 +250,9 @@ export default function StudentDirectoryManager({ token: propToken }: StudentDir
     (s) =>
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.roll_number && s.roll_number.toLowerCase().includes(searchQuery.toLowerCase()))
+      (s.roll_number && s.roll_number.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (s.division && s.division.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (s.department && s.department.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -444,6 +452,18 @@ export default function StudentDirectoryManager({ token: propToken }: StudentDir
                             {s.phone || '—'}
                           </span>
                         </div>
+                        <div>
+                          <span className="text-[10px] text-[#716D67] block">Division</span>
+                          <span className="text-[#242321] dark:text-[#F5F5F4] font-medium break-all">
+                            {s.division || '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-[#716D67] block">Department</span>
+                          <span className="text-[#242321] dark:text-[#F5F5F4] truncate block" title={s.department || ''}>
+                            {s.department || '—'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -457,6 +477,8 @@ export default function StudentDirectoryManager({ token: propToken }: StudentDir
                         <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Student Name</th>
                         <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Email Address</th>
                         <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Roll / ID</th>
+                        <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Division</th>
+                        <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Department</th>
                         <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Phone Number</th>
                         <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">Status</th>
                         <th className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-right">Actions</th>
@@ -473,6 +495,18 @@ export default function StudentDirectoryManager({ token: propToken }: StudentDir
                           </td>
                           <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E]">{s.email}</td>
                           <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E]">{s.roll_number || '—'}</td>
+                          <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">
+                            {s.division ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C] border border-[#C84B18]/20">
+                                {s.division}
+                              </span>
+                            ) : (
+                              <span className="text-[#716D67] dark:text-[#A8A29E]">—</span>
+                            )}
+                          </td>
+                          <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E] max-w-[150px] truncate" title={s.department || ''}>
+                            {s.department || '—'}
+                          </td>
                           <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap text-[#716D67] dark:text-[#A8A29E]">{s.phone || '—'}</td>
                           <td className="px-3.5 sm:px-6 py-3 sm:py-3.5 whitespace-nowrap">
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
@@ -666,6 +700,33 @@ export default function StudentDirectoryManager({ token: propToken }: StudentDir
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#57534E] dark:text-[#A8A29E] mb-1.5">
+                    Division / Section <span className="text-[#716D67] dark:text-[#A8A29E] font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newStudentDivision}
+                    onChange={(e) => setNewStudentDivision(e.target.value)}
+                    placeholder="e.g. Section A"
+                    className="w-full px-3.5 py-2 bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl text-xs text-[#242321] dark:text-[#F5F5F4] placeholder-[#716D67] dark:placeholder-[#A8A29E] focus:outline-none focus:ring-1 focus:ring-[#C84B18]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#57534E] dark:text-[#A8A29E] mb-1.5">
+                    Department <span className="text-[#716D67] dark:text-[#A8A29E] font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newStudentDepartment}
+                    onChange={(e) => setNewStudentDepartment(e.target.value)}
+                    placeholder="e.g. Computer Science"
+                    className="w-full px-3.5 py-2 bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl text-xs text-[#242321] dark:text-[#F5F5F4] placeholder-[#716D67] dark:placeholder-[#A8A29E] focus:outline-none focus:ring-1 focus:ring-[#C84B18]"
+                  />
+                </div>
+              </div>
+
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E5E0D8] dark:border-[#292524]">
                 <button
                   type="button"
@@ -718,7 +779,7 @@ export default function StudentDirectoryManager({ token: propToken }: StudentDir
                   <span className="text-[10px] text-[#716D67] uppercase font-semibold">Sample Files</span>
                 </div>
                 <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">
-                  Use our sample template pre-configured with the required columns (Full Name, Email, Roll/Student ID, Phone, Division).
+                  Use our sample template pre-configured with the required columns (Full Name, Email, Roll/Student ID, Phone, Division, Department).
                 </p>
                 <div className="flex flex-col xs:flex-row items-center gap-2 pt-1">
                   <a
@@ -764,7 +825,7 @@ export default function StudentDirectoryManager({ token: propToken }: StudentDir
                     Supports .xlsx, .xls, .csv, and .tsv with automatic comma, semicolon, and tab detection
                   </p>
                   <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] bg-[#E5E0D8]/60 dark:bg-[#292524] text-[#716D67] dark:text-[#A8A29E] font-medium">
-                    Headers: Full Name, Email, Roll Number, Phone, Division
+                    Headers: Full Name, Email, Roll Number, Phone, Division, Department
                   </span>
                 </div>
               ) : (

@@ -7,6 +7,8 @@ class DirectoryStudentCreate(BaseModel):
     email: Optional[str] = None
     roll_number: Optional[str] = None
     phone: Optional[str] = None
+    division: Optional[str] = None
+    department: Optional[str] = None
     student_code: Optional[str] = None
     status: Optional[str] = "active"
 
@@ -15,6 +17,8 @@ class DirectoryStudentUpdate(BaseModel):
     email: Optional[str] = None
     roll_number: Optional[str] = None
     phone: Optional[str] = None
+    division: Optional[str] = None
+    department: Optional[str] = None
     status: Optional[str] = None
 
 class DirectoryStudentResponse(BaseModel):
@@ -24,6 +28,8 @@ class DirectoryStudentResponse(BaseModel):
     email: Optional[str] = None
     roll_number: Optional[str] = None
     phone: Optional[str] = None
+    division: Optional[str] = None
+    department: Optional[str] = None
     student_code: Optional[str] = None
     status: str
     created_at: Optional[datetime] = None

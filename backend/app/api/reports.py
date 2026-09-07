@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from app.database import get_db
@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 @router.get("/exam-analytics/{exam_id}")
 @router.get("/exam-summary/{exam_id}")
 @router.get("/exam/{exam_id}")
+@router.get("/exams/{exam_id}/analytics")
 def get_exam_analytics(
     exam_id: str,
     current_user: User = Depends(get_current_user),
@@ -214,6 +215,7 @@ def get_exam_analytics(
         "duration_minutes": exam.duration_minutes,
         "total_enrolled": total_credentials,
         "attended_count": attendance_count,
+        "total_submissions": attendance_count,
         "absent_count": absent_count,
         "attendance_rate": attendance_rate,
         "average_score": avg_score,
@@ -229,12 +231,37 @@ def get_exam_analytics(
     }
 
 @router.get("/export-exam-csv/{exam_id}")
+@router.get("/exam-summary/{exam_id}/export-csv")
+@router.get("/exams/{exam_id}/export-csv")
 def export_exam_csv(
     exam_id: str,
-    current_user: User = Depends(teacher_required),
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Exports class gradebook CSV for a specific quiz/exam."""
+    # Resolve caller token flexibly (query param or Authorization header)
+    auth_token = None
+    if authorization and authorization.startswith("Bearer "):
+        auth_token = authorization.split(" ")[1]
+    elif token:
+        auth_token = token
+        
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+        
+    try:
+        payload = jwt.decode(auth_token, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Could not validate credentials")
+        
+    current_user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
+    if not current_user or current_user.role not in ["teacher", "inst_admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Operation not permitted")
+
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
@@ -336,6 +363,7 @@ def get_my_progress(
         return {
             "total_exams_attempted": 0,
             "average_percentage": 0.0,
+            "average_score_percentage": 0.0,
             "best_score": None,
             "worst_score": None,
             "score_trend": [],
@@ -406,6 +434,7 @@ def get_my_progress(
     return {
         "total_exams_attempted": len(submissions),
         "average_percentage": avg_pct,
+        "average_score_percentage": avg_pct,
         "best_score": {
             "exam_name": best_sub.exam.name if best_sub.exam else "Quiz",
             "percentage": round(best_sub.percentage, 1)
@@ -676,6 +705,7 @@ def get_submission_detail(
     }
 
 @router.get("/leaderboard/{exam_id}")
+@router.get("/exams/{exam_id}/leaderboard")
 def get_leaderboard(
     exam_id: str,
     db: Session = Depends(get_db)

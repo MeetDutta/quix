@@ -205,6 +205,8 @@ def run_db_migrations():
             "ALTER TABLE exams ADD COLUMN IF NOT EXISTS created_by VARCHAR(36);",
             "ALTER TABLE exams ADD COLUMN IF NOT EXISTS student_directory_id VARCHAR(36);",
             "ALTER TABLE documents ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(36);",
+            "ALTER TABLE directory_students ADD COLUMN IF NOT EXISTS division VARCHAR(50);",
+            "ALTER TABLE directory_students ADD COLUMN IF NOT EXISTS department VARCHAR(100);",
         ]
         for stmt in statements:
             try:

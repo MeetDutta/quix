@@ -29,6 +29,7 @@ rag_service = RAGService()
 ai_service = AIService()
 
 @router.post("/upload", response_model=DocumentResponse)
+@router.post("/documents", response_model=DocumentResponse)
 def upload_document(
     file: UploadFile = File(...),
     subject_id: str = Form(...),

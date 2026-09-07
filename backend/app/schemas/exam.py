@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -65,6 +65,16 @@ class SubmitExam(BaseModel):
 class ProctorLogCreate(BaseModel):
     event_type: str  # tab_switch, copy_paste, devtools, resize, idle
     event_details: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_fields(cls, data: Any):
+        if isinstance(data, dict):
+            if "event_type" not in data and "alert_type" in data:
+                data["event_type"] = data["alert_type"]
+            if "event_details" not in data and "details" in data:
+                data["event_details"] = data["details"]
+        return data
 
 class ExamGenerateKBRequest(BaseModel):
     name: str

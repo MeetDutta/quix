@@ -31,10 +31,12 @@ export default function CSVImportModal({ onClose, onSuccess }: CSVImportModalPro
     setIsDragOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
-      if (droppedFile.name.endsWith(".csv")) {
+      const validExts = [".csv", ".xlsx", ".xls", ".tsv", ".txt"];
+      const isValid = validExts.some((ext) => droppedFile.name.toLowerCase().endsWith(ext));
+      if (isValid) {
         setFile(droppedFile);
       } else {
-        showToast("Please upload a valid .csv file", "error");
+        showToast("Please upload a valid Excel (.xlsx, .xls) or CSV (.csv) file", "error");
       }
     }
   };
@@ -42,6 +44,11 @@ export default function CSVImportModal({ onClose, onSuccess }: CSVImportModalPro
   const handleDownloadTemplate = () => {
     window.open(`${API_V1}/students/csv-template`, "_blank");
     showToast("Sample CSV template downloaded!", "success");
+  };
+
+  const handleDownloadExcelTemplate = () => {
+    window.open(`${API_V1}/students/excel-template`, "_blank");
+    showToast("Sample Excel template downloaded!", "success");
   };
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -105,23 +112,33 @@ export default function CSVImportModal({ onClose, onSuccess }: CSVImportModalPro
         </div>
 
         {/* Download Template Banner */}
-        <div className="bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-3.5 flex items-center justify-between gap-3">
+        <div className="bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-0.5">
             <div className="text-xs font-semibold text-[#242321] dark:text-[#F5F5F4]">
-              Need the standardized CSV format?
+              Need a standardized roster template?
             </div>
             <p className="text-[11px] text-[#716D67] dark:text-[#A8A29E]">
-              Includes headers: <code className="font-mono text-[#C84B18]">full_name, email, roll_number, division, batch</code>
+              Includes headers: <code className="font-mono text-[#C84B18]">full_name, email, roll_number, division, department</code>
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleDownloadTemplate}
-            className="px-3 py-1.5 rounded-lg border border-[#E5E0D8] dark:border-[#292524] bg-white dark:bg-[#1D1B19] text-xs font-semibold text-[#C84B18] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] flex items-center gap-1.5 transition-all shadow-xs shrink-0"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>Sample Template</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleDownloadExcelTemplate}
+              className="px-2.5 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-xs font-semibold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/20 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              <Download className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Excel (.xlsx)</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadTemplate}
+              className="px-2.5 py-1.5 rounded-lg border border-[#E5E0D8] dark:border-[#292524] bg-white dark:bg-[#1D1B19] text-xs font-semibold text-[#C84B18] hover:bg-[#E5E0D8]/40 dark:hover:bg-[#292524] flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>CSV (.csv)</span>
+            </button>
+          </div>
         </div>
 
         {/* Drag & Drop Upload Zone */}

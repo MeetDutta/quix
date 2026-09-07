@@ -11,6 +11,7 @@ from app.services.workspace_service import get_current_workspace, bootstrap_pers
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
 @router.get("/current", response_model=WorkspaceResponse)
+@router.get("/active", response_model=WorkspaceResponse)
 def get_active_workspace(
     current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(get_current_user),

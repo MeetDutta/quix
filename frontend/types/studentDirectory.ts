@@ -5,6 +5,8 @@ export interface DirectoryStudent {
   email: string;
   roll_number?: string | null;
   phone?: string | null;
+  division?: string | null;
+  department?: string | null;
   status: 'active' | 'inactive';
   created_at: string;
 }
@@ -26,6 +28,8 @@ export interface DirectoryStudentCreate {
   email: string;
   roll_number?: string;
   phone?: string;
+  division?: string;
+  department?: string;
 }
 
 export interface StudentDirectoryCreate {

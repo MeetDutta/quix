@@ -2,10 +2,12 @@ import csv
 import io
 import re
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, Query, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, Query, Header, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from jose import jwt
+from app.config import settings
 from app.database import get_db
 from app.models.user import User
 from app.models.workspace import Workspace
@@ -121,12 +123,16 @@ def create_student_directory(
             email_val = s.email.strip().lower() if s.email and s.email.strip() else None
             roll_val = s.roll_number.strip() if s.roll_number and s.roll_number.strip() else None
             phone_val = s.phone.strip() if s.phone and s.phone.strip() else None
+            division_val = s.division.strip() if s.division and s.division.strip() else None
+            dept_val = s.department.strip() if s.department and s.department.strip() else None
             student = DirectoryStudent(
                 directory_id=directory.id,
                 name=s.name.strip(),
                 email=email_val,
                 roll_number=roll_val,
                 phone=phone_val,
+                division=division_val,
+                department=dept_val,
                 student_code=s.student_code,
                 status=s.status or "active"
             )
@@ -232,7 +238,9 @@ def list_directory_students(
         query = query.filter(
             (DirectoryStudent.name.ilike(s)) |
             (DirectoryStudent.email.ilike(s)) |
-            (DirectoryStudent.roll_number.ilike(s))
+            (DirectoryStudent.roll_number.ilike(s)) |
+            (DirectoryStudent.division.ilike(s)) |
+            (DirectoryStudent.department.ilike(s))
         )
     return query.order_by(DirectoryStudent.name.asc()).all()
 
@@ -250,6 +258,8 @@ def add_directory_student(
 
     email_val = payload.email.strip().lower() if payload.email and payload.email.strip() else None
     roll_val = payload.roll_number.strip() if payload.roll_number and payload.roll_number.strip() else None
+    division_val = payload.division.strip() if payload.division and payload.division.strip() else None
+    dept_val = payload.department.strip() if payload.department and payload.department.strip() else None
 
     # Check for directory-level duplicate email or roll
     if email_val:
@@ -276,6 +286,8 @@ def add_directory_student(
         email=email_val,
         roll_number=roll_val,
         phone=payload.phone.strip() if payload.phone else None,
+        division=division_val,
+        department=dept_val,
         student_code=payload.student_code,
         status=payload.status or "active"
     )
@@ -330,6 +342,10 @@ def update_directory_student(
         student.roll_number = roll_val
     if payload.phone is not None:
         student.phone = payload.phone.strip() if payload.phone.strip() else None
+    if payload.division is not None:
+        student.division = payload.division.strip() if payload.division.strip() else None
+    if payload.department is not None:
+        student.department = payload.department.strip() if payload.department.strip() else None
     if payload.status is not None:
         student.status = payload.status
 
@@ -425,6 +441,8 @@ def import_students_csv(
         raw_email = item.get("email", "").lower() if item.get("email") else ""
         raw_roll = item.get("roll_number", "")
         raw_phone = item.get("phone", "")
+        raw_division = item.get("division", "").strip() if item.get("division") else ""
+        raw_dept = item.get("department", "").strip() if item.get("department") else ""
 
         if not raw_name and not raw_email:
             skipped_count += 1
@@ -435,6 +453,8 @@ def import_students_csv(
         email = raw_email if raw_email else None
         roll = raw_roll if raw_roll else None
         phone = raw_phone if raw_phone else None
+        division = raw_division if raw_division else None
+        department = raw_dept if raw_dept else None
 
         # Email format check
         if email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
@@ -464,6 +484,8 @@ def import_students_csv(
             email=email,
             roll_number=roll,
             phone=phone,
+            division=division,
+            department=department,
             status="active"
         )
         db.add(student)
@@ -477,14 +499,61 @@ def import_students_csv(
         "errors": errors
     }
 
+def _resolve_export_workspace(
+    token: Optional[str],
+    authorization: Optional[str],
+    workspace_id_header: Optional[str],
+    db: Session
+) -> Workspace:
+    auth_token = token
+    if not auth_token and authorization:
+        if authorization.startswith("Bearer "):
+            auth_token = authorization.split(" ")[1]
+        else:
+            auth_token = authorization
+
+    if not auth_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required: No token provided"
+        )
+
+    try:
+        payload = jwt.decode(auth_token, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id = payload.get("sub")
+        token_type = payload.get("type")
+        if not user_id or token_type != "access":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials"
+            )
+        user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Could not validate credentials: {str(e)}"
+        )
+
+    return get_current_workspace(current_user=user, x_workspace_id=workspace_id_header, db=db)
+
 @router.get("/{directory_id}/export")
 @router.get("/{directory_id}/export-csv")
 def export_students_csv(
     directory_id: str,
-    current_workspace: Workspace = Depends(get_current_workspace),
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
     db: Session = Depends(get_db)
 ):
     """Exports all students in the directory as a CSV file."""
+    current_workspace = _resolve_export_workspace(token, authorization, x_workspace_id, db)
     directory = _get_authorized_directory(directory_id, current_workspace, db)
     students = db.query(DirectoryStudent).filter(
         DirectoryStudent.directory_id == directory.id,
@@ -493,7 +562,7 @@ def export_students_csv(
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Roll Number", "Name", "Email", "Phone", "Status", "Joined Date"])
+    writer.writerow(["Roll Number", "Name", "Email", "Phone", "Division", "Department", "Status", "Joined Date"])
 
     for s in students:
         writer.writerow([
@@ -501,14 +570,16 @@ def export_students_csv(
             s.name,
             s.email or "",
             s.phone or "",
+            s.division or "",
+            s.department or "",
             s.status,
             s.created_at.strftime("%Y-%m-%d %H:%M") if s.created_at else ""
         ])
 
     output.seek(0)
     filename = f"{re.sub(r'[^a-zA-Z0-9]+', '_', directory.name.lower())}_roster.csv"
-    return StreamingResponse(
-        iter([output.getvalue()]),
+    return Response(
+        content=output.getvalue(),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
@@ -516,10 +587,13 @@ def export_students_csv(
 @router.get("/{directory_id}/export-excel")
 def export_students_excel(
     directory_id: str,
-    current_workspace: Workspace = Depends(get_current_workspace),
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
     db: Session = Depends(get_db)
 ):
     """Exports all students in the directory as a formatted Excel (.xlsx) workbook."""
+    current_workspace = _resolve_export_workspace(token, authorization, x_workspace_id, db)
     directory = _get_authorized_directory(directory_id, current_workspace, db)
     students = db.query(DirectoryStudent).filter(
         DirectoryStudent.directory_id == directory.id,
@@ -533,7 +607,7 @@ def export_students_excel(
     header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
     data_font = Font(name="Calibri", size=10, color="242321")
 
-    headers = ["Roll Number", "Full Name", "Email Address", "Phone Number", "Status", "Joined Date"]
+    headers = ["Roll Number", "Full Name", "Email Address", "Phone Number", "Division", "Department", "Status", "Joined Date"]
     ws.append(headers)
     for col_idx in range(1, len(headers) + 1):
         cell = ws.cell(row=1, column=col_idx)
@@ -547,6 +621,8 @@ def export_students_excel(
             s.name,
             s.email or "",
             s.phone or "",
+            s.division or "",
+            s.department or "",
             s.status,
             s.created_at.strftime("%Y-%m-%d %H:%M") if s.created_at else ""
         ])

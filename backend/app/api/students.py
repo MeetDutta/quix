@@ -526,8 +526,10 @@ def get_student_assigned_exams(
             questions_count = 0
             
         results.append({
+            "id": exam.id,
             "exam_id": exam.id,
             "name": exam.name,
+            "title": exam.name,
             "exam_code": exam.exam_code,
             "duration_minutes": exam.duration_minutes,
             "total_marks": exam.total_marks,

@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query, Header, Body
 from sqlalchemy.orm import Session
 from jose import jwt
 
@@ -44,6 +44,20 @@ class ConnectionManager:
                     pass
 
 manager = ConnectionManager()
+
+def resolve_exam_token(
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+) -> str:
+    auth_token = token
+    if not auth_token and authorization:
+        if authorization.startswith("Bearer "):
+            auth_token = authorization.split(" ")[1]
+        else:
+            auth_token = authorization
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Exam session token required")
+    return auth_token
 
 def get_submission_by_token(token: str, db: Session) -> ExamSubmission:
     """Helper to validate student exam session token."""
@@ -251,9 +265,14 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
     }
 
 @router.get("/exam-info")
-def get_exam_info(token: str, db: Session = Depends(get_db)):
+def get_exam_info(
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
     """Fetches details of the exam and the questions checklist or completed submission review."""
-    sub = get_submission_by_token(token, db)
+    actual_token = resolve_exam_token(token, authorization)
+    sub = get_submission_by_token(actual_token, db)
     exam = sub.exam
     
     is_completed = sub.status in ["submitted", "auto_submitted"]
@@ -389,6 +408,7 @@ def process_exam_submission(sub: ExamSubmission, db: Session) -> dict:
     # If simulation, return directly without DB writes
     if str(sub.id).startswith("sim_"):
         return {
+            "status": "submitted",
             "message": "Teacher Preview Simulation evaluated successfully.",
             "submission_id": sub.id,
             "score": round(sub.score, 2),
@@ -418,6 +438,7 @@ def process_exam_submission(sub: ExamSubmission, db: Session) -> dict:
         )
     
     return {
+        "status": sub.status,
         "message": "Exam submitted successfully.",
         "submission_id": sub.id,
         "score": round(sub.score, 2),
@@ -552,6 +573,7 @@ def direct_start_for_student(
     is_completed = sub.status in ["submitted", "auto_submitted"]
     
     return {
+        "token": token,
         "session_token": token,
         "student_name": current_user.full_name,
         "duration_minutes": exam.duration_minutes,
@@ -562,9 +584,15 @@ def direct_start_for_student(
     }
 
 @router.post("/save-progress")
-def save_progress(token: str, progress: Dict[str, Any], db: Session = Depends(get_db)):
+def save_progress(
+    progress: Dict[str, Any],
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
     """Persists responses dynamically; auto-submits if schedule window has ended."""
-    sub = get_submission_by_token(token, db)
+    actual_token = resolve_exam_token(token, authorization)
+    sub = get_submission_by_token(actual_token, db)
     if sub.status in ["submitted", "auto_submitted"]:
         raise HTTPException(status_code=400, detail="Cannot save progress on submitted exam")
         
@@ -580,9 +608,15 @@ def save_progress(token: str, progress: Dict[str, Any], db: Session = Depends(ge
     return {"message": "Progress auto-saved."}
 
 @router.post("/proctor-alert")
-async def proctor_alert(token: str, alert: ProctorLogCreate, db: Session = Depends(get_db)):
+async def proctor_alert(
+    alert: ProctorLogCreate,
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
     """Logs proctoring incidents (tab switches, resizing, dev tools, copy/paste) and broadcasts to teacher live streams."""
-    sub = get_submission_by_token(token, db)
+    actual_token = resolve_exam_token(token, authorization)
+    sub = get_submission_by_token(actual_token, db)
     log = ProctoringLog(
         submission_id=sub.id,
         event_type=alert.event_type,
@@ -625,14 +659,25 @@ async def proctor_alert(token: str, alert: ProctorLogCreate, db: Session = Depen
     return {"message": "Proctor event logged and broadcasted."}
 
 @router.post("/submit")
-def submit_exam(token: str, db: Session = Depends(get_db)):
+def submit_exam(
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    answers: Optional[Dict[str, Any]] = Body(default=None),
+    db: Session = Depends(get_db)
+):
     """
     Submits the exam, scores objective questions instantly,
     runs Gemini AI Subjective evaluations against rubrics, and finalizes results.
     """
-    sub = get_submission_by_token(token, db)
+    actual_token = resolve_exam_token(token, authorization)
+    sub = get_submission_by_token(actual_token, db)
     if sub.status in ["submitted", "auto_submitted"]:
         raise HTTPException(status_code=400, detail="Exam already submitted")
+
+    if answers:
+        final_answers = answers.get("answers") if isinstance(answers, dict) and "answers" in answers and isinstance(answers["answers"], dict) else answers
+        sub.answers_json = json.dumps(final_answers)
+        db.commit()
         
     return process_exam_submission(sub, db)
 

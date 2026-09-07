@@ -26,6 +26,8 @@ class DirectoryStudent(TimeStampedModel):
     phone = Column(String(50), nullable=True)
     student_code = Column(String(100), nullable=True)
     status = Column(String(50), default="active")  # "active", "inactive"
+    division = Column(String(50), nullable=True)
+    department = Column(String(100), nullable=True)
     metadata_json = Column(Text, nullable=True)
 
     directory = relationship("StudentDirectory", back_populates="students")
