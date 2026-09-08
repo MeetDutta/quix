@@ -1156,12 +1156,46 @@ def get_submission_certificate_html(
 @router.get("/submissions/{submission_id}/report-card-html")
 def get_submission_report_card_html(
     submission_id: str,
+    token: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Generates an official itemized student performance report card."""
+    auth_token = token
+    if not auth_token and authorization and authorization.startswith("Bearer "):
+        auth_token = authorization.split(" ")[1]
+        
+    user = None
+    if auth_token:
+        try:
+            payload = jwt.decode(auth_token, settings.SECRET_KEY, algorithms=["HS256"])
+            user_id = payload.get("sub")
+            if user_id:
+                user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
+        except Exception:
+            pass
+
     sub = db.query(ExamSubmission).filter(ExamSubmission.id == submission_id).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required to view this report card")
+        
+    # Check permissions
+    if user.role == "student":
+        student_owns = (
+            sub.credential and sub.credential.student and (
+                sub.credential.student.user_id == user.id or 
+                (sub.credential.student.user and sub.credential.student.user.email == user.email)
+            )
+        )
+        if not student_owns:
+            raise HTTPException(status_code=403, detail="Access denied to this report card")
+    elif user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()]
+        if not (sub.exam and (sub.exam.created_by == user.id or (sub.exam.workspace_id and sub.exam.workspace_id in teacher_ws_ids))):
+            raise HTTPException(status_code=403, detail="Access denied to this report card")
 
     exam = sub.exam
     student = sub.credential.student if sub.credential else None

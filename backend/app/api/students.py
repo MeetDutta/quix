@@ -24,6 +24,14 @@ from app.utils.tabular_parser import (
     generate_student_template_excel
 )
 
+def to_iso_utc(dt: Optional[datetime]) -> Optional[str]:
+    if not dt:
+        return None
+    from datetime import timezone
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc).isoformat()
+    return dt.astimezone(timezone.utc).isoformat()
+
 router = APIRouter(prefix="/students", tags=["students"])
 teacher_or_admin_required = RoleChecker(["inst_admin", "teacher", "super_admin"])
 
@@ -534,8 +542,8 @@ def get_student_assigned_exams(
             "duration_minutes": exam.duration_minutes,
             "total_marks": exam.total_marks,
             "passing_marks": exam.passing_marks,
-            "start_time": exam.start_time.isoformat(),
-            "end_time": exam.end_time.isoformat(),
+            "start_time": to_iso_utc(exam.start_time),
+            "end_time": to_iso_utc(exam.end_time),
             "status": sched_status,
             "questions_count": questions_count,
             "has_submitted": submission is not None and submission.status in ["submitted", "auto_submitted"],
@@ -545,7 +553,7 @@ def get_student_assigned_exams(
             "credentials": {
                 "username": cred.username,
                 "password": cred.password,
-                "expires_at": cred.expires_at.isoformat()
+                "expires_at": to_iso_utc(cred.expires_at)
             } if cred else None
         })
         
@@ -678,6 +686,9 @@ def get_student_overview(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
         
+    if current_user.institution_id and student.institution_id != current_user.institution_id and current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Access denied: You do not have permission to view students from another institution")
+
     dept = db.query(Department).filter(Department.id == student.department_id).first() if student.department_id else None
     
     # Submissions

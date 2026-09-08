@@ -4,6 +4,7 @@ import {
   Download, X, Play, Search, Copy, Check, ExternalLink, ShieldCheck, Mail, CopyPlus
 } from "lucide-react";
 import { API_V1, apiFetch, getFrontendBaseUrl } from "../../../../lib/api";
+import { parseUtcDate, formatLocalizedDate, formatExamScheduleRange } from "../../../../lib/dateUtils";
 import { useAuthStore } from "../../../../store/authStore";
 import { useToast } from "../../../../components/Toast";
 import LiveProctoringModal from "./LiveProctoringModal";
@@ -73,8 +74,8 @@ export default function LiveAssessmentsTable({
       return { status: "draft", label: "Draft", dot: "bg-amber-500" };
     }
     const now = new Date();
-    const start = exam.start_time ? new Date(exam.start_time) : null;
-    const end = exam.end_time ? new Date(exam.end_time) : null;
+    const start = parseUtcDate(exam.start_time);
+    const end = parseUtcDate(exam.end_time);
 
     if (start && now < start) {
       return { status: "scheduled", label: "Scheduled", dot: "bg-blue-500" };
@@ -233,7 +234,7 @@ export default function LiveAssessmentsTable({
                     ⏱ {exam.duration_minutes} mins
                   </span>
                   <span className="px-2 py-0.5 rounded bg-[#F0ECE4]/60 dark:bg-[#1D1B19]">
-                    {exam.start_time ? new Date(exam.start_time).toLocaleDateString([], { month: "short", day: "numeric" }) : "Open"}
+                    {exam.start_time ? formatLocalizedDate(exam.start_time, { month: "short", day: "numeric" }) : "Open"}
                   </span>
                 </div>
 
@@ -390,9 +391,7 @@ export default function LiveAssessmentsTable({
                       {exam.duration_minutes}m
                     </td>
                     <td className="py-3.5 px-4 text-[11px] text-[#716D67] dark:text-[#A8A29E]">
-                      {exam.start_time
-                        ? `${new Date(exam.start_time).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} – ${new Date(exam.end_time).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`
-                        : "Open Access"}
+                      {formatExamScheduleRange(exam.start_time, exam.end_time)}
                     </td>
                     <td className="py-3.5 px-4 text-right relative">
                       <div className="flex items-center justify-end gap-1.5">

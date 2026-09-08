@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useAuthStore } from "../../../store/authStore";
 import { useToast } from "../../../components/Toast";
 import { apiFetch, API_V1, getWebSocketUrl } from "../../../lib/api";
+import { parseUtcDate, formatLocalizedDate, formatLocalForInput } from "../../../lib/dateUtils";
 import { 
   Plus, BookOpen, Calendar, ChevronRight, ChevronDown, Check,
   Users, BarChart3, GraduationCap, Clock, 
@@ -585,13 +586,7 @@ export default function TeacherDashboard() {
   };
 
   const formatLocalDateTime = (date: Date) => {
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const year = date.getFullYear();
-    const month = pad(date.getMonth() + 1);
-    const day = pad(date.getDate());
-    const hours = pad(date.getHours());
-    const minutes = pad(date.getMinutes());
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
+    return formatLocalForInput(date);
   };
 
   const setSchedulePreset = (preset: string) => {
@@ -2115,22 +2110,42 @@ export default function TeacherDashboard() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div className="space-y-1.5">
-                      <label className={labelCls}>Start Date & Time</label>
+                      <div className="flex items-center justify-between">
+                        <label className={labelCls}>Start Date & Time</label>
+                        <span className="text-[10px] font-medium text-[#716D67] dark:text-[#A8A29E]">
+                          {typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "Local Time"}
+                        </span>
+                      </div>
                       <input
                         type="datetime-local"
                         value={examStartDate}
                         onChange={(e) => setExamStartDate(e.target.value)}
                         className={`${inputCls} min-w-0`}
                       />
+                      {examStartDate && (
+                        <p className="text-[10px] text-[#047857] dark:text-[#10B981] font-medium">
+                          ✓ Starts: {formatLocalizedDate(new Date(examStartDate), { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-1.5">
-                      <label className={labelCls}>End Date & Time</label>
+                      <div className="flex items-center justify-between">
+                        <label className={labelCls}>End Date & Time</label>
+                        <span className="text-[10px] font-medium text-[#716D67] dark:text-[#A8A29E]">
+                          {typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "Local Time"}
+                        </span>
+                      </div>
                       <input
                         type="datetime-local"
                         value={examEndDate}
                         onChange={(e) => setExamEndDate(e.target.value)}
                         className={`${inputCls} min-w-0`}
                       />
+                      {examEndDate && (
+                        <p className="text-[10px] text-[#047857] dark:text-[#10B981] font-medium">
+                          ✓ Closes: {formatLocalizedDate(new Date(examEndDate), { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      )}
                     </div>
                   </div>
 

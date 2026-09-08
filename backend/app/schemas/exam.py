@@ -1,6 +1,6 @@
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator, field_serializer
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 class BlueprintSection(BaseModel):
     topic: str
@@ -41,6 +41,14 @@ class ExamResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @field_serializer("start_time", "end_time", when_used="json")
+    def serialize_datetime(self, dt: Optional[datetime]) -> Optional[str]:
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc).isoformat()
+        return dt.astimezone(timezone.utc).isoformat()
+
 
 class CredentialResponse(BaseModel):
     username: str
@@ -50,6 +58,14 @@ class CredentialResponse(BaseModel):
     email: Optional[str] = None
     roll_number: Optional[str] = None
     expires_at: datetime
+
+    @field_serializer("expires_at", when_used="json")
+    def serialize_expires_at(self, dt: Optional[datetime]) -> Optional[str]:
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc).isoformat()
+        return dt.astimezone(timezone.utc).isoformat()
 
 class ExamLogin(BaseModel):
     username: str

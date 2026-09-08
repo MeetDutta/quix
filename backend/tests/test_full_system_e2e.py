@@ -15,41 +15,7 @@ from app.models.workspace import Workspace
 from app.models.student_directory import StudentDirectory, DirectoryStudent
 from app.models.exam import Exam
 
-TEST_DB_URL = "sqlite:///./test_full_e2e.db"
-test_engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-
-def override_get_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-app.dependency_overrides[get_db] = override_get_db
-
-@pytest.fixture(autouse=True)
-def setup_database():
-    Base.metadata.drop_all(bind=test_engine)
-    Base.metadata.create_all(bind=test_engine)
-    
-    db = TestingSessionLocal()
-    inst = Institution(name="EduQuizX Academy")
-    db.add(inst)
-    db.flush()
-    
-    dept = Department(name="Computer Science", institution_id=inst.id)
-    db.add(dept)
-    db.flush()
-    
-    course = Course(name="Undergraduate CS", department_id=dept.id)
-    db.add(course)
-    db.flush()
-    
-    subj = Subject(name="General Computer Science", id="cs_101", course_id=course.id)
-    db.add(subj)
-    db.commit()
-    db.close()
+from tests.conftest import TestingSessionLocal
 
 
 @pytest.mark.anyio

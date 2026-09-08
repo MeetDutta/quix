@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useExamStore } from "../../../store/examStore";
 import { useAuthStore } from "../../../store/authStore";
 import { apiFetch, API_V1 } from "../../../lib/api";
+import { formatLocalizedDate } from "../../../lib/dateUtils";
 import { useToast } from "../../../components/Toast";
 import { 
   AlertCircle, Lock, Timer, Flag, ChevronLeft, ChevronRight, 
@@ -447,6 +448,14 @@ export default function ExamPortal() {
             <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">
               This assessment is scheduled. The test room will automatically unlock when the countdown finishes.
             </p>
+            {examStatusData?.start_time && (
+              <div className="pt-1">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]">
+                  <Clock className="h-3 w-3" />
+                  Opens at {formatLocalizedDate(examStatusData.start_time, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Countdown Clock */}

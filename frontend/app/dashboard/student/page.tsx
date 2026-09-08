@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { apiFetch, API_V1 } from "../../../lib/api";
+import { parseUtcDate, formatLocalizedTime, formatLocalizedDate } from "../../../lib/dateUtils";
 import { useAuthStore } from "../../../store/authStore";
 import { 
   Award, Calendar, FileText, CheckCircle, TrendingUp, BookOpen, Download,
@@ -459,7 +460,7 @@ export default function StudentDashboard() {
                       ) : (
                         <div className="w-full py-2 rounded-lg bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 text-center text-xs font-medium text-amber-800 dark:text-amber-300 flex items-center justify-center gap-1">
                           <Clock className="h-3.5 w-3.5" />
-                          <span>Starts {new Date(exam.start_time).toLocaleTimeString()}</span>
+                          <span>Starts {formatLocalizedTime(exam.start_time)}</span>
                         </div>
                       )}
                     </div>
@@ -520,7 +521,7 @@ export default function StudentDashboard() {
                           )}
                           <div className="text-[11px] text-[#716D67] dark:text-[#A8A29E] mt-0.5 flex items-center gap-1.5 font-mono">
                             <Calendar className="h-3 w-3" />
-                            <span>{sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : "Recent"}</span>
+                            <span>{sub.submitted_at ? formatLocalizedDate(sub.submitted_at, { month: "short", day: "numeric", year: "numeric" }) : "Recent"}</span>
                           </div>
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${

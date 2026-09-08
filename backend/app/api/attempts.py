@@ -13,6 +13,7 @@ from app.services.ai_service import AIService
 from app.services.notification_service import create_notification
 from app.config import settings
 from app.utils.security import RoleChecker, get_current_user
+from app.utils.rate_limiter import rate_limit_dependency
 
 router = APIRouter(prefix="/attempts", tags=["attempts"])
 teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
@@ -103,6 +104,14 @@ def to_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
         return dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt
 
+def to_iso_utc(dt: Optional[datetime]) -> Optional[str]:
+    if not dt:
+        return None
+    from datetime import timezone
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc).isoformat()
+    return dt.astimezone(timezone.utc).isoformat()
+
 @router.get("/exam-status")
 def get_exam_status(exam_code: str, db: Session = Depends(get_db)):
     """
@@ -131,14 +140,14 @@ def get_exam_status(exam_code: str, db: Session = Depends(get_db)):
         "exam_name": exam.name,
         "exam_code": exam.exam_code,
         "status": exam_status,
-        "start_time": exam_start.isoformat(),
-        "end_time": exam_end.isoformat(),
+        "start_time": to_iso_utc(exam_start),
+        "end_time": to_iso_utc(exam_end),
         "duration_minutes": exam.duration_minutes,
-        "server_time": now.isoformat(),
+        "server_time": to_iso_utc(now),
         "seconds_until_start": seconds_until_start
     }
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(rate_limit_dependency(max_requests=25, window_seconds=60))])
 def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get_db)):
     """
     Validates a student session login at /exam/{exam_code}
@@ -154,7 +163,7 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
     exam_end = to_naive_utc(exam.end_time) or (exam_start + timedelta(days=30))
     
     if now < exam_start:
-        raise HTTPException(status_code=400, detail=f"Exam has not started yet. Opens at {exam_start}")
+        raise HTTPException(status_code=400, detail=f"Exam has not started yet. Opens at {to_iso_utc(exam_start)}")
     if now > exam_end:
         raise HTTPException(status_code=400, detail="Exam has already ended")
         
@@ -593,7 +602,7 @@ def save_progress(
     """Persists responses dynamically; auto-submits if schedule window has ended."""
     actual_token = resolve_exam_token(token, authorization)
     sub = get_submission_by_token(actual_token, db)
-    if sub.status in ["submitted", "auto_submitted"]:
+    if sub.status in ["submitted", "auto_submitted", "submitting"]:
         raise HTTPException(status_code=400, detail="Cannot save progress on submitted exam")
         
     now = datetime.utcnow()
@@ -658,7 +667,7 @@ async def proctor_alert(
 
     return {"message": "Proctor event logged and broadcasted."}
 
-@router.post("/submit")
+@router.post("/submit", dependencies=[Depends(rate_limit_dependency(max_requests=10, window_seconds=60))])
 def submit_exam(
     token: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None),
@@ -668,33 +677,85 @@ def submit_exam(
     """
     Submits the exam, scores objective questions instantly,
     runs Gemini AI Subjective evaluations against rubrics, and finalizes results.
+    Guarded against concurrent double-submissions.
     """
     actual_token = resolve_exam_token(token, authorization)
     sub = get_submission_by_token(actual_token, db)
-    if sub.status in ["submitted", "auto_submitted"]:
-        raise HTTPException(status_code=400, detail="Exam already submitted")
+    if sub.status in ["submitted", "auto_submitted", "submitting"]:
+        raise HTTPException(status_code=400, detail="Exam already submitted or submission in progress")
+
+    # Atomic concurrency lock for real submissions (non-simulations)
+    if not str(sub.id).startswith("sim_"):
+        rows_updated = db.query(ExamSubmission).filter(
+            ExamSubmission.id == sub.id,
+            ExamSubmission.status.notin_(["submitted", "auto_submitted", "submitting"])
+        ).update({"status": "submitting"}, synchronize_session=False)
+        db.commit()
+        if rows_updated == 0:
+            raise HTTPException(status_code=400, detail="Exam already submitted or submission currently processing")
 
     if answers:
         final_answers = answers.get("answers") if isinstance(answers, dict) and "answers" in answers and isinstance(answers["answers"], dict) else answers
         sub.answers_json = json.dumps(final_answers)
         db.commit()
         
-    return process_exam_submission(sub, db)
+    try:
+        return process_exam_submission(sub, db)
+    except Exception as e:
+        if not str(sub.id).startswith("sim_"):
+            db.query(ExamSubmission).filter(ExamSubmission.id == sub.id, ExamSubmission.status == "submitting").update({"status": "started"}, synchronize_session=False)
+            db.commit()
+        raise e
 
 @router.websocket("/ws/teacher/{exam_id}")
-async def websocket_teacher_endpoint(websocket: WebSocket, exam_id: str):
+async def websocket_teacher_endpoint(websocket: WebSocket, exam_id: str, token: Optional[str] = Query(None)):
+    """Authenticated WebSocket endpoint for teachers to monitor proctoring alerts."""
+    if not token:
+        await websocket.close(code=1008)
+        return
+    db = SessionLocal()
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id = payload.get("sub")
+        user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
+        if not user or user.role not in ["teacher", "inst_admin", "super_admin"]:
+            await websocket.close(code=1008)
+            return
+        exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+        if not exam:
+            await websocket.close(code=1008)
+            return
+    except Exception:
+        await websocket.close(code=1008)
+        return
+    finally:
+        db.close()
+
     await manager.connect_teacher(exam_id, websocket)
     try:
         while True:
-            # Keep socket alive and receive heartbeats
             data = await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect_teacher(exam_id, websocket)
 
 @router.websocket("/ws/student/{submission_id}")
-async def websocket_student_endpoint(websocket: WebSocket, submission_id: str):
+async def websocket_student_endpoint(websocket: WebSocket, submission_id: str, token: Optional[str] = Query(None)):
+    """Authenticated WebSocket endpoint for student sessions to broadcast proctoring events."""
+    if not token:
+        await websocket.close(code=1008)
+        return
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        sub_id = payload.get("sub")
+        if not sub_id or sub_id != submission_id:
+            await websocket.close(code=1008)
+            return
+    except Exception:
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
-    db: Session = SessionLocal() # Manual session lookup since WebSocket doesn't use Depends easily
+    db: Session = SessionLocal()
     try:
         submission = db.query(ExamSubmission).filter(ExamSubmission.id == submission_id).first()
         if not submission:
@@ -705,7 +766,6 @@ async def websocket_student_endpoint(websocket: WebSocket, submission_id: str):
             data = await websocket.receive_text()
             event = json.loads(data)
             
-            # Log event to database
             log = ProctoringLog(
                 submission_id=submission_id,
                 event_type=event.get("event_type", "unknown"),
@@ -714,12 +774,11 @@ async def websocket_student_endpoint(websocket: WebSocket, submission_id: str):
             db.add(log)
             db.commit()
             
-            # Broadcast alert to all active teacher connections!
             await manager.broadcast_proctor_alert(
                 exam_id=submission.exam_id,
                 message={
-                    "student_name": submission.credential.student.user.full_name if submission.credential.student else "Guest Student",
-                    "roll_number": submission.credential.student.roll_number if submission.credential.student else "",
+                    "student_name": submission.credential.student.user.full_name if (submission.credential and submission.credential.student and submission.credential.student.user) else "Guest Student",
+                    "roll_number": submission.credential.student.roll_number if (submission.credential and submission.credential.student) else "",
                     "event_type": event.get("event_type"),
                     "event_details": event.get("event_details"),
                     "timestamp": datetime.utcnow().isoformat()

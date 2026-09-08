@@ -8,8 +8,8 @@ db_url = raw_db_url.strip().strip('"').strip("'")
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-# Ensure Supabase connections enforce SSL mode
-if ("supabase.co" in db_url or "pooler.supabase.com" in db_url) and "sslmode" not in db_url:
+# Ensure cloud PostgreSQL connections enforce SSL mode (Render, Neon, AWS RDS, etc.)
+if any(k in db_url for k in ["neon.tech", "render.com", "amazonaws.com", "azure.com", "cloud"]) and "sslmode" not in db_url:
     delimiter = "&" if "?" in db_url else "?"
     db_url = f"{db_url}{delimiter}sslmode=require"
 

@@ -21,6 +21,14 @@ def to_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
     if dt.tzinfo is not None:
         return dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt
+
+def to_iso_utc(dt: Optional[datetime]) -> Optional[str]:
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc).isoformat()
+    return dt.astimezone(timezone.utc).isoformat()
+
 from app.models.user import User, Student
 from app.models.document import Document, DocumentChunk
 from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog
@@ -1071,7 +1079,7 @@ def end_exam_early(
     return {
         "message": f"Assessment '{exam.name}' has been ended early.",
         "exam_id": exam.id,
-        "end_time": exam.end_time.isoformat()
+        "end_time": to_iso_utc(exam.end_time)
     }
 
 @router.delete("/{exam_id}")
@@ -1583,8 +1591,8 @@ def get_exam_live_monitor(
             "name": exam.name,
             "exam_code": exam.exam_code,
             "duration_minutes": exam.duration_minutes,
-            "start_time": exam.start_time.isoformat(),
-            "end_time": exam.end_time.isoformat(),
+            "start_time": to_iso_utc(exam.start_time),
+            "end_time": to_iso_utc(exam.end_time),
             "is_published": exam.is_published,
             "total_questions": total_questions
         },
@@ -1623,7 +1631,7 @@ def extend_exam_time(
     db.refresh(exam)
     return {
         "message": f"Successfully extended exam by {payload.extra_minutes} minutes.",
-        "new_end_time": exam.end_time.isoformat()
+        "new_end_time": to_iso_utc(exam.end_time)
     }
 
 @router.post("/{exam_id}/clone")

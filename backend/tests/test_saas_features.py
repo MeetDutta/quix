@@ -11,62 +11,7 @@ from app.models.student_directory import StudentDirectory, DirectoryStudent
 from app.models.exam import Exam
 from app.models.candidate import ExamCandidate
 
-TEST_DB_URL = "sqlite:///./test_quiz.db"
-test_engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-
-def override_get_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-app.dependency_overrides[get_db] = override_get_db
-
-@pytest.fixture(autouse=True)
-def setup_database():
-    Base.metadata.drop_all(bind=test_engine)
-    Base.metadata.create_all(bind=test_engine)
-    
-    # Run seed on test db
-    db = TestingSessionLocal()
-    from app.models.institution import Institution, Department, Course, Subject
-    from app.utils.security import get_password_hash
-    from app.services.workspace_service import bootstrap_personal_workspace
-    
-    inst = Institution(name="EduQuizX Academy")
-    db.add(inst)
-    db.flush()
-    
-    dept = Department(name="Computer Science", institution_id=inst.id)
-    db.add(dept)
-    db.flush()
-    
-    course = Course(name="Undergraduate CS", department_id=dept.id)
-    db.add(course)
-    db.flush()
-    
-    subj = Subject(name="General Knowledge", id="general_101", course_id=course.id)
-    db.add(subj)
-    db.commit()
-    
-    teacher = User(
-        email="teacher@aegeus.edu",
-        hashed_password=get_password_hash("securepassword"),
-        full_name="Dr. Sarah Jenkins",
-        role="teacher",
-        institution_id=inst.id,
-        is_active=True
-    )
-    db.add(teacher)
-    db.commit()
-    db.refresh(teacher)
-    bootstrap_personal_workspace(teacher, db)
-        
-    db.close()
-    yield
-    Base.metadata.drop_all(bind=test_engine)
+from tests.conftest import TestingSessionLocal
 
 @pytest.mark.anyio
 async def test_workspace_auto_bootstrap_on_login():

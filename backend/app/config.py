@@ -9,7 +9,11 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "EduQuizX - AI Dynamic Examination & Student Management System"
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str = "super-secret-key-change-in-production"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    ENVIRONMENT: str = "development"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # Short-lived access token (15 mins)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    COOKIE_SECURE: bool = False
+    COOKIE_SAMESITE: str = "lax"
     
     # Database (workspace root quiz.db)
     DATABASE_URL: str = f"sqlite:///{os.path.join(ROOT_DIR, 'quiz.db')}"

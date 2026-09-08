@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
 from typing import Optional
 
 class UserLogin(BaseModel):
@@ -9,8 +9,15 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: str
-    role: str  # "inst_admin", "teacher", "student"
+    role: str  # "teacher", "student"
     institution_id: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_length(cls, v: str) -> str:
+        if len(v.strip()) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        return v
 
 class Token(BaseModel):
     access_token: str
@@ -24,6 +31,13 @@ class Token(BaseModel):
 class PasswordChange(BaseModel):
     old_password: str
     new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password_length(cls, v: str) -> str:
+        if len(v.strip()) < 8:
+            raise ValueError("New password must be at least 8 characters long")
+        return v
 
 class UserProfile(BaseModel):
     id: str
@@ -48,3 +62,10 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password_length(cls, v: str) -> str:
+        if len(v.strip()) < 8:
+            raise ValueError("New password must be at least 8 characters long")
+        return v

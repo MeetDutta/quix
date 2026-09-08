@@ -115,7 +115,7 @@ class RAGService:
             elif ext in [".png", ".jpg", ".jpeg", ".webp"]:
                 # Use Gemini Vision model directly for OCR to capture all text
                 if self.enabled:
-                    model = genai.GenerativeModel("models/gemini-3.5-flash")
+                    model = genai.GenerativeModel("models/gemini-1.5-flash")
                     with open(file_path, "rb") as img_file:
                         img_data = img_file.read()
                     image_part = {

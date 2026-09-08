@@ -195,25 +195,19 @@ from contextlib import asynccontextmanager
 from sqlalchemy import text
 
 def run_db_migrations():
-    """Applies non-destructive schema migrations for new SaaS workspace and student directory fields."""
-    with engine.connect() as conn:
-        statements = [
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_subject VARCHAR(255);",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP;",
-            "ALTER TABLE exams ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(36);",
-            "ALTER TABLE exams ADD COLUMN IF NOT EXISTS created_by VARCHAR(36);",
-            "ALTER TABLE exams ADD COLUMN IF NOT EXISTS student_directory_id VARCHAR(36);",
-            "ALTER TABLE documents ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(36);",
-            "ALTER TABLE directory_students ADD COLUMN IF NOT EXISTS division VARCHAR(50);",
-            "ALTER TABLE directory_students ADD COLUMN IF NOT EXISTS department VARCHAR(100);",
-        ]
-        for stmt in statements:
-            try:
-                conn.execute(text(stmt))
-                conn.commit()
-            except Exception:
-                pass
+    """Runs Alembic versioned migrations to ensure reproducible, version-controlled schema."""
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ini_path = os.path.join(base_dir, "alembic.ini")
+    if os.path.exists(ini_path):
+        try:
+            from alembic.config import Config
+            from alembic import command
+            alembic_cfg = Config(ini_path)
+            alembic_cfg.set_main_option("script_location", os.path.join(base_dir, "alembic"))
+            command.upgrade(alembic_cfg, "head")
+            print("✅ [Migrations] Alembic schema verified at head revision.")
+        except Exception as e:
+            print(f"⚠️ [Migrations] Alembic upgrade notice: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -242,34 +236,41 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Set up CORS middleware with safe credential handling
+raw_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+frontend_origin = settings.FRONTEND_URL.rstrip("/")
+if frontend_origin and frontend_origin not in raw_origins and "*" not in raw_origins:
+    raw_origins.append(frontend_origin)
 
-# Set up CORS middleware for dev & production client requests
-allowed_origins_list = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
-if "*" in allowed_origins_list:
+if "*" in raw_origins:
+    # If wildcard is explicitly chosen, disable credentials to adhere to W3C CORS security specifications
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r".*",
-        allow_credentials=True,
-        allow_methods=["*"],
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers=["*"],
         expose_headers=["*"]
     )
 else:
+    # Whitelisted explicit origins allow credentials securely
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allowed_origins_list,
+        allow_origins=raw_origins,
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers=["*"],
         expose_headers=["*"]
     )
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    import logging
+    logging.getLogger("uvicorn.error").error(f"Unhandled Exception on {request.url.path}: {exc}", exc_info=True)
     origin = request.headers.get("origin", "*")
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error", "error": str(exc)},
+        content={"detail": "An unexpected server error occurred. Please try again later."},
         headers={
             "Access-Control-Allow-Origin": origin if origin else "*",
             "Access-Control-Allow-Credentials": "true",
@@ -311,11 +312,13 @@ def health_check():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception as e:
-        db_status = f"error: {str(e)}"
+        import logging
+        logging.getLogger("uvicorn.error").error(f"Health check DB error: {e}")
+        db_status = "unreachable"
 
     return {
         "status": "healthy" if db_status == "ok" else "unhealthy",
         "database": db_status,
-        "ai_engine": "enabled" if ai_status else "mocked"
+        "ai_engine": "enabled" if ai_status else "disabled"
     }
 

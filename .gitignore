@@ -15,6 +15,9 @@ __pycache__/
 *.pyo
 *.pyd
 *.db
+*.db-shm
+*.db-wal
+*.sqlite*
 backend/app/quiz.db
 backend/quiz.db
 

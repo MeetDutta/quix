@@ -16,7 +16,9 @@ from app.schemas.kb import (
 )
 from app.services.rag_service import RAGService
 from app.services.ai_service import AIService
+from app.services.storage_service import storage_service
 from app.utils.security import RoleChecker, get_current_user
+from app.utils.rate_limiter import rate_limit_dependency
 from app.config import settings
 
 from app.models.workspace import Workspace
@@ -28,8 +30,8 @@ teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
 rag_service = RAGService()
 ai_service = AIService()
 
-@router.post("/upload", response_model=DocumentResponse)
-@router.post("/documents", response_model=DocumentResponse)
+@router.post("/upload", response_model=DocumentResponse, dependencies=[Depends(rate_limit_dependency(max_requests=10, window_seconds=60))])
+@router.post("/documents", response_model=DocumentResponse, dependencies=[Depends(rate_limit_dependency(max_requests=10, window_seconds=60))])
 def upload_document(
     file: UploadFile = File(...),
     subject_id: str = Form(...),
@@ -60,25 +62,18 @@ def upload_document(
             db.delete(existing)
             db.flush()
         
-    # Save file to dedicated KB storage folder
-    subject_folder = subject_id.replace(" ", "_").lower() if subject_id else "general"
-    file_dir = os.path.join(settings.KB_UPLOADS_DIR, subject_folder)
-    os.makedirs(file_dir, exist_ok=True)
-    
-    file_path = os.path.join(file_dir, file.filename)
-    
-    with open(file_path, "wb") as f:
-        f.write(file_bytes)
+    file_path = storage_service.save_kb_document(subject_id, file.filename, file_bytes)
+    safe_filename = os.path.basename(file_path)
         
     try:
         # 1. Parse text
-        pages = rag_service.extract_text(file_path, file.filename)
+        pages = rag_service.extract_text(file_path, safe_filename)
         # 2. Chunk text
         chunks = rag_service.chunk_text(pages)
         
         # 3. Create document record
-        clean_title = rag_service._sanitize_unicode(os.path.splitext(file.filename)[0])
-        clean_filename = rag_service._sanitize_unicode(file.filename)
+        clean_title = rag_service._sanitize_unicode(os.path.splitext(safe_filename)[0])
+        clean_filename = rag_service._sanitize_unicode(safe_filename)
         doc = Document(
             title=clean_title or "Uploaded Document",
             filename=clean_filename,
@@ -129,11 +124,7 @@ def upload_document(
         return doc
     except Exception as e:
         db.rollback()
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except Exception:
-                pass
+        storage_service.delete_document(file_path)
         raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
 
 @router.get("/documents", response_model=List[DocumentResponse])
@@ -212,7 +203,7 @@ def search_kb(
         ))
     return resp
 
-@router.post("/generate-questions", response_model=List[QuestionResponse])
+@router.post("/generate-questions", response_model=List[QuestionResponse], dependencies=[Depends(rate_limit_dependency(max_requests=10, window_seconds=60))])
 def generate_ai_questions(
     config: AIQuestionGenConfig,
     current_workspace: Workspace = Depends(get_current_workspace),
@@ -460,11 +451,16 @@ def delete_question(
 @router.delete("/documents/{doc_id}")
 def delete_document(
     doc_id: str,
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
     """Soft deletes a document and removes it from RAG index."""
-    doc = db.query(Document).filter(Document.id == doc_id, Document.is_deleted == False).first()
+    doc = db.query(Document).filter(
+        Document.id == doc_id,
+        Document.workspace_id == current_workspace.id,
+        Document.is_deleted == False
+    ).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
         
@@ -475,11 +471,8 @@ def delete_document(
     except Exception:
         pass
         
-    if doc.file_path and os.path.exists(doc.file_path):
-        try:
-            os.remove(doc.file_path)
-        except Exception:
-            pass
+    if doc.file_path:
+        storage_service.delete_document(doc.file_path)
             
     db.commit()
     return {"message": "Document deleted successfully."}
@@ -554,15 +547,22 @@ def refine_question_with_ai(
 @router.get("/documents/{document_id}/download")
 def download_document(
     document_id: str,
+    current_workspace: Workspace = Depends(get_current_workspace),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Serves the raw uploaded document file from backend/uploads/kb_documents/."""
-    doc = db.query(Document).filter(Document.id == document_id, Document.is_deleted == False).first()
-    if not doc or not doc.file_path or not os.path.exists(doc.file_path):
+    """Serves the raw uploaded document file from backend/uploads/kb_documents/ for authorized workspace members."""
+    doc = db.query(Document).filter(
+        Document.id == document_id,
+        Document.workspace_id == current_workspace.id,
+        Document.is_deleted == False
+    ).first()
+    if not doc or not doc.file_path:
         raise HTTPException(status_code=404, detail="Document file not found on server storage")
         
+    verified_path = storage_service.get_verified_path(doc.file_path)
     return FileResponse(
-        path=doc.file_path,
+        path=verified_path,
         filename=doc.filename,
         media_type="application/octet-stream"
     )

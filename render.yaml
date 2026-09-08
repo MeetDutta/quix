@@ -1,0 +1,62 @@
+services:
+  # ── 1. EduQuizX Backend Web Service (FastAPI) ──
+  - type: web
+    name: eduquizx-backend
+    runtime: python
+    buildCommand: "pip install --upgrade pip && pip install -r backend/requirements.txt"
+    startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: uploads-storage
+      mountPath: /var/data/uploads
+      sizeGB: 10
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: eduquizx-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: STORAGE_PATH
+        value: /var/data/uploads
+      - key: ALLOWED_ORIGINS
+        value: "https://eduquizx-frontend.onrender.com"
+      - key: FRONTEND_URL
+        value: "https://eduquizx-frontend.onrender.com"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: "lax"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+
+  # ── 2. EduQuizX Frontend Web Service (Next.js) ──
+  - type: web
+    name: eduquizx-frontend
+    runtime: node
+    buildCommand: "cd frontend && npm install && npm run build"
+    startCommand: "cd frontend && npm run start -- -p $PORT"
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
+      - key: NEXT_PUBLIC_API_URL
+        value: "https://eduquizx-backend.onrender.com"
+
+databases:
+  # ── 3. Managed PostgreSQL Database Instance ──
+  - name: eduquizx-db
+    databaseName: eduquizx
+    user: eduquizx_user
+    plan: free
