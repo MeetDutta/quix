@@ -869,31 +869,38 @@ function LoginContent() {
                 <span>Taking a Test? Enter Exam Code</span>
               </button>
             ) : (
-              <form onSubmit={handleDirectExamJump} className="space-y-2 bg-[#FBF9F5] dark:bg-[#1D1B19] p-3 rounded-xl border border-[#E5E0D8] dark:border-[#292524]">
+              <form onSubmit={handleDirectExamJump} className="space-y-2.5 bg-[#FBF9F5] dark:bg-[#1D1B19] p-3 rounded-xl border border-[#E5E0D8] dark:border-[#292524] overflow-hidden">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase tracking-wider">Candidate Direct Access</span>
+                  <span className="text-[11px] font-bold text-[#57534E] dark:text-[#A8A29E] uppercase tracking-wider flex items-center gap-1.5">
+                    <FileCode2 className="h-3.5 w-3.5 text-[#C84B18] dark:text-[#EA580C]" />
+                    <span>Candidate Direct Access</span>
+                  </span>
                   <button
                     type="button"
                     onClick={() => setShowExamCodeGateway(false)}
-                    className="text-[#716D67] hover:text-[#242321] dark:hover:text-white"
+                    className="p-1 -mr-1 rounded-lg text-[#716D67] hover:text-[#242321] dark:hover:text-white hover:bg-[#E5E0D8]/50 dark:hover:bg-[#292524] transition-colors cursor-pointer"
+                    title="Close"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    required
-                    value={examCodeInput}
-                    onChange={(e) => setExamCodeInput(e.target.value)}
-                    placeholder="e.g. ex-com-1234"
-                    className="flex-1 bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-lg px-2.5 py-1.5 text-xs text-[#242321] dark:text-[#F5F5F4] focus:outline-none focus:ring-1 focus:ring-[#C84B18]"
-                  />
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 min-w-0">
+                    <input
+                      type="text"
+                      required
+                      value={examCodeInput}
+                      onChange={(e) => setExamCodeInput(e.target.value)}
+                      placeholder="e.g. ex-com-1234"
+                      className="w-full h-9 bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-lg px-2.5 text-xs text-[#242321] dark:text-[#F5F5F4] placeholder:text-[#A8A29E] focus:outline-none focus:ring-1 focus:ring-[#C84B18]"
+                    />
+                  </div>
                   <button
                     type="submit"
-                    className="px-3 py-1.5 bg-[#C84B18] text-white rounded-lg text-xs font-bold hover:bg-[#B33E0F] transition-all shrink-0 cursor-pointer"
+                    className="h-9 px-3.5 bg-[#C84B18] text-white rounded-lg text-xs font-bold hover:bg-[#B33E0F] active:scale-[0.98] transition-all flex items-center justify-center gap-1 shrink-0 cursor-pointer shadow-xs whitespace-nowrap"
                   >
-                    Take Exam
+                    <span>Take Exam</span>
+                    <ArrowRight className="h-3 w-3" />
                   </button>
                 </div>
               </form>
