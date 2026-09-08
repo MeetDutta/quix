@@ -59,6 +59,7 @@ export default function ExamPortal() {
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [autoSubmitReason, setAutoSubmitReason] = useState<string | null>(null);
   const lastSwitchRef = useRef<number>(0);
+  const isSubmittingRef = useRef<boolean>(false);
 
   // Local Storage Backup Key
   const backupKey = `eduquizx_backup_${examCode}`;
@@ -257,7 +258,7 @@ export default function ExamPortal() {
 
   // Listeners for anti-cheat & tab-switches (disabled in teacher simulation)
   useEffect(() => {
-    if (!isLogged || isSimulation) return;
+    if (!isLogged || submittedResult || isSimulation) return;
 
     const handleTabOrBlurSwitch = (source: string) => {
       const now = Date.now();
@@ -341,26 +342,33 @@ export default function ExamPortal() {
       document.removeEventListener("paste", handleCopyPaste);
       document.removeEventListener("cut", handleCopyPaste);
     };
-  }, [isLogged, isSimulation]);
+  }, [isLogged, submittedResult, isSimulation]);
 
   // Exam timer tick
   useEffect(() => {
-    if (!isLogged || examStore.timeRemainingSeconds <= 0) return;
+    if (!isLogged || submittedResult || !examStore.sessionToken || examStore.timeRemainingSeconds <= 0) return;
 
     const interval = setInterval(() => {
       examStore.decrementTime();
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isLogged, examStore.timeRemainingSeconds]);
+  }, [isLogged, submittedResult, examStore.sessionToken, examStore.timeRemainingSeconds]);
 
   // Auto-submit on timeout
   useEffect(() => {
-    if (isLogged && examStore.timeRemainingSeconds === 0) {
+    if (
+      isLogged &&
+      !submittedResult &&
+      !isSubmittingRef.current &&
+      examStore.sessionToken &&
+      examStore.timeRemainingSeconds === 0 &&
+      examStore.durationMinutes > 0
+    ) {
       showToast("Time expired! Auto-submitting exam...", "warning");
       handleSubmitExam();
     }
-  }, [isLogged, examStore.timeRemainingSeconds]);
+  }, [isLogged, submittedResult, examStore.sessionToken, examStore.timeRemainingSeconds, examStore.durationMinutes]);
 
   // Keyboard Shortcuts (A, B, C, D, ArrowLeft, ArrowRight, F)
   useEffect(() => {
@@ -429,14 +437,19 @@ export default function ExamPortal() {
         method: "POST",
         body: JSON.stringify(updatedAnswers),
       });
-      if (res.ok) setSyncStatus("Synced");
-      else setSyncStatus("Unsynced (Local)");
+      if (res.ok) {
+        setSyncStatus("Synced");
+      } else {
+        setSyncStatus("Unsynced (Local)");
+      }
     } catch {
       setSyncStatus("Unsynced (Local)");
     }
   };
 
   const handleSubmitExam = async () => {
+    if (isSubmittingRef.current || submittedResult || !examStore.sessionToken) return;
+    isSubmittingRef.current = true;
     setLoading(true);
     try {
       const res = await apiFetch(`/attempts/submit?token=${examStore.sessionToken}`, {
@@ -446,6 +459,7 @@ export default function ExamPortal() {
       if (res.ok) {
         showToast(isSimulation ? "Simulation completed!" : "Exam submitted successfully!", "success");
         setSubmittedResult(data);
+        setIsLogged(false);
         examStore.clearExamSession();
         try {
           localStorage.removeItem(backupKey);
@@ -458,6 +472,7 @@ export default function ExamPortal() {
     } finally {
       setLoading(false);
       setShowConfirmModal(false);
+      isSubmittingRef.current = false;
     }
   };
 
