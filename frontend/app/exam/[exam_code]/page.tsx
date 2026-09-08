@@ -876,7 +876,7 @@ export default function ExamPortal() {
                         >
                           {letter}
                         </div>
-                        <div className="text-xs sm:text-sm flex-1">
+                        <div className="text-xs sm:text-sm flex-1 min-w-0 break-words">
                           <MathText text={opt} />
                         </div>
                       </button>

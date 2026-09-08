@@ -2,6 +2,7 @@ import json
 import logging
 import time
 import random
+import re
 from typing import List, Dict, Any, Optional
 import google.generativeai as genai
 from app.config import settings
@@ -103,13 +104,15 @@ class AIService:
             "  1. Immediately set \"status\": \"INSUFFICIENT_CONTEXT\".\n"
             "  2. Set all question payload fields (question, options, correct_answer, explanation, source_used) to null.\n"
             "  3. Do NOT attempt to fabricate, guess, or synthesize missing information.\n\n"
-            "2. ANTI-GENERIC QUESTION & DISTRACTOR RULES:\n"
-            "• NO GENERIC STEMS: Never use generic templates like 'Which statement accurately describes...', 'What is the core significance of...', 'In the context of X, how does Y operate...', or 'Which condition applies to...'. Write direct, academic, natural examination stems.\n"
-            "• NO TEMPLATED OR REPEATED DISTRACTORS: Never use stock generic distractors like 'It operates independently', 'It decreases efficiency', 'It is constrained strictly to high-temperature...', 'None of the above', or random filler sentences.\n"
+            "2. CONCISE QUESTION & ANSWER SPECIFICATIONS (CRITICAL):\n"
+            "• CONCISE & DIRECT QUESTIONS: Question stems must be concise, crisp, and direct (between 12 and 25 words maximum). Avoid rambling preambles, introductory filler, or multi-clause paragraphs.\n"
+            "• CONCISE MCQ OPTIONS: Each option must be brief, crisp, and focused (between 3 and 12 words per option). NEVER output full paragraphs, multiple sentences, or verbose descriptions as options.\n"
+            "• NO CSV / TABULAR / METADATA DUMPS: If the context contains comma-separated data, student rosters, credentials, or table dumps, NEVER quote raw rows or comma-separated lists as questions or options. Formulate real academic questions about concepts.\n"
+            "• NO GENERIC STEMS: Never use generic templates like 'Which statement accurately describes...', 'What is the core significance of...', or 'Which condition applies to...'. Write natural, direct examination questions.\n"
             "• DOMAIN-SPECIFIC DISTRACTORS (For MCQs):\n"
             "  - Every wrong option MUST belong to the exact technical domain as the target concept.\n"
-            "  - Options must share similar length, sentence structure, mathematical complexity, and terminology.\n"
-            "  - Distractors must represent plausible, high-level academic misconceptions.\n\n"
+            "  - Options must share similar concise length, sentence structure, and terminology.\n"
+            "  - Distractors must represent plausible academic misconceptions.\n\n"
             "3. BLOOM'S TAXONOMY & DIFFICULTY MATRIX:\n"
             "Align question structure strictly to requested Bloom level (Remember, Understand, Apply, Analyze, Evaluate, Create).\n\n"
             "4. OUTPUT FORMAT CONTRACT (RAW JSON ONLY):\n"
@@ -122,8 +125,8 @@ class AIService:
             '    "bloom": "<Remember|Understand|Apply|Analyze|Evaluate|Create>",\n'
             '    "marks": 5,\n'
             '    "question_type": "<MCQ|True/False|Fill in the Blank|Short Answer|Long Answer|Numerical|Assertion-Reason>",\n'
-            '    "question": "<Academic-grade examination question>",\n'
-            '    "options": ["<Option A>", "<Option B>", "<Option C>", "<Option D>"],\n'
+            '    "question": "<Concise examination question (12-25 words)>",\n'
+            '    "options": ["<Option A (3-12 words)>", "<Option B (3-12 words)>", "<Option C (3-12 words)>", "<Option D (3-12 words)>"],\n'
             '    "correct_answer": "<Exact correct option or text>",\n'
             '    "explanation": "<Step-by-step academic justification grounded strictly in context>",\n'
             '    "source_used": "<Verbatim excerpt from context supporting the answer>"\n'
@@ -141,12 +144,12 @@ class AIService:
         Generate exactly {count} distinct academic-grade examination questions of type '{question_type}' with difficulty level '{difficulty}'.
         Target Topic/Concept: '{topic if topic else "general domain concepts from context"}'.
         {custom_instr_section}
-        adhere strictly to specifications for '{question_type}':
-        - 'mcq': return 4 distinct technical domain options, correct_answer must be the exact matching option string. Randomize correct answer positions across questions.
-        - 'true_false': options must be ["True", "False"], correct_answer must be either 'True' or 'False'.
+        Adhere strictly to specifications for '{question_type}':
+        - 'mcq': return 4 distinct technical domain options, each concise (3 to 12 words maximum). Question stem must be concise (12 to 25 words). correct_answer must be the exact matching option string. Randomize correct answer positions across questions.
+        - 'true_false': options must be ["True", "False"], question stem must be a concise single-sentence claim.
         - 'numerical': correct_answer must be a number string (e.g., '42' or '3.14'), options must be null.
-        - 'fill_blank': correct_answer must contain the completing terms, options must be null.
-        - 'short_answer' or 'long_answer': correct_answer should outline grading rubric, options must be null.
+        - 'fill_blank': question text must be a concise sentence with '____', correct_answer must contain the completing terms, options must be null.
+        - 'short_answer' or 'long_answer': question text must be focused and clear, options must be null.
 
         Return ONLY a JSON list of exactly {count} question objects matching the required format contract.
         """
@@ -315,17 +318,36 @@ class AIService:
             return {"weak_topics": [], "strong_topics": [], "recommendations": []}
 
     def _is_metadata_or_header(self, text: str) -> bool:
-        """Helper to detect document metadata headers, TOC entries, and generic titles."""
+        """Helper to detect document metadata headers, TOC entries, CSV rows, and raw data dumps."""
         t_low = text.lower().strip()
         header_keywords = [
             "core concepts", "fundamental principles", "table of contents", "chapter ", 
-            "section ", "document title", "key components", "topics regarding", "definitions,"
+            "section ", "document title", "key components", "topics regarding", "definitions,",
+            "student_name", "roll_number", "exam_username", "exam_password", "expires_at",
+            "created_at", "updated_at", "email,phone", "id,name"
         ]
         if any(kw in t_low for kw in header_keywords):
             return True
-        if len(t_low) < 20 or t_low.endswith(":") or t_low.count(",") > 4:
+        # Reject CSV rows or comma-separated lists (e.g. name,roll,user,pass,date)
+        if t_low.count(",") >= 2:
+            return True
+        # Reject lines with dates or credential formats (e.g. 2026-08-16 15:05:05, std_...)
+        if re.search(r"\d{4}-\d{2}-\d{2}", t_low) or "std_" in t_low or t_low.count("_") >= 2:
+            return True
+        # Reject text that is too short, ends with a colon, or is unreasonably long
+        if len(t_low) < 20 or len(t_low) > 180 or t_low.endswith(":"):
             return True
         return False
+
+    def _shorten_phrase(self, text: str, max_words: int = 10) -> str:
+        """Truncates long sentences into concise, academic answer choices (3-10 words)."""
+        clean = text.strip().replace("'", "").replace('"', '').replace("\n", " ")
+        # Strip trailing punctuation
+        words = [w for w in clean.split() if w]
+        if len(words) > max_words:
+            words = words[:max_words]
+        phrase = " ".join(words).rstrip(".,;:")
+        return f"{phrase}."
 
     def _mock_questions(
         self, 
@@ -336,7 +358,7 @@ class AIService:
         context_chunks: Optional[List[Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Synthesizes high-quality academic questions directly from RAG context sentences.
+        Synthesizes high-quality, concise academic questions directly from RAG context sentences.
         Strictly domain-agnostic: uses extracted document sentences and user topic.
         """
         mocked = []
@@ -354,7 +376,7 @@ class AIService:
                         continue
                     for s in line.replace("?", ".").replace("!", ".").split("."):
                         s = s.strip()
-                        if not self._is_metadata_or_header(s) and len(s) >= 25:
+                        if not self._is_metadata_or_header(s) and 25 <= len(s) <= 180:
                             content_sentences.append(s)
                         
         content_sentences = list(dict.fromkeys(content_sentences))
@@ -364,18 +386,18 @@ class AIService:
                 raw_sentence = content_sentences[i % len(content_sentences)]
                 clean_s = raw_sentence.replace("'", "").replace('"', "").strip()
                 words = [w for w in clean_s.split() if len(w) > 3]
-                concept_name = " ".join(words[:3]).capitalize() if len(words) >= 3 else f"{topic_name} Concept"
+                concept_name = " ".join(words[:2]).capitalize() if len(words) >= 2 else f"{topic_name}"
                 
-                # Dynamic academic examination stems referencing real context
+                # Direct, concise examination stems (under 20 words)
                 stems = [
-                    f"Which core principle regarding {concept_name} is established in {topic_name}?",
-                    f"According to the study material on {topic_name}, how is {concept_name} defined?",
-                    f"What is the primary operational mechanism of {concept_name} in {topic_name}?",
-                    f"Which statement accurately describes the characteristics of {concept_name}?",
-                    f"In the context of {topic_name}, what condition applies directly to {concept_name}?"
+                    f"What is the primary operational role of {concept_name}?",
+                    f"How is {concept_name} defined in {topic_name}?",
+                    f"Which core characteristic applies to {concept_name}?",
+                    f"What fundamental principle governs {concept_name} in {topic_name}?",
+                    f"Which mechanism describes the behavior of {concept_name}?"
                 ]
                 q_text = stems[i % len(stems)]
-                correct_ans = f"{clean_s}."
+                correct_ans = self._shorten_phrase(clean_s, max_words=9)
                 
                 # Pick other sentences from the same document for distractors
                 distractor_candidates = [
@@ -386,25 +408,25 @@ class AIService:
                 if len(distractor_candidates) >= 3:
                     for d_idx in range(3):
                         other_sentence = distractor_candidates[(i + d_idx) % len(distractor_candidates)]
-                        opts.append(f"{other_sentence.strip()}.")
+                        opts.append(self._shorten_phrase(other_sentence, max_words=9))
                 else:
                     opts.extend([
-                        f"{concept_name} operates independently without any interaction in {topic_name}.",
-                        f"{concept_name} is strictly prohibited under standard protocols in {topic_name}.",
-                        f"{concept_name} has no measurable effect on the underlying operations of {topic_name}."
+                        f"It operates independently in {topic_name}.",
+                        f"It serves as a secondary fallback model.",
+                        f"It is constrained to baseline standard parameters."
                     ])
                 
-                explanation = f"Grounded directly in syllabus content: '{raw_sentence}'"
-                source_excerpt = raw_sentence
+                explanation = f"Grounded directly in syllabus content: '{raw_sentence[:120]}'"
+                source_excerpt = raw_sentence[:120]
             else:
-                concept_title = f"{topic_name} Core Principle {i+1}"
-                q_text = f"Which statement best characterizes {concept_title} in {topic_name}?"
-                correct_ans = f"{concept_title} provides fundamental structure and methodology for {topic_name}."
+                concept_title = f"{topic_name} Principle {i+1}"
+                q_text = f"What is the primary role of {concept_title} in {topic_name}?"
+                correct_ans = f"Provides core methodology for {topic_name}."
                 opts = [
                     correct_ans,
-                    f"{concept_title} is not applicable within the theoretical scope of {topic_name}.",
-                    f"{concept_title} completely replaces all legacy models without empirical verification.",
-                    f"{concept_title} operates only under extreme isolated boundary constraints."
+                    f"Serves as an optional baseline in {topic_name}.",
+                    f"Operates only under isolated boundary constraints.",
+                    f"Restricts legacy protocols without verification."
                 ]
                 explanation = f"Fundamental theoretical concept in {topic_name}."
                 source_excerpt = f"{concept_title} is a core foundation of {topic_name}."
