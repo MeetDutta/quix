@@ -1509,6 +1509,7 @@ def get_exam_live_monitor(
             total_questions = 0
 
     creds = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).all()
+    candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam_id).all()
     
     candidates_list = []
     logged_in_count = 0
@@ -1522,9 +1523,33 @@ def get_exam_live_monitor(
         ).first()
 
         std = c.student
-        std_name = std.user.full_name if (std and std.user) else "Anonymous Candidate"
-        std_email = std.user.email if (std and std.user) else "N/A"
-        std_roll = std.roll_number if std else "N/A"
+        std_name = None
+        std_email = None
+        std_roll = None
+
+        if std and std.user:
+            std_name = std.user.full_name
+            std_email = std.user.email
+            std_roll = std.roll_number
+        else:
+            for cand in candidates:
+                clean_name = "".join(ch for ch in cand.name_snapshot.split()[0].lower() if ch.isalnum())
+                if (clean_name and clean_name in c.username.lower()) or (cand.roll_number_snapshot and cand.roll_number_snapshot.lower() in c.username.lower()):
+                    std_name = cand.name_snapshot
+                    std_email = cand.email_snapshot
+                    std_roll = cand.roll_number_snapshot
+                    break
+            if not std_name and len(candidates) == 1:
+                std_name = candidates[0].name_snapshot
+                std_email = candidates[0].email_snapshot
+                std_roll = candidates[0].roll_number_snapshot
+
+        # Explicitly remove Anonymous Candidate from live monitor
+        if not std_name or "anonymous" in std_name.lower():
+            continue
+
+        std_email = std_email or "N/A"
+        std_roll = std_roll or "N/A"
 
         answered_count = 0
         status_label = "not_started"
@@ -1588,7 +1613,7 @@ def get_exam_live_monitor(
             "total_questions": total_questions
         },
         "summary": {
-            "total_assigned": len(creds),
+            "total_assigned": len(candidates_list),
             "logged_in": logged_in_count,
             "in_progress": in_progress_count,
             "submitted": submitted_count

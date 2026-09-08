@@ -110,11 +110,18 @@ export default function LiveProctoringModal({
     }
   };
 
-  const filteredCandidates = (telemetry?.candidates || []).filter((c: any) =>
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.roll_number.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredCandidates = (telemetry?.candidates || []).filter((c: any) => {
+    if (!c.name || c.name.toLowerCase().includes("anonymous")) {
+      return false;
+    }
+    const s = searchTerm.toLowerCase();
+    return (
+      c.name.toLowerCase().includes(s) ||
+      (c.email && c.email.toLowerCase().includes(s)) ||
+      (c.roll_number && c.roll_number.toLowerCase().includes(s)) ||
+      (c.username && c.username.toLowerCase().includes(s))
+    );
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 animate-fadeIn">
