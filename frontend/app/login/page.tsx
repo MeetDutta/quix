@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuthStore } from "../../store/authStore";
 import { 
@@ -51,6 +51,11 @@ function LoginContent() {
   const [regConfirmPassword, setRegConfirmPassword] = useState("");
   const [regShowPassword, setRegShowPassword] = useState(false);
   const [regRole, setRegRole] = useState<"teacher" | "student">("teacher");
+  const regRoleRef = useRef<"teacher" | "student">(regRole);
+
+  useEffect(() => {
+    regRoleRef.current = regRole;
+  }, [regRole]);
 
   // Direct Exam Code Fast Gateway
   const [examCodeInput, setExamCodeInput] = useState("");
@@ -104,9 +109,11 @@ function LoginContent() {
       const roleParam = params.get("role");
       if (roleParam === "student") {
         setRegRole("student");
+        regRoleRef.current = "student";
         setTargetDestination("student_dashboard");
       } else if (roleParam === "teacher") {
         setRegRole("teacher");
+        regRoleRef.current = "teacher";
         setTargetDestination("teacher_dashboard");
       }
       const targetParam = params.get("target");
@@ -139,12 +146,13 @@ function LoginContent() {
   const handleGoogleCredentialResponse = async (response: any) => {
     setError(null);
     setLoading(true);
+    const selectedRole = regRoleRef.current;
     try {
       const res = await apiFetch("/auth/google", {
         method: "POST",
         body: JSON.stringify({
           token: response.credential,
-          role: regRole,
+          role: selectedRole,
         }),
       });
 
@@ -153,13 +161,15 @@ function LoginContent() {
         throw new Error(data.detail || "Google authentication failed");
       }
 
+      const assignedRole = data.role || selectedRole;
+
       if (data.workspace_id) {
         localStorage.setItem("workspaceId", data.workspace_id);
         localStorage.setItem("workspaceName", data.workspace_name || "Personal Workspace");
       }
 
-      setAuth(data.access_token, data.role, data.full_name);
-      router.push(resolveDestination(data.role));
+      setAuth(data.access_token, assignedRole, data.full_name);
+      router.push(resolveDestination(assignedRole));
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -230,7 +240,7 @@ function LoginContent() {
     if (typeof window !== "undefined" && (window as any).google?.accounts?.id) {
       initGoogleGIS();
     }
-  }, [theme, gisLoaded, authMode]);
+  }, [theme, gisLoaded, authMode, regRole]);
 
   const toggleTheme = () => {
     const next = theme === "light" ? "dark" : "light";
@@ -468,6 +478,7 @@ function LoginContent() {
                 type="button"
                 onClick={() => {
                   setRegRole("teacher");
+                  regRoleRef.current = "teacher";
                   setTargetDestination("teacher_dashboard");
                 }}
                 className={`group relative rounded-2xl overflow-hidden border-2 text-center transition-all duration-300 cursor-pointer flex flex-col bg-white dark:bg-[#1C1A17] shadow-xs ${
@@ -514,6 +525,7 @@ function LoginContent() {
                 type="button"
                 onClick={() => {
                   setRegRole("student");
+                  regRoleRef.current = "student";
                   setTargetDestination("student_dashboard");
                 }}
                 className={`group relative rounded-2xl overflow-hidden border-2 text-center transition-all duration-300 cursor-pointer flex flex-col bg-white dark:bg-[#1C1A17] shadow-xs ${

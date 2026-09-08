@@ -295,6 +295,8 @@ def google_auth(
             user.avatar_url = avatar_url
         user.auth_provider = "google"
         user.last_login_at = datetime.utcnow()
+        if payload.role and payload.role in ["teacher", "student"]:
+            user.role = payload.role
         db.commit()
         db.refresh(user)
 
