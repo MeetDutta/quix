@@ -142,10 +142,11 @@ export default function DashboardLayout({
   }, [mounted, token, router]);
 
   useEffect(() => {
-    if (mounted && token && role === "student" && pathname === "/dashboard/teacher") {
-      router.push("/dashboard/student");
+    const activeRole = role || (typeof window !== "undefined" ? localStorage.getItem("role") : null);
+    if (mounted && activeRole === "student" && pathname?.startsWith("/dashboard/teacher")) {
+      router.replace("/dashboard/student");
     }
-  }, [mounted, token, role, pathname, router]);
+  }, [mounted, role, pathname, router]);
 
   useEffect(() => {
     const handlePop = () => {

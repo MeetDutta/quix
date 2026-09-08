@@ -67,13 +67,31 @@ function LoginContent() {
   const [forgotError, setForgotError] = useState<string | null>(null);
 
   const resolveDestination = (userRole: string) => {
+    // Role-based routing is strictly authoritative:
+    // A student account must NEVER be sent to the teacher dashboard
+    if (userRole === "student") {
+      if (targetDestination && targetDestination.startsWith("/exam/")) {
+        return targetDestination;
+      }
+      return "/dashboard/student";
+    }
+
+    // Teacher or administrator accounts
+    if (userRole === "teacher" || userRole === "inst_admin" || userRole === "super_admin") {
+      if (targetDestination && targetDestination.startsWith("/") && !targetDestination.startsWith("/dashboard/student")) {
+        return targetDestination;
+      }
+      return "/dashboard/teacher";
+    }
+
+    // Safe fallback if role is unrecognized
     if (targetDestination) {
-      if (targetDestination === "teacher_dashboard") return "/dashboard/teacher";
       if (targetDestination === "student_dashboard") return "/dashboard/student";
+      if (targetDestination === "teacher_dashboard") return "/dashboard/teacher";
+      if (targetDestination.startsWith("/dashboard/teacher")) return "/dashboard/teacher";
       if (targetDestination.startsWith("/")) return targetDestination;
     }
-    if (userRole === "student") return "/dashboard/student";
-    return "/dashboard/teacher";
+    return "/dashboard/student";
   };
 
   useEffect(() => {
@@ -86,8 +104,10 @@ function LoginContent() {
       const roleParam = params.get("role");
       if (roleParam === "student") {
         setRegRole("student");
+        setTargetDestination("student_dashboard");
       } else if (roleParam === "teacher") {
         setRegRole("teacher");
+        setTargetDestination("teacher_dashboard");
       }
       const targetParam = params.get("target");
       if (targetParam) {

@@ -49,7 +49,7 @@ export const useAuthStore = create<AuthState>()(
           const r = localStorage.getItem('role');
           const n = localStorage.getItem('fullName');
           const inst = localStorage.getItem('institutionId');
-          if (t && get().token !== t) {
+          if (t && (get().token !== t || get().role !== r || get().fullName !== n)) {
             set({ token: t, role: r, fullName: n, institutionId: inst });
           }
         }

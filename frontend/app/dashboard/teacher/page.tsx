@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "../../../store/authStore";
 import { useToast } from "../../../components/Toast";
 import { apiFetch, API_V1, getWebSocketUrl } from "../../../lib/api";
@@ -86,11 +87,19 @@ const READY_MADE_PROMPTS: ReadyMadePrompt[] = [
 ];
 
 export default function TeacherDashboard() {
-  const { token, fullName } = useAuthStore();
+  const router = useRouter();
+  const { token, fullName, role } = useAuthStore();
   const { showToast } = useToast();
   
   const [mounted, setMounted] = useState(false);
   const [activeSectionTab, setActiveSectionTab] = useState<string>("all");
+
+  useEffect(() => {
+    const activeRole = role || (typeof window !== "undefined" ? localStorage.getItem("role") : null);
+    if (activeRole === "student") {
+      router.replace("/dashboard/student");
+    }
+  }, [role, router]);
 
   const switchSectionTab = (tab: string) => {
     setActiveSectionTab(tab);
