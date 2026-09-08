@@ -480,6 +480,12 @@ export default function TeacherDashboard() {
       const payload = {
         name: examName,
         subject_id: examSubject,
+        topic: examTopic || "General",
+        num_questions: numQuestions,
+        num_mcq: questionType === "mixed" ? (parseInt(numMcq) || 0) : questionType === "subjective" ? 0 : numQuestions,
+        num_subjective: questionType === "mixed" ? (parseInt(numSubjective) || 0) : questionType === "subjective" ? numQuestions : 0,
+        question_type: questionType,
+        difficulty: difficulty,
         duration_minutes: parseInt(examDuration) || 30,
         total_marks: totalMarksNum,
         passing_marks: parseFloat(examPass) || Math.max(1, Math.round(totalMarksNum * 0.4)),

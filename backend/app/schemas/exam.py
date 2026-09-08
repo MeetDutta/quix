@@ -102,8 +102,9 @@ class ExamGenerateKBRequest(BaseModel):
     total_marks: Optional[float] = 50.0
     passing_marks: Optional[float] = 20.0
     negative_marking: Optional[float] = 0.0
-    num_mcq: Optional[int] = 5
-    num_subjective: Optional[int] = 0
+    num_questions: Optional[int] = None
+    num_mcq: Optional[int] = None
+    num_subjective: Optional[int] = None
     question_type: Optional[str] = "mcq"
     difficulty: Optional[str] = "medium"
     custom_instructions: Optional[str] = None

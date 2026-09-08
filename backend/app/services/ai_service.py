@@ -192,6 +192,12 @@ class AIService:
             if not valid_questions:
                 return self._mock_questions(question_type, difficulty, count, topic, context_chunks)
                 
+            # If Gemini returned fewer valid questions than requested count, backfill up to count
+            if len(valid_questions) < count:
+                needed = count - len(valid_questions)
+                supplement = self._mock_questions(question_type, difficulty, needed, topic, context_chunks)
+                valid_questions.extend(supplement)
+
             # Run answer diversification and position shuffling safeguard
             valid_questions = self._shuffle_and_balance_options(valid_questions)
             

@@ -181,71 +181,62 @@ def generate_exam_from_kb(
             "content": f"Fundamental concepts, core definitions, practical applications, algorithms, principles, and problem solving regarding {req.topic or req.name or 'Subject Knowledge'}."
         }]
     
-    # 2. Determine questions count & types strictly based on question_type
-    q_type_req = str(req.question_type or "mcq").lower()
+    # 2. Determine questions count & types strictly based on blueprint and request fields
+    bp = req.blueprint or {}
+    q_type_req = str(req.question_type or bp.get("question_type") or "mcq").lower()
     
-    if q_type_req in ["mcq", "tf", "true_false"]:
-        total_count = int(req.num_mcq) if (req.num_mcq and int(req.num_mcq) > 0) else 5
-        q_type = "mcq" if q_type_req == "mcq" else "true_false"
-    elif q_type_req == "subjective":
-        total_count = int(req.num_subjective) if (req.num_subjective and int(req.num_subjective) > 0) else 5
-        q_type = "short_answer"
+    # Authoritative determination of requested total question count
+    total_count = None
+    if req.num_questions and int(req.num_questions) > 0:
+        total_count = int(req.num_questions)
+    elif bp.get("num_questions") and int(bp.get("num_questions")) > 0:
+        total_count = int(bp.get("num_questions"))
+    elif bp.get("total_questions") and int(bp.get("total_questions")) > 0:
+        total_count = int(bp.get("total_questions"))
     elif q_type_req == "mixed":
-        mcq_c = int(req.num_mcq) if (req.num_mcq and int(req.num_mcq) > 0) else 3
-        sub_c = int(req.num_subjective) if (req.num_subjective and int(req.num_subjective) > 0) else 2
+        mcq_c = int(req.num_mcq) if (req.num_mcq and int(req.num_mcq) > 0) else int(bp.get("num_mcq") or 3)
+        sub_c = int(req.num_subjective) if (req.num_subjective and int(req.num_subjective) > 0) else int(bp.get("num_subjective") or 2)
         total_count = mcq_c + sub_c
-    # 3. Call AI Service to generate question paper
-    total_count = (req.num_mcq or 5) + (req.num_subjective or 0)
-    if total_count <= 0:
+    elif q_type_req == "subjective":
+        total_count = int(req.num_subjective) if (req.num_subjective and int(req.num_subjective) > 0) else int(bp.get("num_subjective") or 5)
+    elif req.num_mcq and int(req.num_mcq) > 0:
+        total_count = int(req.num_mcq)
+    elif req.num_subjective and int(req.num_subjective) > 0:
+        total_count = int(req.num_subjective)
+
+    if not total_count or total_count <= 0:
         total_count = 5
 
-    custom_instr = req.custom_instructions or (req.blueprint.get("custom_instructions") if req.blueprint else None)
+    # Safe boundaries: 1 to 100 questions
+    total_count = max(1, min(total_count, 100))
+
+    target_difficulty = req.difficulty or bp.get("difficulty") or "medium"
+    target_topic = req.topic or bp.get("topic") or req.name or "General"
+    custom_instr = req.custom_instructions or bp.get("custom_instructions") or None
 
     raw_questions = ai_service.generate_questions(
         context_chunks=chunks,
-        question_type=req.question_type or "mcq",
-        difficulty=req.difficulty or "medium",
+        question_type=q_type_req,
+        difficulty=target_difficulty,
         count=total_count,
-        topic=req.topic or "General",
+        topic=target_topic,
         custom_instructions=custom_instr
     )
 
-    if not raw_questions or len(raw_questions) == 0:
-        topic_title = req.topic or "Subject Knowledge"
-        raw_questions = [
-            {
-                "id": str(uuid.uuid4()),
-                "question_text": f"What is the primary function and key principle of {topic_title}?",
-                "question_type": "mcq",
-                "options": [
-                    f"It provides structured processing and core functionality for {topic_title}.",
-                    f"It reverses the flow of data without storing components.",
-                    f"It bypasses standard security protocols.",
-                    f"It disables execution pipelines."
-                ],
-                "correct_answer": f"It provides structured processing and core functionality for {topic_title}.",
-                "explanation": f"Core principles of {topic_title} focus on structured processing and reliable operations.",
-                "marks": round((req.total_marks or 50) / max(total_count, 1), 2),
-                "estimated_time_seconds": 60,
-                "topic": topic_title
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "question_text": f"Which of the following is a critical advantage when implementing {topic_title}?",
-                "question_type": "mcq",
-                "options": [
-                    "Enhanced consistency and efficient execution",
-                    "Unrestricted memory allocation",
-                    "Removal of data validation layers",
-                    "Deprecation of error logging"
-                ],
-                "correct_answer": "Enhanced consistency and efficient execution",
-                "explanation": "Standard implementations ensure consistency and high performance.",
-                "marks": round((req.total_marks or 50) / max(total_count, 1), 2),
-                "estimated_time_seconds": 60,
-                "topic": topic_title
-            }
-        ]
+    if not raw_questions or len(raw_questions) < total_count:
+        topic_title = target_topic or "Subject Knowledge"
+        needed = total_count - (len(raw_questions) if raw_questions else 0)
+        supplementary = ai_service._mock_questions(
+            q_type=q_type_req,
+            diff=target_difficulty,
+            count=needed,
+            topic=topic_title,
+            context_chunks=chunks
+        )
+        if not raw_questions:
+            raw_questions = supplementary
+        else:
+            raw_questions.extend(supplementary)
 
     # Strictly limit to exact requested count
     raw_questions = raw_questions[:total_count]

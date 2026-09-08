@@ -1,6 +1,7 @@
 import pytest
 import io
 import uuid
+import json
 import httpx
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -166,6 +167,28 @@ async def test_generate_ai_exam(client, teacher_auth):
     data = res.json()
     assert "exam_code" in data
     assert "id" in data
+
+@pytest.mark.anyio
+async def test_generate_ai_exam_custom_question_count(client, teacher_auth):
+    res = await client.post("/api/v1/exams/generate-from-kb", headers=teacher_auth, json={
+        "name": "Custom Count Exam",
+        "subject_id": "MATH-201",
+        "topic": "Calculus",
+        "num_questions": 12,
+        "blueprint": {
+            "num_questions": 12
+        },
+        "difficulty": "medium",
+        "duration_minutes": 45,
+        "total_marks": 60,
+        "passing_marks": 24
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert "exam_code" in data
+    assert "id" in data
+    questions = json.loads(data.get("questions_json", "[]"))
+    assert len(questions) == 12
 
 # =========================================================
 # 7. STUDENT PROGRESS & MASTERY ANALYTICS TESTS
