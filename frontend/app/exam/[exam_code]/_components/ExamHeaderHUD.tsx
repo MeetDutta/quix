@@ -128,9 +128,12 @@ export default function ExamHeaderHUD({
 
           {/* Proctoring Warning Badge */}
           {tabSwitchCount > 0 && (
-            <div className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 text-[10px] sm:text-[11px] font-bold border border-rose-300 dark:border-rose-800" title={`${tabSwitchCount}/3 tab switches recorded`}>
+            <div
+              className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 text-[10px] sm:text-[11px] font-bold border border-rose-300 dark:border-rose-800 animate-pulse"
+              title={`${tabSwitchCount}/1 allowed tab switch used (Final Warning - Next switch will auto-submit)`}
+            >
               <ShieldAlert className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-rose-600" />
-              <span>{tabSwitchCount}/3</span>
+              <span>{tabSwitchCount}/1 Strike</span>
             </div>
           )}
 

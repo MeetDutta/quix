@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useExamStore } from "../../../store/examStore";
 import { useAuthStore } from "../../../store/authStore";
 import { apiFetch, API_V1 } from "../../../lib/api";
@@ -58,6 +58,7 @@ export default function ExamPortal() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [autoSubmitReason, setAutoSubmitReason] = useState<string | null>(null);
+  const lastSwitchRef = useRef<number>(0);
 
   // Local Storage Backup Key
   const backupKey = `eduquizx_backup_${examCode}`;
@@ -258,44 +259,87 @@ export default function ExamPortal() {
   useEffect(() => {
     if (!isLogged || isSimulation) return;
 
+    const handleTabOrBlurSwitch = (source: string) => {
+      const now = Date.now();
+      // Debounce events firing within 1500ms of each other (e.g. blur + visibilitychange)
+      if (now - lastSwitchRef.current < 1500) return;
+      lastSwitchRef.current = now;
+
+      setTabSwitchCount((prev) => {
+        const nextCount = prev + 1;
+        if (nextCount > 1) {
+          triggerProctorAlert("tab_switch", `Critical violation: Tab switch #${nextCount} detected (exceeded 1 allowed switch via ${source}). Auto-submitting exam.`);
+          setAutoSubmitReason(
+            "Maximum tab-switch violations exceeded (only 1 tab switch is allowed). Your exam has been automatically submitted due to anti-cheat policy."
+          );
+          showToast("CRITICAL PROCTORING VIOLATION: Second tab switch detected! Auto-submitting exam...", "error");
+          setTimeout(() => {
+            handleSubmitExam();
+          }, 100);
+        } else {
+          triggerProctorAlert("tab_switch", `Tab switch violation #1 recorded (${source}). 1 allowed switch used.`);
+          showToast(
+            "⚠️ FINAL WARNING: 1 of 1 allowed tab switch used! Any further tab switch or leaving this window will immediately auto-submit your exam.",
+            "error"
+          );
+        }
+        return nextCount;
+      });
+    };
+
     const handleVisibility = () => {
       if (document.visibilityState === "hidden") {
-        setTabSwitchCount((prev) => {
-          const nextCount = prev + 1;
-          triggerProctorAlert("tab_switch", `Tab switch violation #${nextCount} of 3 recorded.`);
-          if (nextCount >= 3) {
-            setAutoSubmitReason(
-              "Maximum tab-switch violations reached (3/3). Your exam has been automatically submitted due to anti-cheat policy."
-            );
-            showToast("CRITICAL PROCTORING VIOLATION: 3 tab switches detected! Auto-submitting exam...", "error");
-            setTimeout(() => {
-              handleSubmitExam();
-            }, 100);
-          } else {
-            showToast(
-              `Proctoring Warning: Tab switch ${nextCount}/3 detected! Reaching 3 tab switches will auto-submit.`,
-              "warning"
-            );
-          }
-          return nextCount;
-        });
+        handleTabOrBlurSwitch("tab_switch");
+      }
+    };
+
+    const handleWindowBlur = () => {
+      handleTabOrBlurSwitch("window_blur");
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      triggerProctorAlert("contextmenu", "Right-click context menu attempt blocked");
+      showToast("Right-click is disabled during exams.", "warning");
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+      if (
+        e.key === "F12" ||
+        (cmdOrCtrl && e.shiftKey && (e.key === "I" || e.key === "i")) ||
+        (cmdOrCtrl && e.shiftKey && (e.key === "J" || e.key === "j")) ||
+        (cmdOrCtrl && (e.key === "U" || e.key === "u"))
+      ) {
+        e.preventDefault();
+        triggerProctorAlert("devtools", `Developer tools shortcut attempt blocked (${e.key})`);
+        showToast("Inspection shortcuts are disabled during exams.", "error");
       }
     };
 
     const handleCopyPaste = (e: Event) => {
       e.preventDefault();
-      triggerProctorAlert("copy_paste", "Copy/paste attempt intercepted");
-      showToast("Copy/Paste is disabled during exams.", "warning");
+      triggerProctorAlert("copy_paste", "Copy/paste/cut attempt intercepted");
+      showToast("Copy, paste, and cut are disabled during exams.", "warning");
     };
 
     document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("blur", handleWindowBlur);
+    document.addEventListener("contextmenu", handleContextMenu);
+    document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("copy", handleCopyPaste);
     document.addEventListener("paste", handleCopyPaste);
+    document.addEventListener("cut", handleCopyPaste);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("blur", handleWindowBlur);
+      document.removeEventListener("contextmenu", handleContextMenu);
+      document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("copy", handleCopyPaste);
       document.removeEventListener("paste", handleCopyPaste);
+      document.removeEventListener("cut", handleCopyPaste);
     };
   }, [isLogged, isSimulation]);
 
@@ -481,6 +525,7 @@ export default function ExamPortal() {
             <ul className="list-disc pl-4 text-[11px] space-y-0.5 opacity-90">
               <li>Ensure stable Wi-Fi connection and full battery/power.</li>
               <li>Keep full screen open during the test to avoid proctor flags.</li>
+              <li>Strict Anti-Cheat: Only 1 tab switch is allowed. A second switch will auto-submit.</li>
               <li>Have your candidate PIN/passcode ready for instant login.</li>
             </ul>
           </div>
@@ -712,6 +757,18 @@ export default function ExamPortal() {
         answeredCount={answeredCount}
         totalQuestions={examStore.questions.length}
       />
+
+      {/* Tab Switch Strike 1 Warning Banner */}
+      {tabSwitchCount === 1 && (
+        <div className="bg-rose-600 text-white px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-bold shadow-md animate-pulse">
+          <div className="flex items-center gap-2 max-w-7xl mx-auto w-full justify-center text-center">
+            <ShieldAlert className="h-4 w-4 shrink-0" />
+            <span>
+              FINAL PROCTORING WARNING: 1 of 1 allowed tab switch used! Any further tab switch, window minimizing, or leaving this screen will immediately auto-submit your exam.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Main Exam Arena Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">

@@ -538,7 +538,7 @@ export default function UnifiedHomePage() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   <div className="p-3.5 rounded-xl bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] space-y-1.5">
                     <div className="font-bold text-rose-600">Tab-Switch Interception</div>
-                    <p className="text-[#716D67] dark:text-[#A8A29E]">Automated 3-strike tab switch enforcement with progressive warning toasts and automatic test submission on violation #3.</p>
+                    <p className="text-[#716D67] dark:text-[#A8A29E]">Strict anti-cheat proctoring: exactly 1 tab switch allowed with high-priority warning, and automatic exam submission if another switch is detected.</p>
                   </div>
                   <div className="p-3.5 rounded-xl bg-[#F7F4EF] dark:bg-[#141312] border border-[#E5E0D8] dark:border-[#292524] space-y-1.5">
                     <div className="font-bold text-rose-600">Live WebSocket Telemetry</div>
