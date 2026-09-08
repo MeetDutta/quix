@@ -15,8 +15,15 @@ class AIService:
         self.enabled = bool(self.api_key)
         if self.enabled:
             genai.configure(api_key=self.api_key)
-            self.model_candidates = ["models/gemini-1.5-flash", "gemini-1.5-flash", "models/gemini-pro", "gemini-pro"]
-            self.model_name = "models/gemini-1.5-flash"
+            self.model_candidates = [
+                "models/gemini-2.5-flash",
+                "models/gemini-flash-latest",
+                "models/gemini-2.5-flash-lite",
+                "models/gemini-3.5-flash",
+                "models/gemini-2.5-pro",
+                "models/gemini-pro-latest"
+            ]
+            self.model_name = "models/gemini-2.5-flash"
         else:
             logger.warning("GEMINI_API_KEY is not set. AI capabilities will be mocked.")
 
@@ -56,7 +63,7 @@ class AIService:
             
         for attempt in range(max_retries):
             # Try available model candidates
-            for candidate in ["models/gemini-1.5-flash", "gemini-1.5-flash", "models/gemini-pro"]:
+            for candidate in self.model_candidates:
                 try:
                     model = genai.GenerativeModel(model_name=candidate)
                     response = model.generate_content(full_prompt)
