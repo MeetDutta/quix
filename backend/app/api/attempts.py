@@ -307,24 +307,40 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
     allowed_end = to_naive_utc(exam.end_time) or (now + timedelta(minutes=exam_duration))
     deadline = min(now + timedelta(minutes=exam_duration), allowed_end)
 
-    # Resolve or create single submission
+    # Resolve or create single submission (respecting reattempt history)
     sub = None
     if cand:
+        # First look for an active in-progress attempt
         sub = db.query(ExamSubmission).filter(
             ExamSubmission.exam_id == exam.id,
-            ExamSubmission.candidate_id == cand.id
-        ).first()
-    if not sub:
+            ExamSubmission.candidate_id == cand.id,
+            ExamSubmission.status.in_(["started", "in_progress", "submitting"])
+        ).order_by(ExamSubmission.attempt_number.desc()).first()
+        # If no active attempt, select latest attempt overall
+        if not sub:
+            sub = db.query(ExamSubmission).filter(
+                ExamSubmission.exam_id == exam.id,
+                ExamSubmission.candidate_id == cand.id
+            ).order_by(ExamSubmission.attempt_number.desc()).first()
+    if not sub and cred:
         sub = db.query(ExamSubmission).filter(
             ExamSubmission.exam_id == exam.id,
-            ExamSubmission.credential_id == cred.id
-        ).first()
+            ExamSubmission.credential_id == cred.id,
+            ExamSubmission.status.in_(["started", "in_progress", "submitting"])
+        ).order_by(ExamSubmission.attempt_number.desc()).first()
+        if not sub:
+            sub = db.query(ExamSubmission).filter(
+                ExamSubmission.exam_id == exam.id,
+                ExamSubmission.credential_id == cred.id
+            ).order_by(ExamSubmission.attempt_number.desc()).first()
 
     if not sub:
         sub = ExamSubmission(
             exam_id=exam.id,
             candidate_id=cand.id if cand else None,
-            credential_id=cred.id,
+            credential_id=cred.id if cred else None,
+            attempt_number=1,
+            is_counted_for_result=True,
             status="started",
             started_at=now,
             deadline_at=deadline,
@@ -368,7 +384,9 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
         "total_marks": exam.total_marks,
         "passing_marks": exam.passing_marks,
         "questions_count": len(questions_list),
-        "is_completed": is_completed
+        "is_completed": is_completed,
+        "attempt_number": sub.attempt_number or 1,
+        "is_reattempt": (sub.attempt_number or 1) > 1
     }
 
 @router.get("/exam-info")
@@ -456,7 +474,9 @@ def get_exam_info(
         "submission_id": sub.id,
         "score": sub.score,
         "percentage": sub.percentage,
-        "evaluated_answers": evaluated_answers
+        "evaluated_answers": evaluated_answers,
+        "attempt_number": sub.attempt_number or 1,
+        "is_counted_for_result": sub.is_counted_for_result if sub.is_counted_for_result is not None else True
     }
 
 def process_exam_submission(sub: ExamSubmission, db: Session, auto_submitted: bool = False, auto_submit_reason: Optional[str] = None) -> dict:

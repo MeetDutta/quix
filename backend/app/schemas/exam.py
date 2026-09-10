@@ -151,3 +151,24 @@ class RerollPromptRequest(BaseModel):
     prompt_feedback: str
     subject_id: Optional[str] = None
 
+class AddCandidatePostDeploymentRequest(BaseModel):
+    student_id: Optional[str] = None
+    directory_student_id: Optional[str] = None
+    notify_student: Optional[bool] = True
+
+    @property
+    def resolved_student_id(self) -> str:
+        return self.student_id or self.directory_student_id or ""
+
+class GrantReattemptRequest(BaseModel):
+    time_policy: Optional[str] = "remaining"  # "remaining" or "custom"
+    custom_duration_minutes: Optional[int] = None
+    reason: Optional[str] = None
+    admin_override: Optional[bool] = False
+
+class SelectResultAttemptRequest(BaseModel):
+    attempt_number: Optional[int] = None
+    submission_id: Optional[str] = None
+    reason: Optional[str] = None
+    notes: Optional[str] = None
+

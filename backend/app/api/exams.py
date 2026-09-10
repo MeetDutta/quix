@@ -25,7 +25,7 @@ to_naive_utc = to_utc_instant
 
 from app.models.user import User, Student
 from app.models.document import Document, DocumentChunk
-from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog
+from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog, AuditLog
 from app.models.question import Question
 from app.models.institution import Subject, Institution, Department, Course
 from app.models.workspace import Workspace, WorkspaceMember
@@ -33,7 +33,8 @@ from app.models.student_directory import StudentDirectory, DirectoryStudent
 from app.models.candidate import ExamCandidate
 from app.schemas.exam import (
     ExamCreate, ExamResponse, CredentialResponse, ExamGenerateKBRequest,
-    UpdateQuestionsRequest, RegenerateQuestionRequest, AuditPaperRequest, RerollPromptRequest
+    UpdateQuestionsRequest, RegenerateQuestionRequest, AuditPaperRequest, RerollPromptRequest,
+    AddCandidatePostDeploymentRequest, GrantReattemptRequest, SelectResultAttemptRequest
 )
 from app.utils.security import RoleChecker, get_current_user
 from app.services.workspace_service import get_current_workspace
@@ -1600,7 +1601,12 @@ def get_exam_live_monitor(
 
     for cand in candidates:
         cred = cand.credential
-        sub = cand.submission
+        cand_subs = db.query(ExamSubmission).filter(
+            ExamSubmission.exam_id == exam_id,
+            ExamSubmission.candidate_id == cand.id
+        ).order_by(ExamSubmission.attempt_number.asc()).all()
+        sub = cand_subs[-1] if cand_subs else None
+        total_attempts = len(cand_subs)
 
         # Explicitly ignore any corrupted or dummy candidate records
         if not cand.name_snapshot or "anonymous" in cand.name_snapshot.lower():
@@ -1633,6 +1639,7 @@ def get_exam_live_monitor(
 
             if sub.status in ["started", "in_progress", "submitting"] and now >= effective_deadline:
                 sub.status = "auto_submitted"
+                sub.auto_submit_reason = "TIME_EXPIRED"
                 sub.submitted_at = effective_deadline
                 db.commit()
 
@@ -1659,6 +1666,35 @@ def get_exam_live_monitor(
         else:
             not_started_count += 1
 
+        exam_end_dt = to_utc_instant(exam.end_time)
+        can_grant_reattempt = bool(
+            sub and 
+            sub.status == "auto_submitted" and 
+            sub.auto_submit_reason == "TAB_SWITCH" and 
+            sub.tab_switch_count >= 2 and 
+            total_attempts < 2 and
+            (not exam_end_dt or now < exam_end_dt)
+        )
+
+        attempts_history = [
+            {
+                "submission_id": s.id,
+                "attempt_number": s.attempt_number,
+                "status": s.status,
+                "raw_status": s.status,
+                "auto_submit_reason": s.auto_submit_reason,
+                "tab_switch_count": s.tab_switch_count,
+                "score": s.score,
+                "is_counted_for_result": s.is_counted_for_result,
+                "started_at": to_iso_utc(s.started_at),
+                "started_at_ist": format_ist_time(s.started_at) if s.started_at else None,
+                "submitted_at": to_iso_utc(s.submitted_at),
+                "submitted_at_ist": format_ist_time(s.submitted_at) if s.submitted_at else None,
+                "deadline_at_ist": format_ist_time(s.deadline_at) if s.deadline_at else None,
+            }
+            for s in cand_subs
+        ]
+
         proctor_flags_count = proctor_counts.get(sub.id, 0) if sub else 0
 
         candidates_list.append({
@@ -1673,6 +1709,11 @@ def get_exam_live_monitor(
             "raw_status": sub.status if sub else "not_started",
             "auto_submit_reason": sub.auto_submit_reason if sub else None,
             "tab_switch_count": sub.tab_switch_count if sub else 0,
+            "attempt_number": sub.attempt_number if sub else 1,
+            "total_attempts": total_attempts,
+            "can_grant_reattempt": can_grant_reattempt,
+            "is_counted_for_result": sub.is_counted_for_result if sub else True,
+            "attempts_history": attempts_history,
             "connection_status": connection_status,
             "answered_count": answered_count,
             "total_questions": total_questions,
@@ -1853,6 +1894,424 @@ def regenerate_single_question(
         "difficulty": payload.difficulty,
         "marks": 5.0,
         "bloom_level": "Apply"
+    }
+
+
+@router.get("/{exam_id}/available-students")
+def list_available_students_for_exam(
+    exam_id: str,
+    search: Optional[str] = None,
+    current_workspace: Workspace = Depends(get_current_workspace),
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """
+    Lists workspace directory students who are eligible and not yet enrolled as candidates in this exam.
+    """
+    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+
+    # Workspace authorization check
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied to this exam")
+
+    # Exclude students already enrolled in this exam
+    enrolled_student_ids = [
+        r[0] for r in db.query(ExamCandidate.directory_student_id)
+        .filter(ExamCandidate.exam_id == exam_id, ExamCandidate.directory_student_id.isnot(None))
+        .all()
+    ]
+
+    # Find directories belonging to exam workspace
+    ws_id = exam.workspace_id or current_workspace.id
+    query = db.query(DirectoryStudent).join(StudentDirectory).filter(
+        StudentDirectory.workspace_id == ws_id,
+        StudentDirectory.is_deleted == False,
+        DirectoryStudent.is_deleted == False,
+        DirectoryStudent.status == "active"
+    )
+    if enrolled_student_ids:
+        query = query.filter(DirectoryStudent.id.notin_(enrolled_student_ids))
+
+    if search and search.strip():
+        s = f"%{search.strip()}%"
+        query = query.filter(
+            (DirectoryStudent.name.ilike(s)) |
+            (DirectoryStudent.email.ilike(s)) |
+            (DirectoryStudent.roll_number.ilike(s)) |
+            (DirectoryStudent.student_code.ilike(s))
+        )
+
+    students = query.order_by(DirectoryStudent.name.asc()).limit(100).all()
+    return {
+        "students": [
+            {
+                "id": s.id,
+                "directory_student_id": s.id,
+                "name": s.name,
+                "email": s.email,
+                "roll_number": s.roll_number,
+                "student_code": s.student_code,
+                "department": s.department,
+                "division": s.division
+            }
+            for s in students
+        ]
+    }
+
+
+@router.post("/{exam_id}/candidates")
+def add_student_to_exam_post_deployment(
+    exam_id: str,
+    payload: AddCandidatePostDeploymentRequest,
+    background_tasks: BackgroundTasks,
+    current_workspace: Workspace = Depends(get_current_workspace),
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """
+    Enrolls an individual workspace student into an already deployed/active exam without
+    modifying or resetting existing candidates or credentials.
+    """
+    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+
+    # Workspace authorization check
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied to this exam")
+
+    now = now_utc()
+    exam_end = to_utc_instant(exam.end_time)
+    if exam_end and now >= exam_end:
+        raise HTTPException(status_code=400, detail="Cannot add students to an exam that has already concluded")
+
+    # Verify student exists in current workspace
+    target_student_id = payload.resolved_student_id
+    ws_id = exam.workspace_id or current_workspace.id
+    dir_student = db.query(DirectoryStudent).join(StudentDirectory).filter(
+        DirectoryStudent.id == target_student_id,
+        StudentDirectory.workspace_id == ws_id,
+        DirectoryStudent.is_deleted == False
+    ).first()
+    if not dir_student:
+        raise HTTPException(status_code=404, detail="Student not found in this workspace directory")
+
+    # Check for duplicate candidate enrollment
+    existing_cand = db.query(ExamCandidate).filter(
+        ExamCandidate.exam_id == exam.id,
+        ExamCandidate.directory_student_id == dir_student.id
+    ).first()
+    if existing_cand:
+        raise HTTPException(status_code=409, detail="Student is already enrolled in this exam")
+
+    # Create ExamCandidate snapshot
+    candidate = ExamCandidate(
+        exam_id=exam.id,
+        directory_student_id=dir_student.id,
+        name_snapshot=dir_student.name,
+        email_snapshot=dir_student.email,
+        roll_number_snapshot=dir_student.roll_number,
+        status="PENDING"
+    )
+    db.add(candidate)
+    db.flush()
+
+    # Generate single deterministic credential
+    clean_roll = "".join(c for c in (dir_student.roll_number or (dir_student.email.split("@")[0] if dir_student.email else "") or dir_student.name).lower() if c.isalnum())[:16] or "stud"
+    base_username = f"{exam.exam_code}-{clean_roll}"
+    existing_user = db.query(ExamCredential).filter(ExamCredential.username == base_username).first()
+    if existing_user:
+        username = f"{base_username}-{secrets.randbelow(900) + 100}"
+    else:
+        username = base_username
+
+    password = str(secrets.randbelow(900000) + 100000)
+    expires_at = exam_end or (now + timedelta(days=30))
+
+    cred = ExamCredential(
+        exam_id=exam.id,
+        candidate_id=candidate.id,
+        username=username,
+        password=password,
+        expires_at=expires_at
+    )
+    db.add(cred)
+
+    # Audit log
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="STUDENT_ADDED_AFTER_DEPLOYMENT",
+        details=json.dumps({
+            "exam_id": exam.id,
+            "exam_code": exam.exam_code,
+            "candidate_id": candidate.id,
+            "student_id": dir_student.id,
+            "student_name": dir_student.name,
+            "username": username,
+            "enrolled_at": now.isoformat()
+        }),
+        timestamp=now
+    ))
+
+    db.commit()
+    db.refresh(candidate)
+    db.refresh(cred)
+
+    # Send invitation email only if requested and student email exists
+    email_sent = False
+    if payload.notify_student and dir_student.email:
+        email_sent = True
+        background_tasks.add_task(
+            email_service.send_exam_credentials_email,
+            student_name=candidate.name_snapshot,
+            email=dir_student.email,
+            exam_name=exam.name,
+            exam_code=exam.exam_code,
+            username=cred.username,
+            password=cred.password,
+            start_time=exam.start_time,
+            end_time=exam.end_time
+        )
+
+    return {
+        "status": "success",
+        "message": "Student successfully enrolled in assessment",
+        "candidate_id": candidate.id,
+        "exam_code": exam.exam_code,
+        "email_sent": email_sent,
+        "candidate": {
+            "id": candidate.id,
+            "name": candidate.name_snapshot,
+            "email": candidate.email_snapshot,
+            "roll_number": candidate.roll_number_snapshot,
+            "status": "not_started"
+        },
+        "credential": {
+            "username": cred.username,
+            "password": cred.password,
+            "expires_at": to_iso_utc(cred.expires_at),
+            "expires_at_ist": format_ist_datetime(cred.expires_at)
+        }
+    }
+
+
+@router.post("/{exam_id}/candidates/{candidate_id}/reattempt")
+def grant_candidate_reattempt(
+    exam_id: str,
+    candidate_id: str,
+    payload: Optional[GrantReattemptRequest] = None,
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """
+    Grants a controlled reattempt to a candidate whose attempt was auto-submitted
+    due to proctoring tab switching. Preserves the original attempt and starts Attempt #2.
+    """
+    if payload is None:
+        payload = GrantReattemptRequest()
+    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+
+    # Workspace authorization check
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied to this exam")
+
+    now = now_utc()
+    exam_end = to_utc_instant(exam.end_time)
+    if exam_end and now >= exam_end:
+        raise HTTPException(status_code=400, detail="Cannot grant reattempt: Exam has already concluded")
+
+    candidate = db.query(ExamCandidate).filter(
+        ExamCandidate.id == candidate_id,
+        ExamCandidate.exam_id == exam_id
+    ).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found for this exam")
+
+    # Fetch all submissions for candidate with order
+    subs = db.query(ExamSubmission).filter(
+        ExamSubmission.exam_id == exam_id,
+        ExamSubmission.candidate_id == candidate_id
+    ).order_by(ExamSubmission.attempt_number.asc()).all()
+
+    if not subs:
+        raise HTTPException(status_code=400, detail="Candidate has not started the exam yet")
+
+    latest_attempt = subs[-1]
+
+    # Check for active attempt in progress
+    active_attempt = next((s for s in subs if s.status in ["started", "in_progress", "submitting"]), None)
+    if active_attempt:
+        raise HTTPException(status_code=409, detail=f"Candidate already has an active attempt (Attempt #{active_attempt.attempt_number}) in progress")
+
+    # Strict eligibility check:
+    # Must be auto_submitted AND auto_submit_reason == TAB_SWITCH AND tab_switch_count >= 2
+    if not (latest_attempt.status == "auto_submitted" and 
+            latest_attempt.auto_submit_reason == "TAB_SWITCH" and 
+            latest_attempt.tab_switch_count >= 2):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Reattempt is only authorized for candidates whose attempt was auto-submitted due to tab switching. Current status: {latest_attempt.status} ({latest_attempt.auto_submit_reason or 'normal'})"
+        )
+
+    # Maximum reattempts policy: default max reattempts = 1 (total attempts = 2)
+    if len(subs) >= 2:
+        if not (payload.admin_override and current_user.role in ["super_admin", "inst_admin"]):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Maximum allowed reattempts (1) reached for this candidate. Current attempt count: {len(subs)}"
+            )
+
+    # Calculate deadline
+    if payload.time_policy == "custom" and payload.custom_duration_minutes and payload.custom_duration_minutes > 0:
+        duration_mins = payload.custom_duration_minutes
+    else:
+        duration_mins = exam.duration_minutes or 30
+
+    deadline = min(now + timedelta(minutes=duration_mins), exam_end) if exam_end else (now + timedelta(minutes=duration_mins))
+
+    next_attempt_number = max(s.attempt_number for s in subs) + 1
+
+    # Attempt #1 remains untouched with is_counted_for_result = True
+    # Attempt #2 created with is_counted_for_result = False
+    new_sub = ExamSubmission(
+        exam_id=exam.id,
+        candidate_id=candidate.id,
+        credential_id=candidate.credential.id if candidate.credential else latest_attempt.credential_id,
+        attempt_number=next_attempt_number,
+        is_counted_for_result=False,
+        reattempt_granted_by=current_user.id,
+        reopened_from_id=latest_attempt.id,
+        status="started",
+        tab_switch_count=0,
+        auto_submit_reason=None,
+        answers_json="{}",
+        questions_snapshot_json=exam.questions_json,
+        answer_version=0,
+        score=0.0,
+        percentage=0.0,
+        started_at=now,
+        deadline_at=deadline,
+        last_seen_at=now,
+        grading_status="COMPLETED"
+    )
+    db.add(new_sub)
+
+    # Audit log
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="REATTEMPT_GRANTED",
+        details=json.dumps({
+            "exam_id": exam.id,
+            "candidate_id": candidate.id,
+            "student_name": candidate.name_snapshot,
+            "original_attempt_number": latest_attempt.attempt_number,
+            "original_submission_id": latest_attempt.id,
+            "attempt_number": next_attempt_number,
+            "new_attempt_number": next_attempt_number,
+            "new_submission_id": new_sub.id,
+            "time_policy": payload.time_policy,
+            "allocated_duration_minutes": duration_mins,
+            "deadline_at": deadline.isoformat(),
+            "reason": payload.reason or "Tab switch auto-submit reattempt authorized by teacher",
+            "granted_by": current_user.id,
+            "timestamp": now.isoformat()
+        }),
+        timestamp=now
+    ))
+
+    db.commit()
+    db.refresh(new_sub)
+
+    return {
+        "status": "success",
+        "message": f"Reattempt successfully authorized for {candidate.name_snapshot}. Attempt #{next_attempt_number} is now active.",
+        "attempt_number": next_attempt_number,
+        "attempt": {
+            "submission_id": new_sub.id,
+            "attempt_number": new_sub.attempt_number,
+            "status": new_sub.status,
+            "deadline_at": to_iso_utc(new_sub.deadline_at),
+            "deadline_at_ist": format_ist_time(new_sub.deadline_at),
+            "tab_switch_count": 0,
+            "is_counted_for_result": False
+        }
+    }
+
+
+@router.post("/{exam_id}/candidates/{candidate_id}/select-result-attempt")
+def select_result_attempt(
+    exam_id: str,
+    candidate_id: str,
+    payload: SelectResultAttemptRequest,
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """
+    Explicitly designates which attempt counts as the official final result for reports and leaderboards.
+    """
+    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied to this exam")
+
+    subs = db.query(ExamSubmission).filter(
+        ExamSubmission.exam_id == exam_id,
+        ExamSubmission.candidate_id == candidate_id
+    ).all()
+
+    target_sub = next(
+        (s for s in subs if (payload.submission_id and s.id == payload.submission_id) or (payload.attempt_number and s.attempt_number == payload.attempt_number)),
+        None
+    )
+    if not target_sub:
+        raise HTTPException(status_code=404, detail="Submission not found for this candidate")
+
+    if target_sub.status not in ["submitted", "auto_submitted", "graded"]:
+        raise HTTPException(status_code=400, detail="Only completed attempts can be selected as the official result")
+
+    previous_counted = next((s for s in subs if s.is_counted_for_result), None)
+
+    for s in subs:
+        s.is_counted_for_result = (s.id == target_sub.id)
+
+    now = now_utc()
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="FINAL_RESULT_ATTEMPT_SELECTED",
+        details=json.dumps({
+            "exam_id": exam_id,
+            "candidate_id": candidate_id,
+            "selected_submission_id": target_sub.id,
+            "selected_attempt_number": target_sub.attempt_number,
+            "previous_counted_submission_id": previous_counted.id if previous_counted else None,
+            "reason": payload.reason or payload.notes or "Explicit teacher selection",
+            "timestamp": now.isoformat()
+        }),
+        timestamp=now
+    ))
+
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Attempt #{target_sub.attempt_number} is now the designated official result for candidate.",
+        "candidate_id": candidate_id,
+        "selected_attempt_number": target_sub.attempt_number,
+        "selected_submission_id": target_sub.id
     }
 
 

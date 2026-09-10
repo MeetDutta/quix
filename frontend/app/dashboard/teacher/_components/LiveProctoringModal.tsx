@@ -4,12 +4,15 @@ import { useState, useEffect } from "react";
 import { 
   X, Radio, Users, Clock, ShieldAlert, CheckCircle2, 
   AlertTriangle, RefreshCw, Plus, Play, Pause, Search, UserCheck,
-  AlertOctagon, Flame
+  AlertOctagon, Flame, UserPlus, RotateCcw, Award, History
 } from "lucide-react";
 import { API_V1, apiFetch, getWebSocketUrl } from "../../../../lib/api";
 import { useAuthStore } from "../../../../store/authStore";
 import { useToast } from "../../../../components/Toast";
 import { formatISTTime } from "../../../../lib/dateUtils";
+import AddStudentToExamModal from "./AddStudentToExamModal";
+import ReattemptConfirmModal from "./ReattemptConfirmModal";
+import CandidateAttemptsModal from "./CandidateAttemptsModal";
 
 interface LiveProctoringModalProps {
   examId?: string;
@@ -37,6 +40,11 @@ export default function LiveProctoringModal({
   const [isExtending, setIsExtending] = useState(false);
   const [liveAlerts, setLiveAlerts] = useState<any[]>(alerts || []);
   const [showAlertsDrawer, setShowAlertsDrawer] = useState(false);
+
+  // Post-deployment enrollment & reattempt modal states
+  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [selectedCandidateForReattempt, setSelectedCandidateForReattempt] = useState<any | null>(null);
+  const [selectedCandidateForAttempts, setSelectedCandidateForAttempts] = useState<any | null>(null);
 
   const fetchLiveTelemetry = async () => {
     if (!targetExamId) return;
@@ -125,14 +133,23 @@ export default function LiveProctoringModal({
   });
 
   const renderStatusBadge = (c: any) => {
+    const attemptBadge = (
+      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+        Attempt #{c.attempt_number || 1}
+      </span>
+    );
+
     if (c.status === "auto_submitted" || c.raw_status === "auto_submitted") {
       const reasonDisplay = c.auto_submit_reason ? c.auto_submit_reason.replace("_", " ").toUpperCase() : "TAB SWITCH";
       return (
         <div className="flex flex-col gap-0.5 shrink-0">
-          <span className="px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-extrabold text-[10px] flex items-center gap-1 shrink-0 uppercase tracking-wide">
-            <AlertOctagon className="h-3 w-3" />
-            <span>AUTO-SUBMITTED</span>
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-extrabold text-[10px] flex items-center gap-1 shrink-0 uppercase tracking-wide">
+              <AlertOctagon className="h-3 w-3" />
+              <span>AUTO-SUBMITTED</span>
+            </span>
+            {attemptBadge}
+          </div>
           <span className="text-[9px] font-bold text-rose-600 dark:text-rose-400">
             Reason: {reasonDisplay}
           </span>
@@ -147,10 +164,13 @@ export default function LiveProctoringModal({
     if (c.status === "submitted" || c.raw_status === "submitted") {
       return (
         <div className="flex flex-col gap-0.5 shrink-0">
-          <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
-            <CheckCircle2 className="h-3 w-3" />
-            <span>Submitted</span>
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
+              <CheckCircle2 className="h-3 w-3" />
+              <span>Submitted</span>
+            </span>
+            {attemptBadge}
+          </div>
           {c.submitted_at_ist && (
             <span className="text-[9px] text-[#716D67] dark:text-[#A8A29E] font-mono">
               {c.submitted_at_ist} IST
@@ -162,30 +182,42 @@ export default function LiveProctoringModal({
     if (c.status === "in_progress") {
       if (c.connection_status === "online") {
         return (
-          <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-            <span>Answering Now</span>
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span>Answering Now</span>
+            </span>
+            {attemptBadge}
+          </div>
         );
       }
       if (c.connection_status === "disconnected") {
         return (
-          <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
-            <Clock className="h-3 w-3 text-amber-600" />
-            <span>Disconnected</span>
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
+              <Clock className="h-3 w-3 text-amber-600" />
+              <span>Disconnected</span>
+            </span>
+            {attemptBadge}
+          </div>
         );
       }
       return (
-        <span className="px-2 py-0.5 rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
-          <span>Offline</span>
-        </span>
+        <div className="flex items-center gap-1">
+          <span className="px-2 py-0.5 rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
+            <span>Offline</span>
+          </span>
+          {attemptBadge}
+        </div>
       );
     }
     return (
-      <span className="px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 font-medium text-[10px] shrink-0">
-        Not Started
-      </span>
+      <div className="flex items-center gap-1">
+        <span className="px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 font-medium text-[10px] shrink-0">
+          Not Started
+        </span>
+        {attemptBadge}
+      </div>
     );
   };
 
@@ -244,6 +276,17 @@ export default function LiveProctoringModal({
             >
               <ShieldAlert className="h-3.5 w-3.5 text-rose-600" />
               <span>Violations ({liveAlerts.length})</span>
+            </button>
+
+            {/* Post-Deployment Add Student Button */}
+            <button
+              type="button"
+              onClick={() => setShowAddStudentModal(true)}
+              className="px-2.5 sm:px-3 py-1.5 bg-[#C84B18] hover:bg-[#A83D12] text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer"
+              title="Add a student to this deployed exam"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              <span>+ Add Student</span>
             </button>
 
             {/* Grant +10 Mins Button */}
@@ -467,6 +510,30 @@ export default function LiveProctoringModal({
                           />
                         </div>
                       </div>
+
+                      {/* Controlled Reattempt Action if Eligible */}
+                      {c.can_grant_reattempt && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCandidateForReattempt(c)}
+                          className="w-full py-1.5 px-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>Authorize Reattempt</span>
+                        </button>
+                      )}
+
+                      {/* View Attempts History if Multiple */}
+                      {c.attempts_history && c.attempts_history.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCandidateForAttempts(c)}
+                          className="w-full py-1 px-2 border border-[#E5E0D8] dark:border-[#292524] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 text-[#716D67] hover:text-[#242321] dark:hover:text-white"
+                        >
+                          <History className="h-3.5 w-3.5" />
+                          <span>View All Attempts ({c.attempts_history.length})</span>
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -482,7 +549,7 @@ export default function LiveProctoringModal({
                       <th className="py-2.5 px-4 font-bold text-[#716D67]">Status</th>
                       <th className="py-2.5 px-4 font-bold text-[#716D67]">Proctoring</th>
                       <th className="py-2.5 px-4 font-bold text-[#716D67]">Progress</th>
-                      <th className="py-2.5 px-4 font-bold text-[#716D67] text-right">Score</th>
+                      <th className="py-2.5 px-4 font-bold text-[#716D67] text-right">Score / Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E5E0D8] dark:divide-[#292524]">
@@ -541,8 +608,31 @@ export default function LiveProctoringModal({
                             </div>
                           </td>
 
-                          <td className="py-3 px-4 text-right font-bold text-[#242321] dark:text-[#F5F5F4]">
-                            {c.score !== null ? `${c.score} pts` : "—"}
+                          <td className="py-3 px-4 text-right">
+                            <div className="font-bold text-[#242321] dark:text-[#F5F5F4]">
+                              {c.score !== null ? `${c.score} pts` : "—"}
+                            </div>
+                            {c.can_grant_reattempt && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedCandidateForReattempt(c)}
+                                className="mt-1 px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-bold text-[11px] flex items-center gap-1 shadow-xs transition-all cursor-pointer ml-auto"
+                                title="Authorize a controlled reattempt for tab-switch infraction"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                <span>Reattempt</span>
+                              </button>
+                            )}
+                            {c.attempts_history && c.attempts_history.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedCandidateForAttempts(c)}
+                                className="mt-1 text-[10px] text-blue-600 dark:text-blue-400 font-semibold hover:underline flex items-center gap-1 ml-auto cursor-pointer"
+                              >
+                                <History className="h-3 w-3" />
+                                <span>{c.attempts_history.length} attempts</span>
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -567,6 +657,32 @@ export default function LiveProctoringModal({
             Close Room
           </button>
         </div>
+
+        {/* Sub-modals */}
+        {showAddStudentModal && (
+          <AddStudentToExamModal
+            examId={targetExamId}
+            examName={telemetry?.exam?.name || "Assessment"}
+            onClose={() => setShowAddStudentModal(false)}
+            onSuccess={() => fetchLiveTelemetry()}
+          />
+        )}
+        {selectedCandidateForReattempt && (
+          <ReattemptConfirmModal
+            examId={targetExamId}
+            candidate={selectedCandidateForReattempt}
+            onClose={() => setSelectedCandidateForReattempt(null)}
+            onSuccess={() => fetchLiveTelemetry()}
+          />
+        )}
+        {selectedCandidateForAttempts && (
+          <CandidateAttemptsModal
+            examId={targetExamId}
+            candidate={selectedCandidateForAttempts}
+            onClose={() => setSelectedCandidateForAttempts(null)}
+            onSuccess={() => fetchLiveTelemetry()}
+          />
+        )}
       </div>
     </div>
   );

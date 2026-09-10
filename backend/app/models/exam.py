@@ -61,10 +61,18 @@ class ExamCredential(TimeStampedModel):
 
 class ExamSubmission(TimeStampedModel):
     __tablename__ = "exam_submissions"
+    __table_args__ = (
+        UniqueConstraint("candidate_id", "attempt_number", name="uq_submission_candidate_attempt"),
+    )
     
     exam_id = Column(String(36), ForeignKey("exams.id"), nullable=False)
     candidate_id = Column(String(36), ForeignKey("exam_candidates.id", ondelete="CASCADE"), nullable=True, index=True)
-    credential_id = Column(String(36), ForeignKey("exam_credentials.id"), unique=True, nullable=False)
+    credential_id = Column(String(36), ForeignKey("exam_credentials.id"), nullable=False)
+    attempt_number = Column(Integer, default=1, nullable=False)
+    is_counted_for_result = Column(Boolean, default=True, nullable=False)
+    reattempt_granted_by = Column(String(36), ForeignKey("users.id"), nullable=True)
+    reopened_from_id = Column(String(36), ForeignKey("exam_submissions.id"), nullable=True)
+    
     answers_json = Column(Text, nullable=True) # JSON of student answers
     questions_snapshot_json = Column(Text, nullable=True) # Immutable snapshot of questions at attempt start
     answer_version = Column(Integer, default=0, nullable=False) # Server-controlled monotonic autosave version
@@ -82,8 +90,10 @@ class ExamSubmission(TimeStampedModel):
     auto_submit_reason = Column(String(100), nullable=True) # "TAB_SWITCH", "TIME_EXPIRED", etc.
     
     exam = relationship("Exam", back_populates="submissions")
-    candidate = relationship("ExamCandidate", back_populates="submission")
+    candidate = relationship("ExamCandidate", back_populates="submissions")
     credential = relationship("ExamCredential", back_populates="submission")
+    granted_by = relationship("User", foreign_keys=[reattempt_granted_by])
+    reopened_from = relationship("ExamSubmission", remote_side="ExamSubmission.id")
     proctoring_logs = relationship("ProctoringLog", back_populates="submission", cascade="all, delete-orphan")
 
 class ProctoringLog(TimeStampedModel):
