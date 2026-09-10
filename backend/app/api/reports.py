@@ -14,6 +14,10 @@ from app.utils.security import RoleChecker, get_current_user
 from app.services.ai_service import AIService
 from jose import jwt
 from app.config import settings
+from app.utils.timezone import (
+    now_utc, to_utc_instant, to_iso_utc, to_ist, 
+    format_ist, format_ist_datetime, format_ist_time
+)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
@@ -48,7 +52,7 @@ def get_exam_analytics(
             raise HTTPException(status_code=403, detail="Access denied to this exam's analytics")
         
     # Auto-submit any active submissions whose deadline has passed (e.g. from network drops at deadline)
-    now = datetime.utcnow()
+    now = now_utc()
     expired_subs = db.query(ExamSubmission).filter(
         ExamSubmission.exam_id == exam_id,
         ExamSubmission.status.in_(["started", "in_progress", "submitting"]),
@@ -317,7 +321,7 @@ def export_exam_csv(
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Rank", "Student Name", "Email", "Roll Number", "Score", "Max Marks", "Percentage", "Result", "Proctor Flags", "Submitted At"])
+    writer.writerow(["Rank", "Student Name", "Email", "Roll Number", "Score", "Max Marks", "Percentage", "Result", "Proctor Flags", "Submitted At (IST)"])
     
     for rank_idx, s in enumerate(submissions, 1):
         st = s.credential.student if s.credential else None
@@ -358,7 +362,7 @@ def export_exam_csv(
             f"{pct_val}%",
             "PASSED" if score_val >= pass_marks else "FAILED",
             alerts,
-            s.submitted_at.strftime("%Y-%m-%d %H:%M") if s.submitted_at else ""
+            format_ist(s.submitted_at) if s.submitted_at else ""
         ])
         
     output.seek(0)

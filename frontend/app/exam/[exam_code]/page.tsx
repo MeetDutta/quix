@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useExamStore } from "../../../store/examStore";
 import { useAuthStore } from "../../../store/authStore";
 import { apiFetch, API_V1 } from "../../../lib/api";
-import { formatLocalizedDate } from "../../../lib/dateUtils";
+import { formatLocalizedDate, formatISTDateTime, formatISTTime } from "../../../lib/dateUtils";
 import { useToast } from "../../../components/Toast";
 import { 
   AlertCircle, Lock, Timer, Flag, ChevronLeft, ChevronRight, 
@@ -58,6 +58,7 @@ export default function ExamPortal() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [autoSubmitReason, setAutoSubmitReason] = useState<string | null>(null);
+  const [deadlineIST, setDeadlineIST] = useState<string | null>(null);
   const lastSwitchRef = useRef<number>(0);
   const isSubmittingRef = useRef<boolean>(false);
 
@@ -192,6 +193,11 @@ export default function ExamPortal() {
           info.saved_answers,
           info.time_remaining_seconds
         );
+        if (info.deadline_at_ist) {
+          setDeadlineIST(info.deadline_at_ist);
+        } else if (info.deadline_at) {
+          setDeadlineIST(formatISTTime(info.deadline_at));
+        }
         setIsLogged(true);
         showToast("Logged into exam portal securely.", "success");
       }
@@ -233,6 +239,11 @@ export default function ExamPortal() {
           info.saved_answers,
           info.time_remaining_seconds
         );
+        if (info.deadline_at_ist) {
+          setDeadlineIST(info.deadline_at_ist);
+        } else if (info.deadline_at) {
+          setDeadlineIST(formatISTTime(info.deadline_at));
+        }
         setIsLogged(true);
         showToast("Logged into exam portal securely.", "success");
       }
@@ -256,46 +267,137 @@ export default function ExamPortal() {
     } catch {}
   };
 
+  const handleSubmitExam = async () => {
+    if (isSubmittingRef.current || submittedResult || !examStore.sessionToken) return;
+    isSubmittingRef.current = true;
+    setLoading(true);
+    try {
+      const res = await apiFetch(`/attempts/submit?token=${examStore.sessionToken}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(
+          isSimulation
+            ? "Simulation completed!"
+            : (autoSubmitReason || (data.status === "auto_submitted" ? "Exam automatically submitted due to tab switching." : "Exam submitted successfully!")),
+          "success"
+        );
+        setSubmittedResult(data);
+        setIsLogged(false);
+        examStore.clearExamSession();
+        try {
+          localStorage.removeItem(backupKey);
+        } catch {}
+      } else {
+        showToast(data.detail || "Submission failed", "error");
+      }
+    } catch {
+      showToast("Error submitting exam", "error");
+    } finally {
+      setLoading(false);
+      setShowConfirmModal(false);
+      isSubmittingRef.current = false;
+    }
+  };
+
+  // Periodic Student Heartbeat & Server Authority Sync (Every 12s)
+  const sendHeartbeat = useCallback(async () => {
+    if (isSubmittingRef.current || !examStore.sessionToken || isSimulation) return;
+    try {
+      const res = await apiFetch(`/attempts/heartbeat?token=${examStore.sessionToken}`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (
+          data.action === "force_submit" ||
+          data.force_submit ||
+          data.status === "auto_submitted" ||
+          data.action === "time_expired" ||
+          data.action === "submitted" ||
+          data.status === "submitted"
+        ) {
+          const isTabSwitch = (data.reason || "").toLowerCase().includes("tab") || data.reason === "TAB_SWITCH";
+          const message = isTabSwitch
+            ? "Exam automatically submitted due to tab switching."
+            : (data.reason === "time_expired" ? "Exam deadline reached on server. Finalizing submission..." : "Exam submitted.");
+          setAutoSubmitReason(message);
+          showToast(message, "warning");
+          handleSubmitExam();
+        } else if (typeof data.time_remaining_seconds === "number" && Math.abs(examStore.timeRemainingSeconds - data.time_remaining_seconds) > 5) {
+          // Reconcile client timer drift with server clock
+          examStore.setTimeRemaining(data.time_remaining_seconds);
+        }
+      }
+    } catch {
+      // Network temporary drop; client will retry next tick
+    }
+  }, [examStore.sessionToken, isSimulation, examStore.timeRemainingSeconds]);
+
   // Listeners for anti-cheat & tab-switches (disabled in teacher simulation)
   useEffect(() => {
     if (!isLogged || submittedResult || isSimulation) return;
 
-    const handleTabOrBlurSwitch = (source: string) => {
-      const now = Date.now();
-      // Debounce events firing within 1500ms of each other (e.g. blur + visibilitychange)
-      if (now - lastSwitchRef.current < 1500) return;
-      lastSwitchRef.current = now;
-
-      setTabSwitchCount((prev) => {
-        const nextCount = prev + 1;
-        if (nextCount > 1) {
-          triggerProctorAlert("tab_switch", `Critical violation: Tab switch #${nextCount} detected (exceeded 1 allowed switch via ${source}). Auto-submitting exam.`);
-          setAutoSubmitReason(
-            "Maximum tab-switch violations exceeded (only 1 tab switch is allowed). Your exam has been automatically submitted due to anti-cheat policy."
-          );
-          showToast("CRITICAL PROCTORING VIOLATION: Second tab switch detected! Auto-submitting exam...", "error");
-          setTimeout(() => {
-            handleSubmitExam();
-          }, 100);
-        } else {
-          triggerProctorAlert("tab_switch", `Tab switch violation #1 recorded (${source}). 1 allowed switch used.`);
-          showToast(
-            "⚠️ FINAL WARNING: 1 of 1 allowed tab switch used! Any further tab switch or leaving this window will immediately auto-submit your exam.",
-            "error"
-          );
-        }
-        return nextCount;
-      });
-    };
-
-    const handleVisibility = () => {
+    const handleVisibility = async () => {
       if (document.visibilityState === "hidden") {
-        handleTabOrBlurSwitch("tab_switch");
-      }
-    };
+        const now = Date.now();
+        // Debounce multiple visibility events from one physical switch within 1200ms
+        if (now - lastSwitchRef.current < 1200) return;
+        lastSwitchRef.current = now;
 
-    const handleWindowBlur = () => {
-      handleTabOrBlurSwitch("window_blur");
+        const clientEventId = typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `tab_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+        const payload = {
+          type: "TAB_SWITCH",
+          client_event_id: clientEventId,
+          occurred_at: new Date().toISOString(),
+          source: "browser_visibility"
+        };
+
+        try {
+          // Send server-authoritative violation event with keepalive
+          const res = await apiFetch(`/attempts/violation?token=${examStore.sessionToken}`, {
+            method: "POST",
+            body: JSON.stringify(payload),
+            headers: { "Content-Type": "application/json" }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.action === "warn" || data.violation_count === 1) {
+              setTabSwitchCount(1);
+              showToast(
+                "Warning: Tab switching is not allowed. One more tab switch will automatically submit your exam.",
+                "error"
+              );
+            } else if (data.action === "auto_submit" || data.status === "auto_submitted" || data.force_submit) {
+              setTabSwitchCount(2);
+              setAutoSubmitReason("Exam automatically submitted due to tab switching.");
+              showToast("Exam automatically submitted due to tab switching.", "error");
+              setSubmittedResult(data.result || {
+                status: "auto_submitted",
+                score: data.result?.score || 0,
+                total_marks: data.result?.total_marks || 50,
+                percentage: data.result?.percentage || 0,
+                is_passed: false,
+                auto_submit_reason: "TAB_SWITCH"
+              });
+              setIsLogged(false);
+              examStore.clearExamSession();
+              try {
+                localStorage.removeItem(backupKey);
+              } catch {}
+            }
+          }
+        } catch {
+          // If offline while hidden, the return-to-tab or heartbeat will reconcile authoritative state
+        }
+      } else if (document.visibilityState === "visible") {
+        // Return to tab is NOT a violation. Immediately reconcile authoritative server state!
+        sendHeartbeat();
+      }
     };
 
     const handleContextMenu = (e: MouseEvent) => {
@@ -326,7 +428,6 @@ export default function ExamPortal() {
     };
 
     document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("blur", handleWindowBlur);
     document.addEventListener("contextmenu", handleContextMenu);
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("copy", handleCopyPaste);
@@ -335,14 +436,13 @@ export default function ExamPortal() {
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("blur", handleWindowBlur);
       document.removeEventListener("contextmenu", handleContextMenu);
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("copy", handleCopyPaste);
       document.removeEventListener("paste", handleCopyPaste);
       document.removeEventListener("cut", handleCopyPaste);
     };
-  }, [isLogged, submittedResult, isSimulation]);
+  }, [isLogged, submittedResult, isSimulation, examStore.sessionToken, sendHeartbeat]);
 
   // Exam timer tick
   useEffect(() => {
@@ -355,35 +455,13 @@ export default function ExamPortal() {
     return () => clearInterval(interval);
   }, [isLogged, submittedResult, examStore.sessionToken, examStore.timeRemainingSeconds]);
 
-  // Periodic Student Heartbeat & Server Authority Sync (Every 12s)
+  // Periodic Student Heartbeat (Every 12s)
   useEffect(() => {
     if (!isLogged || submittedResult || !examStore.sessionToken || isSimulation) return;
-
-    const sendHeartbeat = async () => {
-      if (isSubmittingRef.current) return;
-      try {
-        const res = await apiFetch(`/attempts/heartbeat?token=${examStore.sessionToken}`, {
-          method: "POST",
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.action === "time_expired" || data.action === "submitted" || data.status === "auto_submitted" || data.status === "submitted") {
-            showToast("Exam deadline reached on server. Finalizing submission...", "warning");
-            handleSubmitExam();
-          } else if (typeof data.time_remaining_seconds === "number" && Math.abs(examStore.timeRemainingSeconds - data.time_remaining_seconds) > 5) {
-            // Reconcile client timer drift with server clock
-            examStore.setTimeRemaining(data.time_remaining_seconds);
-          }
-        }
-      } catch {
-        // Network temporary drop; client will retry next tick
-      }
-    };
-
     sendHeartbeat();
     const hbInterval = setInterval(sendHeartbeat, 12000);
     return () => clearInterval(hbInterval);
-  }, [isLogged, submittedResult, examStore.sessionToken, isSimulation]);
+  }, [isLogged, submittedResult, examStore.sessionToken, isSimulation, sendHeartbeat]);
 
   // Auto-submit on timeout
   useEffect(() => {
@@ -482,35 +560,6 @@ export default function ExamPortal() {
     }
   };
 
-  const handleSubmitExam = async () => {
-    if (isSubmittingRef.current || submittedResult || !examStore.sessionToken) return;
-    isSubmittingRef.current = true;
-    setLoading(true);
-    try {
-      const res = await apiFetch(`/attempts/submit?token=${examStore.sessionToken}`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showToast(isSimulation ? "Simulation completed!" : "Exam submitted successfully!", "success");
-        setSubmittedResult(data);
-        setIsLogged(false);
-        examStore.clearExamSession();
-        try {
-          localStorage.removeItem(backupKey);
-        } catch {}
-      } else {
-        showToast(data.detail || "Submission failed", "error");
-      }
-    } catch {
-      showToast("Error submitting exam", "error");
-    } finally {
-      setLoading(false);
-      setShowConfirmModal(false);
-      isSubmittingRef.current = false;
-    }
-  };
-
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
@@ -546,7 +595,7 @@ export default function ExamPortal() {
               <div className="pt-1">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#C84B18]/10 text-[#C84B18] dark:bg-[#EA580C]/15 dark:text-[#EA580C]">
                   <Clock className="h-3 w-3" />
-                  Opens at {formatLocalizedDate(examStatusData.start_time, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  Opens at {formatISTDateTime(examStatusData.start_time)}
                 </span>
               </div>
             )}
@@ -724,10 +773,14 @@ export default function ExamPortal() {
               {isSimulation ? "Teacher Sandbox Simulation Result" : "Examination Result Summary"}
             </span>
             <h1 className="text-2xl font-bold font-serif text-[#242321] dark:text-[#F5F5F4]">
-              {isPass ? "Assessment Passed!" : "Assessment Completed"}
+              {submittedResult?.status === "auto_submitted" || submittedResult?.auto_submit_reason === "TAB_SWITCH"
+                ? "Exam Auto-Submitted"
+                : (isPass ? "Assessment Passed!" : "Assessment Completed")}
             </h1>
-            <p className="text-xs text-[#716D67] dark:text-[#A8A29E]">
-              {autoSubmitReason || "Your responses have been evaluated and recorded."}
+            <p className="text-xs text-[#716D67] dark:text-[#A8A29E] font-medium">
+              {submittedResult?.status === "auto_submitted" || submittedResult?.auto_submit_reason === "TAB_SWITCH" || autoSubmitReason?.toLowerCase().includes("tab")
+                ? "Exam automatically submitted due to tab switching."
+                : (autoSubmitReason || "Your responses have been evaluated and recorded.")}
             </p>
           </div>
 
@@ -794,6 +847,7 @@ export default function ExamPortal() {
         examName={examStore.examName || "Assessment"}
         candidateName={candidateName}
         timeRemainingSeconds={examStore.timeRemainingSeconds}
+        deadlineIST={deadlineIST || undefined}
         syncStatus={syncStatus}
         isCalculatorOpen={isCalculatorOpen}
         onToggleCalculator={() => setIsCalculatorOpen((prev) => !prev)}
@@ -810,11 +864,11 @@ export default function ExamPortal() {
 
       {/* Tab Switch Strike 1 Warning Banner */}
       {tabSwitchCount === 1 && (
-        <div className="bg-rose-600 text-white px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-bold shadow-md animate-pulse">
+        <div className="bg-rose-600 text-white px-3 sm:px-4 py-2.5 sm:py-3 text-xs font-bold shadow-md animate-pulse border-b border-rose-700">
           <div className="flex items-center gap-2 max-w-7xl mx-auto w-full justify-center text-center">
             <ShieldAlert className="h-4 w-4 shrink-0" />
             <span>
-              FINAL PROCTORING WARNING: 1 of 1 allowed tab switch used! Any further tab switch, window minimizing, or leaving this screen will immediately auto-submit your exam.
+              Warning: Tab switching is not allowed. One more tab switch will automatically submit your exam.
             </span>
           </div>
         </div>

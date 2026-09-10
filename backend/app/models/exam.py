@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, ForeignKey, Integer, Float, Text, Boolean, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from app.models.base import TimeStampedModel
+from app.utils.timezone import now_utc
 
 class Exam(TimeStampedModel):
     __tablename__ = "exams"
@@ -17,8 +17,8 @@ class Exam(TimeStampedModel):
     total_marks = Column(Integer, nullable=False)
     negative_marking = Column(Float, default=0.0)
     passing_marks = Column(Integer, nullable=False)
-    start_time = Column(DateTime, nullable=False)
-    end_time = Column(DateTime, nullable=False)
+    start_time = Column(DateTime(timezone=True), nullable=False)
+    end_time = Column(DateTime(timezone=True), nullable=False)
     exam_code = Column(String(50), unique=True, index=True, nullable=False)
     is_published = Column(Boolean, default=False)
     is_result_published = Column(Boolean, default=False)
@@ -52,7 +52,7 @@ class ExamCredential(TimeStampedModel):
     username = Column(String(100), unique=True, index=True, nullable=False)
     password = Column(String(100), nullable=False)
     is_used = Column(Boolean, default=False)
-    expires_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
     
     exam = relationship("Exam", back_populates="credentials")
     candidate = relationship("ExamCandidate", back_populates="credential")
@@ -73,10 +73,13 @@ class ExamSubmission(TimeStampedModel):
     status = Column(String(50), default="started") # "started", "submitting", "submitted", "auto_submitted", "graded", "terminated"
     grading_status = Column(String(50), default="COMPLETED", nullable=False) # "COMPLETED", "PENDING_MANUAL_REVIEW"
     ai_feedback = Column(Text, nullable=True)
-    started_at = Column(DateTime, default=datetime.utcnow)
-    deadline_at = Column(DateTime, nullable=True)
-    last_seen_at = Column(DateTime, default=datetime.utcnow, nullable=True)
-    submitted_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime(timezone=True), default=now_utc)
+    deadline_at = Column(DateTime(timezone=True), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), default=now_utc, nullable=True)
+    submitted_at = Column(DateTime(timezone=True), nullable=True)
+    
+    tab_switch_count = Column(Integer, default=0, nullable=False)
+    auto_submit_reason = Column(String(100), nullable=True) # "TAB_SWITCH", "TIME_EXPIRED", etc.
     
     exam = relationship("Exam", back_populates="submissions")
     candidate = relationship("ExamCandidate", back_populates="submission")
@@ -85,11 +88,19 @@ class ExamSubmission(TimeStampedModel):
 
 class ProctoringLog(TimeStampedModel):
     __tablename__ = "proctoring_logs"
+    __table_args__ = (
+        UniqueConstraint("submission_id", "client_event_id", name="uq_proctor_log_sub_client_event"),
+    )
     
-    submission_id = Column(String(36), ForeignKey("exam_submissions.id"), nullable=False)
+    submission_id = Column(String(36), ForeignKey("exam_submissions.id"), nullable=False, index=True)
+    candidate_id = Column(String(36), ForeignKey("exam_candidates.id", ondelete="CASCADE"), nullable=True, index=True)
+    exam_id = Column(String(36), ForeignKey("exams.id"), nullable=True, index=True)
     event_type = Column(String(100), nullable=False) # "tab_switch", "copy_paste", "devtools", "resize", "idle"
     event_details = Column(Text, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    client_event_id = Column(String(64), nullable=True, index=True)
+    source = Column(String(50), default="browser_visibility", nullable=True)
+    client_timestamp = Column(DateTime(timezone=True), nullable=True)
+    timestamp = Column(DateTime(timezone=True), default=now_utc)
     
     submission = relationship("ExamSubmission", back_populates="proctoring_logs")
 
@@ -99,6 +110,7 @@ class AuditLog(TimeStampedModel):
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True) # None for unauthenticated actions (like public portal)
     action = Column(String(255), nullable=False)
     details = Column(Text, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime(timezone=True), default=now_utc)
     
     user = relationship("User", back_populates="audit_logs")
+

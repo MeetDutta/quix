@@ -23,14 +23,8 @@ from app.utils.tabular_parser import (
     generate_student_template_csv,
     generate_student_template_excel
 )
+from app.utils.timezone import now_utc, to_utc_instant, to_iso_utc, to_ist, format_ist, format_ist_datetime
 
-def to_iso_utc(dt: Optional[datetime]) -> Optional[str]:
-    if not dt:
-        return None
-    from datetime import timezone
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc).isoformat()
-    return dt.astimezone(timezone.utc).isoformat()
 
 router = APIRouter(prefix="/students", tags=["students"])
 teacher_or_admin_required = RoleChecker(["inst_admin", "teacher", "super_admin"])
@@ -410,7 +404,7 @@ def get_student_assigned_exams(
     Returns all active, scheduled, and completed assessments for the student portal,
     along with student-specific session passcodes, start times, and test room URLs.
     """
-    now = datetime.utcnow()
+    now = now_utc()
     
     is_teacher = current_user.role in ["teacher", "inst_admin", "super_admin"]
     
@@ -496,7 +490,7 @@ def get_student_assigned_exams(
                     student_id=student.id,
                     username=cand_username,
                     password=str(secrets.randbelow(900000) + 100000),
-                    expires_at=exam.end_time or (datetime.utcnow() + timedelta(days=7))
+                    expires_at=to_utc_instant(exam.end_time) or (now_utc() + timedelta(days=7))
                 )
                 db.add(cred)
                 try:
@@ -521,9 +515,11 @@ def get_student_assigned_exams(
                 ExamCredential.student_id == student.id
             ).first()
             
-        if exam.end_time < now:
+        exam_end = to_utc_instant(exam.end_time)
+        exam_start = to_utc_instant(exam.start_time)
+        if exam_end and exam_end < now:
             sched_status = "ended"
-        elif exam.start_time > now:
+        elif exam_start and exam_start > now:
             sched_status = "upcoming"
         else:
             sched_status = "active"

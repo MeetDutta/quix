@@ -3,8 +3,10 @@ import smtplib
 import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from typing import Optional, Union
+from datetime import datetime
 from app.config import settings
+from app.utils.timezone import format_ist_datetime, format_ist_time
 
 logger = logging.getLogger(__name__)
 
@@ -276,11 +278,25 @@ class EmailService:
         exam_name: str, 
         exam_code: str, 
         username: str, 
-        password: str
+        password: str,
+        start_time: Optional[Union[datetime, str]] = None,
+        end_time: Optional[Union[datetime, str]] = None
     ):
-        """Dispatches an automated email to student containing test link, exam username, and passcode PIN."""
+        """Dispatches an automated email to student containing test link, exam username, passcode PIN, and IST schedule."""
         exam_link = f"{settings.FRONTEND_URL}/exam/{exam_code}"
         subject = f"Exam Notification & Access Credentials — {exam_name}"
+        
+        schedule_html = ""
+        if start_time:
+            start_str = format_ist_datetime(start_time)
+            end_str = format_ist_datetime(end_time) if end_time else None
+            schedule_html = f"""
+            <div style="background-color: #FEF3C7; border: 1px solid #FDE68A; border-radius: 8px; padding: 12px 16px; margin: 15px 0; font-size: 13px;">
+                <p style="margin: 3px 0; color: #92400E; font-weight: bold;">Official Schedule (Indian Standard Time - IST):</p>
+                <p style="margin: 3px 0; color: #78350F;"><b>Starts:</b> {start_str}</p>
+                {f'<p style="margin: 3px 0; color: #78350F;"><b>Ends:</b> {end_str}</p>' if end_str else ''}
+            </div>
+            """
         
         html_content = f"""
         <!DOCTYPE html>
@@ -291,6 +307,8 @@ class EmailService:
                 <p>Hello <b>{student_name}</b>,</p>
                 <p>You have been enrolled for the examination: <b>{exam_name}</b> (Code: <b style="color: #9A3412;">{exam_code}</b>).</p>
                 
+                {schedule_html}
+
                 <div style="background-color: #FBF9F5; border: 1px solid #E7E0D3; border-radius: 12px; padding: 20px; margin: 20px 0;">
                     <p style="margin: 5px 0;"><b>Exam Session Username:</b> <span style="color: #9A3412; font-family: monospace; font-size: 16px;">{username}</span></p>
                     <p style="margin: 5px 0;"><b>Exam Passcode / PIN:</b> <span style="color: #047857; font-family: monospace; font-size: 16px; background: #ECFDF5; padding: 2px 8px; border-radius: 4px;">{password}</span></p>
@@ -301,7 +319,7 @@ class EmailService:
                 <p><a href="{exam_link}" style="display: inline-block; background: #9A3412; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 10px; font-weight: bold;">Open Exam Portal Link</a></p>
                 
                 <hr style="border: none; border-top: 1px solid #E7E0D3; margin-top: 30px;" />
-                <p style="font-size: 11px; color: #78716C;">EduQuizX Proctoring Portal • Confidential Student Credentials</p>
+                <p style="font-size: 11px; color: #78716C;">EduQuizX Proctoring Portal • Confidential Student Credentials • All Times in Indian Standard Time (IST)</p>
             </div>
         </body>
         </html>
@@ -318,12 +336,16 @@ class EmailService:
         exam_code: str, 
         username: str, 
         password: str,
-        start_time_str: str
+        start_time_str: Union[datetime, str]
     ):
         """Dispatches an automated 15-minute pre-exam schedule reminder email."""
         exam_link = f"{settings.FRONTEND_URL}/exam/{exam_code}"
         subject = f"⏰ 15-Minute Exam Reminder — {exam_name}"
         
+        display_start = format_ist_datetime(start_time_str) if isinstance(start_time_str, datetime) or "T" in str(start_time_str) else str(start_time_str)
+        if not display_start.endswith("IST"):
+            display_start = f"{display_start} IST"
+            
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -332,7 +354,7 @@ class EmailService:
                 <span style="background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; padding: 4px 12px; border-radius: 99px; font-size: 11px; font-weight: bold; text-transform: uppercase;">Upcoming Exam Starting Soon</span>
                 <h2 style="color: #9A3412; margin-top: 10px;">Your Exam Begins in 15 Minutes</h2>
                 <p>Hello <b>{student_name}</b>,</p>
-                <p>This is an automated schedule reminder that your examination <b>{exam_name}</b> (Code: <b style="color: #9A3412;">{exam_code}</b>) is starting at <b>{start_time_str}</b>.</p>
+                <p>This is an automated schedule reminder that your examination <b>{exam_name}</b> (Code: <b style="color: #9A3412;">{exam_code}</b>) is starting at <b>{display_start}</b>.</p>
                 
                 <div style="background-color: #FBF9F5; border: 1px solid #E7E0D3; border-radius: 12px; padding: 20px; margin: 20px 0;">
                     <p style="margin: 5px 0;"><b>Session Username:</b> <span style="color: #9A3412; font-family: monospace; font-size: 16px;">{username}</span></p>
@@ -343,7 +365,7 @@ class EmailService:
                 <p><a href="{exam_link}" style="display: inline-block; background: #9A3412; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 10px; font-weight: bold;">Open Live Exam Gateway</a></p>
                 
                 <hr style="border: none; border-top: 1px solid #E7E0D3; margin-top: 30px;" />
-                <p style="font-size: 11px; color: #78716C;">EduQuizX Proctoring Portal • Scheduled Window Notification</p>
+                <p style="font-size: 11px; color: #78716C;">EduQuizX Proctoring Portal • Scheduled Window Notification • All Times in Indian Standard Time (IST)</p>
             </div>
         </body>
         </html>

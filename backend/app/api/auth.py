@@ -27,6 +27,7 @@ from app.utils.security import (
 )
 from app.config import settings
 from app.services.email_service import email_service
+from app.utils.timezone import now_utc
 
 from app.models.workspace import Workspace, WorkspaceMember
 from app.services.workspace_service import bootstrap_personal_workspace
@@ -140,7 +141,7 @@ def login(login_in: UserLogin, response: Response, db: Session = Depends(get_db)
         ws_id = ws.id
         ws_name = ws.name
 
-    user.last_login_at = datetime.utcnow()
+    user.last_login_at = now_utc()
     db.commit()
         
     access = create_access_token(user.id)
@@ -281,7 +282,7 @@ def google_auth(
             google_id=google_sub,
             google_subject=google_sub,
             avatar_url=avatar_url,
-            last_login_at=datetime.utcnow()
+            last_login_at=now_utc()
         )
         db.add(user)
         db.commit()
@@ -294,7 +295,7 @@ def google_auth(
         if avatar_url:
             user.avatar_url = avatar_url
         user.auth_provider = "google"
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = now_utc()
         if payload.role and payload.role in ["teacher", "student"]:
             user.role = payload.role
         db.commit()

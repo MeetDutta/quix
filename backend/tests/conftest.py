@@ -12,7 +12,7 @@ from app.services.workspace_service import bootstrap_personal_workspace
 from app.utils.rate_limiter import limiter
 
 TEST_DB_URL = "sqlite:///./test_unified.db"
-test_engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+test_engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False, "timeout": 30}, pool_size=60, max_overflow=60)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 @pytest.fixture(autouse=True)

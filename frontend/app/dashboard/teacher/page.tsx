@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "../../../store/authStore";
 import { useToast } from "../../../components/Toast";
 import { apiFetch, API_V1, getWebSocketUrl } from "../../../lib/api";
-import { parseUtcDate, formatLocalizedDate, formatLocalForInput } from "../../../lib/dateUtils";
+import { 
+  parseUtcDate, formatLocalizedDate, formatLocalForInput, 
+  formatISTDate, formatISTTime, formatISTDateTime, formatISTForInput, parseISTInputToUtcIso 
+} from "../../../lib/dateUtils";
+
 import { 
   Plus, BookOpen, Calendar, ChevronRight, ChevronDown, Check,
   Users, BarChart3, GraduationCap, Clock, 
@@ -491,8 +495,8 @@ export default function TeacherDashboard() {
         passing_marks: parseFloat(examPass) || Math.max(1, Math.round(totalMarksNum * 0.4)),
         negative_marking: parseFloat(examNegative) || 0,
         marks_distribution: distributionPayload,
-        start_time: examStartDate ? new Date(examStartDate).toISOString() : null,
-        end_time: examEndDate ? new Date(examEndDate).toISOString() : null,
+        start_time: examStartDate ? parseISTInputToUtcIso(examStartDate) : null,
+        end_time: examEndDate ? parseISTInputToUtcIso(examEndDate) : null,
         student_directory_id: selectedDirectoryId || null,
         custom_instructions: customPromptInstructions,
         blueprint: blueprint,
@@ -601,36 +605,38 @@ export default function TeacherDashboard() {
   };
 
   const formatLocalDateTime = (date: Date) => {
-    return formatLocalForInput(date);
+    return formatISTForInput(date);
   };
 
   const setSchedulePreset = (preset: string) => {
-    const now = new Date();
     const durMins = parseInt(examDuration) || 30;
+    const now = new Date();
     if (preset === "now") {
-      setExamStartDate(formatLocalDateTime(now));
+      setExamStartDate(formatISTForInput(now));
       const end = new Date(now.getTime() + durMins * 60000);
-      setExamEndDate(formatLocalDateTime(end));
+      setExamEndDate(formatISTForInput(end));
     } else if (preset === "today4pm") {
-      const start = new Date();
-      start.setHours(16, 0, 0, 0);
-      if (now > start) {
-        start.setDate(start.getDate() + 1);
+      const todayIST = formatISTForInput(now).split("T")[0];
+      let targetStartIso = parseISTInputToUtcIso(`${todayIST}T16:00`)!;
+      if (Date.now() > new Date(targetStartIso).getTime()) {
+        const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const tomorrowIST = formatISTForInput(tomorrow).split("T")[0];
+        targetStartIso = parseISTInputToUtcIso(`${tomorrowIST}T16:00`)!;
       }
-      setExamStartDate(formatLocalDateTime(start));
-      const end = new Date(start.getTime() + durMins * 60000);
-      setExamEndDate(formatLocalDateTime(end));
+      setExamStartDate(formatISTForInput(targetStartIso));
+      const end = new Date(new Date(targetStartIso).getTime() + durMins * 60000);
+      setExamEndDate(formatISTForInput(end));
     } else if (preset === "tomorrow10am") {
-      const start = new Date();
-      start.setDate(start.getDate() + 1);
-      start.setHours(10, 0, 0, 0);
-      setExamStartDate(formatLocalDateTime(start));
-      const end = new Date(start.getTime() + durMins * 60000);
-      setExamEndDate(formatLocalDateTime(end));
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const tomorrowIST = formatISTForInput(tomorrow).split("T")[0];
+      const targetStartIso = parseISTInputToUtcIso(`${tomorrowIST}T10:00`)!;
+      setExamStartDate(formatISTForInput(targetStartIso));
+      const end = new Date(new Date(targetStartIso).getTime() + durMins * 60000);
+      setExamEndDate(formatISTForInput(end));
     } else if (preset === "open30days") {
-      setExamStartDate(formatLocalDateTime(now));
+      setExamStartDate(formatISTForInput(now));
       const end = new Date(now.getTime() + 30 * 24 * 60 * 60000);
-      setExamEndDate(formatLocalDateTime(end));
+      setExamEndDate(formatISTForInput(end));
     }
   };
 
@@ -2127,8 +2133,8 @@ export default function TeacherDashboard() {
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
                         <label className={labelCls}>Start Date & Time</label>
-                        <span className="text-[10px] font-medium text-[#716D67] dark:text-[#A8A29E]">
-                          {typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "Local Time"}
+                        <span className="text-[10px] font-bold text-[#C84B18] dark:text-[#F97316]">
+                          IST (Asia/Kolkata)
                         </span>
                       </div>
                       <input
@@ -2139,15 +2145,15 @@ export default function TeacherDashboard() {
                       />
                       {examStartDate && (
                         <p className="text-[10px] text-[#047857] dark:text-[#10B981] font-medium">
-                          ✓ Starts: {formatLocalizedDate(new Date(examStartDate), { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          ✓ Starts: {formatISTDateTime(parseISTInputToUtcIso(examStartDate))}
                         </p>
                       )}
                     </div>
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
                         <label className={labelCls}>End Date & Time</label>
-                        <span className="text-[10px] font-medium text-[#716D67] dark:text-[#A8A29E]">
-                          {typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "Local Time"}
+                        <span className="text-[10px] font-bold text-[#C84B18] dark:text-[#F97316]">
+                          IST (Asia/Kolkata)
                         </span>
                       </div>
                       <input
@@ -2158,7 +2164,7 @@ export default function TeacherDashboard() {
                       />
                       {examEndDate && (
                         <p className="text-[10px] text-[#047857] dark:text-[#10B981] font-medium">
-                          ✓ Closes: {formatLocalizedDate(new Date(examEndDate), { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          ✓ Closes: {formatISTDateTime(parseISTInputToUtcIso(examEndDate))}
                         </p>
                       )}
                     </div>

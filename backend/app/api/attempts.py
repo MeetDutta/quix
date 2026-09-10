@@ -11,14 +11,20 @@ from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog
 from app.models.candidate import ExamCandidate
 from app.models.user import User, Student
 from app.models.workspace import WorkspaceMember
-from app.schemas.exam import ExamLogin, SubmitExam, ProctorLogCreate
+from app.schemas.exam import ExamLogin, SubmitExam, ProctorLogCreate, ViolationReport
 from app.services.ai_service import AIService
 from app.services.notification_service import create_notification
 from app.config import settings
 from app.utils.security import RoleChecker, get_current_user
 from app.utils.rate_limiter import rate_limit_dependency
+from app.utils.timezone import (
+    now_utc, to_utc_instant, to_iso_utc, to_ist, 
+    format_ist, format_ist_time, format_ist_datetime
+)
+to_naive_utc = to_utc_instant
 
 import asyncio
+
 
 router = APIRouter(prefix="/attempts", tags=["attempts"])
 teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
@@ -92,7 +98,7 @@ class ConnectionManager:
         payload = {
             "event_type": event_type,
             "exam_id": exam_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": to_iso_utc(now_utc()),
             **data
         }
         r = await self._get_redis()
@@ -154,26 +160,10 @@ def get_submission_by_token(token: str, db: Session) -> ExamSubmission:
         raise HTTPException(status_code=401, detail="Exam session not found")
         
     # Check if credentials expired
-    if submission.credential and submission.credential.expires_at and datetime.utcnow() > submission.credential.expires_at:
+    if submission.credential and submission.credential.expires_at and now_utc() > to_utc_instant(submission.credential.expires_at):
         raise HTTPException(status_code=403, detail="Exam credentials expired")
         
     return submission
-
-def to_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
-    if dt is None:
-        return None
-    if dt.tzinfo is not None:
-        from datetime import timezone
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
-    return dt
-
-def to_iso_utc(dt: Optional[datetime]) -> Optional[str]:
-    if not dt:
-        return None
-    from datetime import timezone
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc).isoformat()
-    return dt.astimezone(timezone.utc).isoformat()
 
 @router.get("/exam-status")
 def get_exam_status(exam_code: str, db: Session = Depends(get_db)):
@@ -185,9 +175,9 @@ def get_exam_status(exam_code: str, db: Session = Depends(get_db)):
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found or not published")
     
-    now = datetime.utcnow()
-    exam_start = to_naive_utc(exam.start_time) or (now - timedelta(seconds=10))
-    exam_end = to_naive_utc(exam.end_time) or (exam_start + timedelta(days=30))
+    now = now_utc()
+    exam_start = to_utc_instant(exam.start_time) or (now - timedelta(seconds=10))
+    exam_end = to_utc_instant(exam.end_time) or (exam_start + timedelta(days=30))
     
     if now < exam_start:
         exam_status = "not_started"
@@ -205,6 +195,8 @@ def get_exam_status(exam_code: str, db: Session = Depends(get_db)):
         "status": exam_status,
         "start_time": to_iso_utc(exam_start),
         "end_time": to_iso_utc(exam_end),
+        "start_time_ist": format_ist_datetime(exam_start),
+        "end_time_ist": format_ist_datetime(exam_end),
         "duration_minutes": exam.duration_minutes,
         "server_time": to_iso_utc(now),
         "seconds_until_start": seconds_until_start
@@ -221,12 +213,12 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
         raise HTTPException(status_code=404, detail="Exam not active or invalid code")
         
     # Verify timeframe
-    now = datetime.utcnow()
-    exam_start = to_naive_utc(exam.start_time) or (now - timedelta(seconds=10))
-    exam_end = to_naive_utc(exam.end_time) or (exam_start + timedelta(days=30))
+    now = now_utc()
+    exam_start = to_utc_instant(exam.start_time) or (now - timedelta(seconds=10))
+    exam_end = to_utc_instant(exam.end_time) or (exam_start + timedelta(days=30))
     
     if now < exam_start:
-        raise HTTPException(status_code=400, detail=f"Exam has not started yet. Opens at {to_iso_utc(exam_start)}")
+        raise HTTPException(status_code=400, detail=f"Exam has not started yet. Opens at {format_ist_time(exam_start)}")
     if now > exam_end:
         raise HTTPException(status_code=400, detail="Exam has already ended")
         
@@ -284,7 +276,7 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
                     student_id=student.id,
                     username=cand_username,
                     password=raw_pass,
-                    expires_at=exam.end_time or (datetime.utcnow() + timedelta(days=7))
+                    expires_at=to_utc_instant(exam.end_time) or (now_utc() + timedelta(days=7))
                 )
                 db.add(cred)
                 try:
@@ -348,18 +340,20 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
         if cand and not sub.candidate_id:
             sub.candidate_id = cand.id
         if not sub.deadline_at:
-            sub.deadline_at = min((sub.started_at or now) + timedelta(minutes=exam_duration), allowed_end)
+            sub.deadline_at = min((to_utc_instant(sub.started_at) or now) + timedelta(minutes=exam_duration), allowed_end)
         if not sub.questions_snapshot_json and exam.questions_json:
             sub.questions_snapshot_json = exam.questions_json
         sub.last_seen_at = now
         db.commit()
 
     # If already past deadline, mark auto_submitted immediately
-    if sub.status in ["started", "in_progress", "submitting"] and now >= sub.deadline_at:
+    sub_deadline = to_utc_instant(sub.deadline_at)
+    if sub.status in ["started", "in_progress", "submitting"] and sub_deadline and now >= sub_deadline:
         process_exam_submission(sub, db, auto_submitted=True)
 
     # Issue exam session token
-    token_expire = exam.end_time or (now + timedelta(days=30))
+    end_instant = to_utc_instant(exam.end_time) or (now + timedelta(days=30))
+    token_expire = max(end_instant, now + timedelta(hours=6))
     payload = {"sub": sub.id, "exp": token_expire, "type": "exam_session"}
     token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
@@ -426,10 +420,11 @@ def get_exam_info(
     saved_answers = {k: v for k, v in raw_saved.items() if k != "_meta"} if isinstance(raw_saved, dict) else {}
     
     # Compute authoritative time remaining based on personal deadline
-    now = datetime.utcnow()
+    now = now_utc()
     exam_duration = exam.duration_minutes or 30
-    allowed_end = to_naive_utc(exam.end_time) or (now + timedelta(minutes=exam_duration))
-    deadline = sub.deadline_at or min((sub.started_at or now) + timedelta(minutes=exam_duration), allowed_end)
+    allowed_end = to_utc_instant(exam.end_time) or (now + timedelta(minutes=exam_duration))
+    sub_deadline = to_utc_instant(sub.deadline_at)
+    deadline = sub_deadline or min((to_utc_instant(sub.started_at) or now) + timedelta(minutes=exam_duration), allowed_end)
 
     if sub.status in ["started", "in_progress", "submitting"] and now >= deadline:
         process_exam_submission(sub, db, auto_submitted=True)
@@ -450,6 +445,13 @@ def get_exam_info(
         "settings": settings_dict,
         "saved_answers": saved_answers,
         "time_remaining_seconds": time_remaining,
+        "server_time": to_iso_utc(now),
+        "deadline_at": to_iso_utc(deadline),
+        "deadline_at_ist": format_ist_time(deadline),
+        "start_time": to_iso_utc(exam.start_time),
+        "end_time": to_iso_utc(exam.end_time),
+        "start_time_ist": format_ist_datetime(exam.start_time),
+        "end_time_ist": format_ist_datetime(exam.end_time),
         "is_completed": is_completed,
         "submission_id": sub.id,
         "score": sub.score,
@@ -457,7 +459,7 @@ def get_exam_info(
         "evaluated_answers": evaluated_answers
     }
 
-def process_exam_submission(sub: ExamSubmission, db: Session, auto_submitted: bool = False) -> dict:
+def process_exam_submission(sub: ExamSubmission, db: Session, auto_submitted: bool = False, auto_submit_reason: Optional[str] = None) -> dict:
     """Internal helper to process exam evaluation and submission with live broadcast."""
     exam = sub.exam
     q_source = sub.questions_snapshot_json if sub.questions_snapshot_json else exam.questions_json
@@ -560,8 +562,10 @@ def process_exam_submission(sub: ExamSubmission, db: Session, auto_submitted: bo
     sub.score = max(0.0, total_score) # prevent negative total marks
     sub.percentage = (sub.score / float(exam.total_marks or 1.0)) * 100.0 if exam.total_marks else 0.0
     sub.status = "auto_submitted" if auto_submitted else "submitted"
+    if auto_submitted:
+        sub.auto_submit_reason = auto_submit_reason or sub.auto_submit_reason or "TAB_SWITCH"
     sub.grading_status = "PENDING_MANUAL_REVIEW" if has_pending_manual_review else "COMPLETED"
-    sub.submitted_at = datetime.utcnow()
+    sub.submitted_at = now_utc()
     sub.answers_json = json.dumps(evaluated_responses)
     
     # If simulation, return directly without DB writes
@@ -569,6 +573,7 @@ def process_exam_submission(sub: ExamSubmission, db: Session, auto_submitted: bo
         return {
             "status": sub.status,
             "grading_status": sub.grading_status,
+            "auto_submit_reason": sub.auto_submit_reason,
             "message": "Teacher Preview Simulation evaluated successfully.",
             "submission_id": sub.id,
             "score": round(sub.score, 2),
@@ -606,16 +611,20 @@ def process_exam_submission(sub: ExamSubmission, db: Session, auto_submitted: bo
         loop = asyncio.get_event_loop()
         if loop.is_running():
             broadcast_type = "AUTO_SUBMITTED" if auto_submitted else "SUBMISSION_COMPLETED"
+            violation_count = db.query(func.count(ProctoringLog.id)).filter(ProctoringLog.submission_id == sub.id).scalar() or 0
             asyncio.create_task(manager.broadcast_event(
                 exam_id=sub.exam_id,
                 event_type=broadcast_type,
                 data={
                     "student_name": cand_name,
                     "roll_number": roll_no,
-                    "status": sub.status,
+                    "status": "AUTO_SUBMITTED" if auto_submitted else "SUBMITTED",
+                    "reason": sub.auto_submit_reason or ("TAB_SWITCH" if auto_submitted else "NORMAL"),
+                    "violation_count": violation_count,
                     "grading_status": sub.grading_status,
                     "score": round(sub.score, 2),
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": to_iso_utc(sub.submitted_at or now_utc()),
+                    "submitted_at_ist": format_ist_time(sub.submitted_at) if sub.submitted_at else format_ist_time(now_utc())
                 }
             ))
     except Exception:
@@ -635,6 +644,7 @@ def process_exam_submission(sub: ExamSubmission, db: Session, auto_submitted: bo
     return {
         "status": sub.status,
         "grading_status": sub.grading_status,
+        "auto_submit_reason": sub.auto_submit_reason,
         "message": "Exam submitted. Subjective answers pending instructor manual review." if has_pending_manual_review else "Exam submitted successfully.",
         "submission_id": sub.id,
         "score": round(sub.score, 2),
@@ -667,7 +677,7 @@ def create_teacher_preview_session(
     if not exam:
         raise HTTPException(status_code=404, detail="Assessment not found")
         
-    token_expire = datetime.utcnow() + timedelta(hours=3)
+    token_expire = now_utc() + timedelta(hours=3)
     payload = {
         "sub": f"sim_{exam.id}",
         "exam_id": exam.id,
@@ -762,7 +772,7 @@ def direct_start_for_student(
             student_id=student.id,
             username=cand_username,
             password=str(secrets.randbelow(900000) + 100000),
-            expires_at=exam.end_time or (datetime.utcnow() + timedelta(days=7))
+            expires_at=to_utc_instant(exam.end_time) or (now_utc() + timedelta(days=7))
         )
         db.add(cred)
         try:
@@ -775,9 +785,9 @@ def direct_start_for_student(
                 ExamCredential.student_id == student.id
             ).first()
 
-    now = datetime.utcnow()
+    now = now_utc()
     exam_duration = exam.duration_minutes or 30
-    allowed_end = to_naive_utc(exam.end_time) or (now + timedelta(minutes=exam_duration))
+    allowed_end = to_utc_instant(exam.end_time) or (now + timedelta(minutes=exam_duration))
     deadline = min(now + timedelta(minutes=exam_duration), allowed_end)
 
     sub = None
@@ -812,16 +822,18 @@ def direct_start_for_student(
         if cand and not sub.candidate_id:
             sub.candidate_id = cand.id
         if not sub.deadline_at:
-            sub.deadline_at = min((sub.started_at or now) + timedelta(minutes=exam_duration), allowed_end)
+            sub.deadline_at = min((to_utc_instant(sub.started_at) or now) + timedelta(minutes=exam_duration), allowed_end)
         if not sub.questions_snapshot_json and exam.questions_json:
             sub.questions_snapshot_json = exam.questions_json
         sub.last_seen_at = now
         db.commit()
 
-    if sub.status in ["started", "in_progress", "submitting"] and now >= sub.deadline_at:
+    sub_deadline = to_utc_instant(sub.deadline_at)
+    if sub.status in ["started", "in_progress", "submitting"] and sub_deadline and now >= sub_deadline:
         process_exam_submission(sub, db, auto_submitted=True)
 
-    token_expire = exam.end_time or (now + timedelta(days=30))
+    end_instant = to_utc_instant(exam.end_time) or (now + timedelta(days=30))
+    token_expire = max(end_instant, now + timedelta(hours=6))
     payload = {"sub": sub.id, "exp": token_expire, "type": "exam_session"}
     token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
@@ -851,11 +863,13 @@ def save_progress(
     if sub.status in ["submitted", "auto_submitted", "submitting", "graded"]:
         raise HTTPException(status_code=400, detail="Cannot save progress on submitted exam")
         
-    now = datetime.utcnow()
+    now = now_utc()
     exam = sub.exam
     exam_duration = exam.duration_minutes or 30
-    allowed_end = to_naive_utc(exam.end_time) or (now + timedelta(minutes=exam_duration))
-    deadline = sub.deadline_at or min((sub.started_at or now) + timedelta(minutes=exam_duration), allowed_end)
+    allowed_end = to_utc_instant(exam.end_time) or (now + timedelta(minutes=exam_duration))
+    started_instant = to_utc_instant(sub.started_at) or now
+    sub_deadline = to_utc_instant(sub.deadline_at)
+    deadline = sub_deadline or min(started_instant + timedelta(minutes=exam_duration), allowed_end)
 
     if now >= deadline:
         # Strict deadline enforcement: do not accept late incoming answers! Auto-submit whatever was on record before deadline.
@@ -938,6 +952,197 @@ def save_progress(
         "time_remaining_seconds": max(0, int((deadline - now).total_seconds()))
     }
 
+async def handle_violation_logic(sub: ExamSubmission, violation: ViolationReport, db: Session) -> dict:
+    """
+    Locked EduQuizX tab-switch policy:
+    FIRST TAB SWITCH:
+      - Persist TAB_SWITCH violation
+      - violation_count = 1
+      - DO NOT submit exam
+      - Student remains ACTIVE
+      - Return prominent warning
+    SECOND TAB SWITCH:
+      - Persist TAB_SWITCH violation
+      - violation_count = 2
+      - Immediately AUTO_SUBMIT server-side
+      - Concurrency-safe atomic database state transition
+      - Freeze answers, invalidate exam session, trigger grading exactly once
+      - Broadcast final state to teacher live monitor
+    """
+    server_now = now_utc()
+    
+    # Check if already submitted/auto-submitted/graded
+    if sub.status in ["submitted", "auto_submitted", "graded"]:
+        return {
+            "action": "already_submitted",
+            "status": sub.status,
+            "force_submit": True,
+            "reason": sub.auto_submit_reason or "TAB_SWITCH",
+            "violation_count": sub.tab_switch_count or 0,
+            "message": "Exam already finalized."
+        }
+
+    # Idempotency check: if client_event_id already recorded for this submission
+    if violation.client_event_id:
+        existing_event = db.query(ProctoringLog).filter(
+            ProctoringLog.submission_id == sub.id,
+            ProctoringLog.client_event_id == violation.client_event_id
+        ).first()
+        if existing_event:
+            return {
+                "action": "ignored_duplicate",
+                "status": sub.status,
+                "force_submit": sub.status in ["submitted", "auto_submitted", "graded"],
+                "reason": sub.auto_submit_reason,
+                "violation_count": sub.tab_switch_count or 0,
+                "message": "Duplicate violation event ignored."
+            }
+
+    # Query current count of tab_switch violations for this submission
+    current_tab_switches = db.query(func.count(ProctoringLog.id)).filter(
+        ProctoringLog.submission_id == sub.id,
+        ProctoringLog.event_type == "tab_switch"
+    ).scalar() or 0
+    new_count = current_tab_switches + 1
+
+    # Persist the violation log
+    client_ts = None
+    if violation.occurred_at:
+        try:
+            client_ts = to_utc_instant(violation.occurred_at)
+        except Exception:
+            pass
+
+    details_str = json.dumps(violation.metadata) if violation.metadata else f"Tab switch violation #{new_count} detected via {violation.source or 'browser_visibility'}"
+
+    log = ProctoringLog(
+        submission_id=sub.id,
+        candidate_id=sub.candidate_id,
+        exam_id=sub.exam_id,
+        event_type="tab_switch",
+        event_details=details_str,
+        client_event_id=violation.client_event_id,
+        source=violation.source or "browser_visibility",
+        client_timestamp=client_ts,
+        timestamp=server_now
+    )
+    db.add(log)
+    sub.tab_switch_count = new_count
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        sub = db.query(ExamSubmission).filter(ExamSubmission.id == sub.id).first()
+        return {
+            "action": "ignored_duplicate",
+            "status": sub.status if sub else "started",
+            "force_submit": sub.status in ["submitted", "auto_submitted", "graded"] if sub else False,
+            "reason": sub.auto_submit_reason if sub else None,
+            "violation_count": sub.tab_switch_count if sub else 0,
+            "message": "Duplicate violation event ignored."
+        }
+
+    # Resolve candidate details for live broadcast
+    cand_name = "Candidate"
+    roll_no = ""
+    if sub.candidate:
+        cand_name = sub.candidate.name_snapshot
+        roll_no = sub.candidate.roll_number_snapshot or ""
+    elif sub.credential and sub.credential.student and sub.credential.student.user:
+        cand_name = sub.credential.student.user.full_name
+        roll_no = sub.credential.student.roll_number or ""
+
+    if new_count == 1:
+        # Policy: FIRST TAB SWITCH -> Warning only, remain ACTIVE
+        await manager.broadcast_proctor_alert(
+            exam_id=sub.exam_id,
+            message={
+                "student_name": cand_name,
+                "roll_number": roll_no,
+                "event_type": "tab_switch",
+                "event_details": "Warning: Tab switch #1 recorded. Allowed switches remaining: 0",
+                "violation_count": 1,
+                "timestamp": to_iso_utc(server_now)
+            }
+        )
+        return {
+            "action": "warn",
+            "violation_count": 1,
+            "warning": "Warning: Tab switching is not allowed. One more tab switch will automatically submit your exam.",
+            "status": sub.status,
+            "allowed_switches_remaining": 0
+        }
+    else:
+        # Policy: SECOND TAB SWITCH -> Immediately AUTO_SUBMIT server-side
+        # Atomic DB state transition row lock
+        rows_updated = db.query(ExamSubmission).filter(
+            ExamSubmission.id == sub.id,
+            ExamSubmission.status.in_(["started", "in_progress", "submitting"])
+        ).update({
+            "status": "auto_submitted",
+            "submitted_at": server_now,
+            "auto_submit_reason": "TAB_SWITCH"
+        }, synchronize_session=False)
+        db.commit()
+
+        if rows_updated > 0:
+            eval_res = process_exam_submission(sub, db, auto_submitted=True, auto_submit_reason="TAB_SWITCH")
+            return {
+                "action": "auto_submit",
+                "violation_count": new_count,
+                "status": "auto_submitted",
+                "force_submit": True,
+                "reason": "TAB_SWITCH",
+                "message": "Exam automatically submitted due to tab switching.",
+                "result": eval_res
+            }
+        else:
+            # Already transitioned concurrently
+            db.rollback()
+            sub = db.query(ExamSubmission).filter(ExamSubmission.id == sub.id).first()
+            evaluated = json.loads(sub.answers_json) if (sub and sub.answers_json) else {}
+            return {
+                "action": "auto_submit",
+                "violation_count": new_count,
+                "status": sub.status if sub else "auto_submitted",
+                "force_submit": True,
+                "reason": (sub.auto_submit_reason if sub else None) or "TAB_SWITCH",
+                "message": "Exam automatically submitted due to tab switching.",
+                "result": {
+                    "status": sub.status if sub else "auto_submitted",
+                    "score": sub.score if sub else 0.0,
+                    "percentage": sub.percentage if sub else 0.0,
+                    "evaluated_answers": evaluated
+                }
+            }
+
+@router.post("/violation")
+async def report_violation_token(
+    violation: ViolationReport,
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Server-authoritative violation enforcement endpoint."""
+    actual_token = resolve_exam_token(token, authorization)
+    sub = get_submission_by_token(actual_token, db)
+    return await handle_violation_logic(sub, violation, db)
+
+@router.post("/{submission_id}/violation")
+async def report_violation_path(
+    submission_id: str,
+    violation: ViolationReport,
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Server-authoritative violation enforcement endpoint by submission ID or token."""
+    sub = db.query(ExamSubmission).filter(ExamSubmission.id == submission_id).first()
+    if not sub:
+        actual_token = resolve_exam_token(token, authorization)
+        sub = get_submission_by_token(actual_token, db)
+    return await handle_violation_logic(sub, violation, db)
+
 @router.post("/heartbeat")
 async def student_heartbeat(
     token: Optional[str] = Query(None),
@@ -946,30 +1151,57 @@ async def student_heartbeat(
 ):
     """
     Receives periodic presence heartbeats (every 10-15s) from student test room.
-    Enforces server-authoritative exam deadline and records last_seen_at.
+    Enforces server-authoritative exam deadline, tab-switch policy state sync, and records last_seen_at.
     """
     actual_token = resolve_exam_token(token, authorization)
     sub = get_submission_by_token(actual_token, db)
-    now = datetime.utcnow()
+    now = now_utc()
 
     if sub.status in ["submitted", "auto_submitted", "graded"]:
         return {
             "status": sub.status,
-            "action": "redirect_completed",
+            "action": "force_submit" if sub.status == "auto_submitted" else "redirect_completed",
+            "force_submit": True,
+            "reason": (sub.auto_submit_reason or "tab_switch") if sub.status == "auto_submitted" else "completed",
+            "time_remaining_seconds": 0
+        }
+
+    # Tab-switch policy enforcement check during heartbeat
+    if (sub.tab_switch_count or 0) >= 2:
+        rows_updated = db.query(ExamSubmission).filter(
+            ExamSubmission.id == sub.id,
+            ExamSubmission.status.in_(["started", "in_progress", "submitting"])
+        ).update({
+            "status": "auto_submitted",
+            "submitted_at": now,
+            "auto_submit_reason": "TAB_SWITCH"
+        }, synchronize_session=False)
+        db.commit()
+        if rows_updated > 0:
+            process_exam_submission(sub, db, auto_submitted=True, auto_submit_reason="TAB_SWITCH")
+        return {
+            "status": "auto_submitted",
+            "action": "force_submit",
+            "force_submit": True,
+            "reason": "tab_switch",
             "time_remaining_seconds": 0
         }
 
     exam = sub.exam
     exam_duration = exam.duration_minutes or 30
-    allowed_end = to_naive_utc(exam.end_time) or (now + timedelta(minutes=exam_duration))
-    deadline = sub.deadline_at or min((sub.started_at or now) + timedelta(minutes=exam_duration), allowed_end)
+    allowed_end = to_utc_instant(exam.end_time) or (now + timedelta(minutes=exam_duration))
+    started_instant = to_utc_instant(sub.started_at) or now
+    sub_deadline = to_utc_instant(sub.deadline_at)
+    deadline = sub_deadline or min(started_instant + timedelta(minutes=exam_duration), allowed_end)
 
     if now >= deadline:
         if sub.status not in ["submitted", "auto_submitted", "submitting", "graded"]:
-            process_exam_submission(sub, db, auto_submitted=True)
+            process_exam_submission(sub, db, auto_submitted=True, auto_submit_reason="TIME_EXPIRED")
         return {
             "status": "auto_submitted",
             "action": "time_expired",
+            "force_submit": True,
+            "reason": "time_expired",
             "time_remaining_seconds": 0
         }
 
@@ -988,13 +1220,28 @@ async def proctor_alert(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
-    """Logs proctoring incidents (tab switches, resizing, dev tools, copy/paste) and broadcasts to teacher live streams."""
+    """Logs proctoring incidents and broadcasts to teacher live streams; delegates tab_switch to policy engine."""
     actual_token = resolve_exam_token(token, authorization)
     sub = get_submission_by_token(actual_token, db)
+    
+    if alert.event_type == "tab_switch":
+        violation_report = ViolationReport(
+            type="TAB_SWITCH",
+            client_event_id=None,
+            occurred_at=to_iso_utc(now_utc()),
+            source="browser_visibility",
+            metadata={"details": alert.event_details}
+        )
+        return await handle_violation_logic(sub, violation_report, db)
+
     log = ProctoringLog(
         submission_id=sub.id,
+        candidate_id=sub.candidate_id,
+        exam_id=sub.exam_id,
         event_type=alert.event_type,
-        event_details=alert.event_details
+        event_details=alert.event_details,
+        source="client_telemetry",
+        timestamp=now_utc()
     )
     db.add(log)
     db.commit()
@@ -1017,7 +1264,7 @@ async def proctor_alert(
             "roll_number": roll_no,
             "event_type": alert.event_type,
             "event_details": alert.event_details,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": to_iso_utc(now_utc())
         }
     )
 
@@ -1093,11 +1340,13 @@ def submit_exam(
                 }
             raise HTTPException(status_code=409, detail="Exam submission currently processing. Please wait.")
 
-    now = datetime.utcnow()
+    now = now_utc()
     exam = sub.exam
     exam_duration = exam.duration_minutes or 30 if exam else 30
-    allowed_end = to_naive_utc(exam.end_time) if exam else None
-    deadline = sub.deadline_at or (to_naive_utc(sub.started_at or now) + timedelta(minutes=exam_duration))
+    allowed_end = to_utc_instant(exam.end_time) if exam else None
+    started_instant = to_utc_instant(sub.started_at) or now
+    sub_deadline = to_utc_instant(sub.deadline_at)
+    deadline = sub_deadline or (started_instant + timedelta(minutes=exam_duration))
     if allowed_end and allowed_end < deadline:
         deadline = allowed_end
 
@@ -1226,7 +1475,7 @@ async def websocket_student_endpoint(websocket: WebSocket, submission_id: str, t
                     "roll_number": roll_no,
                     "event_type": event.get("event_type"),
                     "event_details": event.get("event_details"),
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": to_iso_utc(now_utc())
                 }
             )
     except WebSocketDisconnect:

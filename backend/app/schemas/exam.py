@@ -1,6 +1,7 @@
-from pydantic import BaseModel, ConfigDict, model_validator, field_serializer
+from pydantic import BaseModel, ConfigDict, model_validator, field_serializer, field_validator
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime
+from app.utils.timezone import to_utc_instant, to_iso_utc
 
 class BlueprintSection(BaseModel):
     topic: str
@@ -21,6 +22,11 @@ class ExamCreate(BaseModel):
     student_directory_id: Optional[str] = None
     blueprint: Optional[List[BlueprintSection]] = None
     settings: Optional[Dict[str, Any]] = None # Fullscreen, shuffle, proctor limits
+
+    @field_validator("start_time", "end_time", mode="after")
+    @classmethod
+    def normalize_to_utc(cls, v: datetime) -> datetime:
+        return to_utc_instant(v)
 
 class ExamResponse(BaseModel):
     id: str
@@ -43,11 +49,7 @@ class ExamResponse(BaseModel):
 
     @field_serializer("start_time", "end_time", when_used="json")
     def serialize_datetime(self, dt: Optional[datetime]) -> Optional[str]:
-        if dt is None:
-            return None
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc).isoformat()
-        return dt.astimezone(timezone.utc).isoformat()
+        return to_iso_utc(dt)
 
 
 class CredentialResponse(BaseModel):
@@ -61,11 +63,7 @@ class CredentialResponse(BaseModel):
 
     @field_serializer("expires_at", when_used="json")
     def serialize_expires_at(self, dt: Optional[datetime]) -> Optional[str]:
-        if dt is None:
-            return None
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc).isoformat()
-        return dt.astimezone(timezone.utc).isoformat()
+        return to_iso_utc(dt)
 
 class ExamLogin(BaseModel):
     username: str
@@ -92,6 +90,23 @@ class ProctorLogCreate(BaseModel):
                 data["event_details"] = data["details"]
         return data
 
+class ViolationReport(BaseModel):
+    type: str = "TAB_SWITCH"
+    client_event_id: Optional[str] = None
+    occurred_at: Optional[str] = None
+    source: Optional[str] = "browser_visibility"
+    metadata: Optional[Dict[str, Any]] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_fields(cls, data: Any):
+        if isinstance(data, dict):
+            if "event_type" in data and "type" not in data:
+                data["type"] = data["event_type"]
+            if "event_details" in data and "metadata" not in data:
+                data["metadata"] = {"details": data["event_details"]}
+        return data
+
 class ExamGenerateKBRequest(BaseModel):
     name: str
     subject_id: Optional[str] = "general_101"
@@ -112,6 +127,11 @@ class ExamGenerateKBRequest(BaseModel):
     marks_distribution: Optional[Dict[str, Any]] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
+
+    @field_validator("start_time", "end_time", mode="after")
+    @classmethod
+    def normalize_to_utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return to_utc_instant(v) if v is not None else None
 
 class UpdateQuestionsRequest(BaseModel):
     questions: List[Dict[str, Any]]

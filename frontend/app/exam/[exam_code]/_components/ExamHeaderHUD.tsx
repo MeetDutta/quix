@@ -18,6 +18,7 @@ interface ExamHeaderHUDProps {
   onTogglePalette?: () => void;
   answeredCount?: number;
   totalQuestions?: number;
+  deadlineIST?: string;
 }
 
 export default function ExamHeaderHUD({
@@ -36,6 +37,7 @@ export default function ExamHeaderHUD({
   onTogglePalette,
   answeredCount,
   totalQuestions,
+  deadlineIST,
 }: ExamHeaderHUDProps) {
   const formatTime = (secs: number) => {
     const h = Math.floor(secs / 3600);
@@ -88,8 +90,8 @@ export default function ExamHeaderHUD({
           </div>
         </div>
 
-        {/* Center: High Visibility Timer */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Center: High Visibility Timer & IST Deadline */}
+        <div className="flex flex-col items-center gap-0.5 shrink-0">
           <div
             className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl border flex items-center gap-1.5 sm:gap-2 font-mono font-bold text-xs sm:text-base transition-all ${
               isCriticalTime
@@ -102,6 +104,11 @@ export default function ExamHeaderHUD({
             <Timer className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${isCriticalTime ? "text-rose-600 animate-spin" : isLowTime ? "text-amber-600" : "text-[#C84B18]"}`} />
             <span>{formatTime(timeRemainingSeconds)}</span>
           </div>
+          {deadlineIST && (
+            <span className="text-[9px] sm:text-[10px] text-[#716D67] dark:text-[#A8A29E] font-medium hidden sm:inline">
+              Deadline: <span className="font-semibold text-[#242321] dark:text-[#F5F5F4]">{deadlineIST}</span>
+            </span>
+          )}
         </div>
 
         {/* Right: Tools & Status Controls */}

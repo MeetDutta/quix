@@ -14,20 +14,14 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt
 from app.config import settings
 from app.database import get_db
+from app.utils.timezone import (
+    now_utc, to_utc_instant, to_iso_utc, to_ist, format_ist, 
+    format_ist_datetime, format_ist_time, format_ist_date
+)
 
-def to_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
-    if dt is None:
-        return None
-    if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
-    return dt
+# Alias for backward compatibility within this module
+to_naive_utc = to_utc_instant
 
-def to_iso_utc(dt: Optional[datetime]) -> Optional[str]:
-    if not dt:
-        return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc).isoformat()
-    return dt.astimezone(timezone.utc).isoformat()
 
 from app.models.user import User, Student
 from app.models.document import Document, DocumentChunk
@@ -66,7 +60,7 @@ def snapshot_candidates_for_exam(exam: Exam, directory_id: str, db: Session):
         DirectoryStudent.status == "active"
     ).all()
     
-    expires_at = exam.end_time or (datetime.utcnow() + timedelta(days=30))
+    expires_at = to_utc_instant(exam.end_time) or (now_utc() + timedelta(days=30))
     active_dir_student_ids = set()
 
     for s in students:
@@ -339,12 +333,12 @@ def generate_exam_from_kb(
     get_or_create_subject(db, subj_id)
 
     exam_code = generate_unique_exam_code(db, req.name or "quiz")
-    now = datetime.utcnow()
+    now = now_utc()
     dur = req.duration_minutes or 30
 
     # Schedule bounds validation
-    exam_start = to_naive_utc(req.start_time) if req.start_time else (now - timedelta(seconds=10))
-    exam_end = to_naive_utc(req.end_time) if req.end_time else (exam_start + timedelta(days=30))
+    exam_start = to_utc_instant(req.start_time) if req.start_time else (now - timedelta(seconds=10))
+    exam_end = to_utc_instant(req.end_time) if req.end_time else (exam_start + timedelta(days=30))
     if exam_end <= exam_start:
         exam_end = exam_start + timedelta(days=30)
 
@@ -524,9 +518,9 @@ def create_exam(
     # 3. Create Exam code
     exam_code = generate_unique_exam_code(db, subj.name or "quiz")
     
-    now = datetime.utcnow()
-    c_start = to_naive_utc(exam_in.start_time) if exam_in.start_time else (now - timedelta(seconds=10))
-    c_end = to_naive_utc(exam_in.end_time) if exam_in.end_time else (c_start + timedelta(days=30))
+    now = now_utc()
+    c_start = to_utc_instant(exam_in.start_time) if exam_in.start_time else (now - timedelta(seconds=10))
+    c_end = to_utc_instant(exam_in.end_time) if exam_in.end_time else (c_start + timedelta(days=30))
     if c_end <= c_start:
         c_end = c_start + timedelta(days=30)
     
@@ -596,7 +590,7 @@ def duplicate_exam(
         raise HTTPException(status_code=404, detail="Exam paper not found")
         
     exam_code = generate_unique_exam_code(db, original.name or "quiz")
-    now = datetime.utcnow()
+    now = now_utc()
 
     new_exam = Exam(
         name=f"{original.name} (Copy)",
@@ -642,7 +636,7 @@ def publish_exam(
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
     
-    now = datetime.utcnow()
+    now = now_utc()
     exam.is_published = True
     
     # If start_time was never set, default to immediate active window
@@ -650,8 +644,10 @@ def publish_exam(
         exam.start_time = now - timedelta(seconds=30)
         
     # Ensure end_time is open and valid relative to start_time
-    if not exam.end_time or exam.end_time <= exam.start_time:
-        exam.end_time = exam.start_time + timedelta(days=30)
+    exam_start = to_utc_instant(exam.start_time)
+    exam_end = to_utc_instant(exam.end_time)
+    if not exam_end or exam_end <= exam_start:
+        exam.end_time = exam_start + timedelta(days=30)
         
     db.commit()
     db.refresh(exam)
@@ -767,7 +763,7 @@ def generate_credentials(
         raise HTTPException(status_code=404, detail="Exam not found")
         
     # Safe expires_at calculation (handles None end_time)
-    base_expiry = exam.end_time if exam.end_time else (datetime.utcnow() + timedelta(days=30))
+    base_expiry = to_utc_instant(exam.end_time) if exam.end_time else (now_utc() + timedelta(days=30))
     expires_at = base_expiry + timedelta(hours=1)
     
     # 1. Check if exam already has candidate snapshots
@@ -836,7 +832,9 @@ def generate_credentials(
                 exam_name=exam.name,
                 exam_code=exam.exam_code,
                 username=cand_cred.username,
-                password=cand_cred.password
+                password=cand_cred.password,
+                start_time=exam.start_time,
+                end_time=exam.end_time
             )
 
     # Generate credentials for Legacy Students
@@ -870,7 +868,9 @@ def generate_credentials(
                 exam_name=exam.name,
                 exam_code=exam.exam_code,
                 username=existing.username,
-                password=existing.password
+                password=existing.password,
+                start_time=exam.start_time,
+                end_time=exam.end_time
             )
 
     db.commit()
@@ -952,7 +952,9 @@ def resend_credentials_email(
                 exam_name=exam.name,
                 exam_code=exam.exam_code,
                 username=cred.username,
-                password=cred.password
+                password=cred.password,
+                start_time=exam.start_time,
+                end_time=exam.end_time
             )
             dispatched_count += 1
             
@@ -1029,7 +1031,7 @@ def export_credentials_csv(
             s_roll,
             c.username,
             c.password,
-            c.expires_at.strftime("%Y-%m-%d %H:%M:%S") if c.expires_at else ""
+            format_ist(c.expires_at) if c.expires_at else ""
         ])
         
     output.seek(0)
@@ -1058,19 +1060,21 @@ def end_exam_early(
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
         
-    exam.end_time = datetime.utcnow()
+    now = now_utc()
+    exam.end_time = now
     
     # Auto-expire credentials
     db.query(ExamCredential).filter(
         ExamCredential.exam_id == exam_id
-    ).update({"expires_at": datetime.utcnow()}, synchronize_session=False)
+    ).update({"expires_at": now}, synchronize_session=False)
     
     db.commit()
     db.refresh(exam)
     return {
-        "message": f"Assessment '{exam.name}' has been ended early.",
+        "message": f"Assessment '{exam.name}' has been ended early at {format_ist_time(now)}.",
         "exam_id": exam.id,
-        "end_time": to_iso_utc(exam.end_time)
+        "end_time": to_iso_utc(exam.end_time),
+        "ended_at_ist": format_ist_datetime(now)
     }
 
 @router.delete("/{exam_id}")
@@ -1576,7 +1580,7 @@ def get_exam_live_monitor(
             total_questions = 0
 
     candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam_id).all()
-    now = datetime.utcnow()
+    now = now_utc()
     
     # 1. Batch query proctoring log counts to avoid N+1 queries
     proctor_counts = dict(
@@ -1611,7 +1615,7 @@ def get_exam_live_monitor(
         submitted_at = None
 
         if sub:
-            started_at = sub.started_at.isoformat() if sub.started_at else None
+            started_at = to_iso_utc(sub.started_at)
             score = sub.score
 
             if sub.answers_json:
@@ -1622,8 +1626,8 @@ def get_exam_live_monitor(
                     answered_count = 0
 
             # Auto-submit expired sessions on live sweep
-            effective_deadline = to_naive_utc(sub.deadline_at) or ((to_naive_utc(sub.started_at) or now) + timedelta(minutes=exam.duration_minutes))
-            exam_end_dt = to_naive_utc(exam.end_time)
+            effective_deadline = to_utc_instant(sub.deadline_at) or ((to_utc_instant(sub.started_at) or now) + timedelta(minutes=exam.duration_minutes))
+            exam_end_dt = to_utc_instant(exam.end_time)
             if exam_end_dt and exam_end_dt < effective_deadline:
                 effective_deadline = exam_end_dt
 
@@ -1633,13 +1637,13 @@ def get_exam_live_monitor(
                 db.commit()
 
             if sub.status in ["submitted", "auto_submitted", "graded"]:
-                submission_status = "submitted"
+                submission_status = "auto_submitted" if sub.status == "auto_submitted" else "submitted"
                 connection_status = "completed"
-                submitted_at = sub.submitted_at.isoformat() if sub.submitted_at else None
+                submitted_at = to_iso_utc(sub.submitted_at)
                 submitted_count += 1
             else:
                 submission_status = "in_progress"
-                last_seen = sub.last_seen_at or sub.started_at
+                last_seen = to_utc_instant(sub.last_seen_at) or to_utc_instant(sub.started_at)
                 diff_sec = (now - last_seen).total_seconds() if last_seen else 999.0
 
                 if diff_sec < 30:
@@ -1666,13 +1670,20 @@ def get_exam_live_monitor(
             "roll_number": cand.roll_number_snapshot or "N/A",
             "username": username,
             "status": submission_status,
+            "raw_status": sub.status if sub else "not_started",
+            "auto_submit_reason": sub.auto_submit_reason if sub else None,
+            "tab_switch_count": sub.tab_switch_count if sub else 0,
             "connection_status": connection_status,
             "answered_count": answered_count,
             "total_questions": total_questions,
             "proctor_flags_count": proctor_flags_count,
             "score": score,
             "started_at": started_at,
-            "submitted_at": submitted_at
+            "started_at_ist": format_ist_time(sub.started_at) if (sub and sub.started_at) else None,
+            "submitted_at": submitted_at,
+            "submitted_at_ist": format_ist_time(sub.submitted_at) if (sub and sub.submitted_at) else None,
+            "last_seen_at": to_iso_utc(sub.last_seen_at) if (sub and sub.last_seen_at) else None,
+            "last_seen_at_ist": format_ist_time(sub.last_seen_at) if (sub and sub.last_seen_at) else None
         })
 
     return {
@@ -1683,6 +1694,8 @@ def get_exam_live_monitor(
             "duration_minutes": exam.duration_minutes,
             "start_time": to_iso_utc(exam.start_time),
             "end_time": to_iso_utc(exam.end_time),
+            "start_time_ist": format_ist_datetime(exam.start_time),
+            "end_time_ist": format_ist_datetime(exam.end_time),
             "is_published": exam.is_published,
             "total_questions": total_questions
         },
@@ -1690,12 +1703,18 @@ def get_exam_live_monitor(
             "total_assigned": len(candidates_list),
             "logged_in": active_in_room_count,
             "active_in_room": active_in_room_count,
+            "active_count": active_in_room_count,
             "in_progress": answering_now_count,
             "answering_now": answering_now_count,
+            "answering_now_count": answering_now_count,
             "submitted": submitted_count,
+            "submitted_count": submitted_count,
             "disconnected": disconnected_count,
-            "not_started": not_started_count
+            "not_started": not_started_count,
+            "not_started_count": not_started_count
         },
+        "server_time": to_iso_utc(now),
+        "server_time_ist": format_ist_datetime(now),
         "candidates": candidates_list
     }
 
@@ -1722,7 +1741,8 @@ def extend_exam_time(
     if payload.extra_minutes < 1 or payload.extra_minutes > 180:
         raise HTTPException(status_code=400, detail="Extra minutes must be between 1 and 180")
 
-    exam_end = to_naive_utc(exam.end_time) or datetime.utcnow()
+    now = now_utc()
+    exam_end = to_utc_instant(exam.end_time) or now
     exam.end_time = exam_end + timedelta(minutes=payload.extra_minutes)
     exam.duration_minutes = (exam.duration_minutes or 30) + payload.extra_minutes
     
@@ -1730,7 +1750,7 @@ def extend_exam_time(
     creds = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).all()
     for c in creds:
         if c.expires_at:
-            c.expires_at = to_naive_utc(c.expires_at) + timedelta(minutes=payload.extra_minutes)
+            c.expires_at = to_utc_instant(c.expires_at) + timedelta(minutes=payload.extra_minutes)
     
     # Extend deadline_at for all active/in-progress student submissions
     active_subs = db.query(ExamSubmission).filter(
@@ -1739,13 +1759,14 @@ def extend_exam_time(
     ).all()
     for sub in active_subs:
         if sub.deadline_at:
-            sub.deadline_at = to_naive_utc(sub.deadline_at) + timedelta(minutes=payload.extra_minutes)
+            sub.deadline_at = to_utc_instant(sub.deadline_at) + timedelta(minutes=payload.extra_minutes)
     
     db.commit()
     db.refresh(exam)
     return {
         "message": f"Successfully extended exam by {payload.extra_minutes} minutes.",
         "new_end_time": to_iso_utc(exam.end_time),
+        "new_end_time_ist": format_ist_datetime(exam.end_time),
         "duration_minutes": exam.duration_minutes
     }
 
@@ -1766,7 +1787,7 @@ def clone_exam(
     import random
     clean_name = "".join(c for c in original.name.lower() if c.isalnum())[:5]
     new_code = f"ex-{clean_name}-{random.randint(1000, 9999)}"
-    now = datetime.utcnow()
+    now = now_utc()
 
     cloned = Exam(
         name=f"[Clone] {original.name}",

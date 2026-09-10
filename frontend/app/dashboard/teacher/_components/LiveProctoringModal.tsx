@@ -9,6 +9,7 @@ import {
 import { API_V1, apiFetch, getWebSocketUrl } from "../../../../lib/api";
 import { useAuthStore } from "../../../../store/authStore";
 import { useToast } from "../../../../components/Toast";
+import { formatISTTime } from "../../../../lib/dateUtils";
 
 interface LiveProctoringModalProps {
   examId?: string;
@@ -124,12 +125,38 @@ export default function LiveProctoringModal({
   });
 
   const renderStatusBadge = (c: any) => {
-    if (c.status === "submitted" || c.status === "auto_submitted") {
+    if (c.status === "auto_submitted" || c.raw_status === "auto_submitted") {
+      const reasonDisplay = c.auto_submit_reason ? c.auto_submit_reason.replace("_", " ").toUpperCase() : "TAB SWITCH";
       return (
-        <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
-          <CheckCircle2 className="h-3 w-3" />
-          <span>{c.status === "auto_submitted" ? "Auto-Submitted" : "Submitted"}</span>
-        </span>
+        <div className="flex flex-col gap-0.5 shrink-0">
+          <span className="px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-extrabold text-[10px] flex items-center gap-1 shrink-0 uppercase tracking-wide">
+            <AlertOctagon className="h-3 w-3" />
+            <span>AUTO-SUBMITTED</span>
+          </span>
+          <span className="text-[9px] font-bold text-rose-600 dark:text-rose-400">
+            Reason: {reasonDisplay}
+          </span>
+          {c.submitted_at_ist && (
+            <span className="text-[9px] text-[#716D67] dark:text-[#A8A29E] font-mono">
+              {c.submitted_at_ist} IST
+            </span>
+          )}
+        </div>
+      );
+    }
+    if (c.status === "submitted" || c.raw_status === "submitted") {
+      return (
+        <div className="flex flex-col gap-0.5 shrink-0">
+          <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
+            <CheckCircle2 className="h-3 w-3" />
+            <span>Submitted</span>
+          </span>
+          {c.submitted_at_ist && (
+            <span className="text-[9px] text-[#716D67] dark:text-[#A8A29E] font-mono">
+              {c.submitted_at_ist} IST
+            </span>
+          )}
+        </div>
       );
     }
     if (c.status === "in_progress") {
@@ -326,7 +353,7 @@ export default function LiveProctoringModal({
                       <span className="text-[#716D67] truncate max-w-[120px] sm:max-w-[240px]">{alt.event_details}</span>
                     </div>
                     <span className="text-[10px] text-[#716D67] font-mono shrink-0">
-                      {new Date(alt.timestamp).toLocaleTimeString()}
+                      {formatISTTime(alt.timestamp)}
                     </span>
                   </div>
                 ))}
