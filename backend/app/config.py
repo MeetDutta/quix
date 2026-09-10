@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     # Database (workspace root quiz.db)
     DATABASE_URL: str = f"sqlite:///{os.path.join(ROOT_DIR, 'quiz.db')}"
     
+    # Redis Pub/Sub (Required for Multi-Worker WebSocket Sync in Production)
+    REDIS_URL: Optional[str] = None
+    
     # AI Engine
     GEMINI_API_KEY: str = ""
     
@@ -25,7 +28,8 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     
-    # Uploads
+    # Storage & Uploads
+    STORAGE_PATH: Optional[str] = None
     UPLOAD_DIR: str = os.path.join(BASE_DIR, "uploads")
     KB_UPLOADS_DIR: str = os.path.join(BASE_DIR, "uploads", "kb_documents")
     
@@ -33,7 +37,7 @@ class Settings(BaseSettings):
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USER: str = "aegeusexams@gmail.com"
-    SMTP_PASSWORD: str = "bpofgsqqgmbectsb"
+    SMTP_PASSWORD: str = ""
     EMAILS_FROM_EMAIL: str = "aegeusexams@gmail.com"
     EMAILS_FROM_NAME: str = "EduQuizX Examination System"
     
@@ -54,6 +58,11 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+
+# Reconcile dynamic STORAGE_PATH if provided by Render / Cloud mount
+if settings.STORAGE_PATH:
+    settings.UPLOAD_DIR = settings.STORAGE_PATH
+    settings.KB_UPLOADS_DIR = os.path.join(settings.STORAGE_PATH, "kb_documents")
 
 # Create upload directories if not exist
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)

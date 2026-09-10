@@ -45,6 +45,8 @@ def get_sqlite_path():
     return "sqlite:///quiz.db"
 
 if db_url.startswith("sqlite") or not db_url:
+    if settings.ENVIRONMENT == "production":
+        raise RuntimeError("FATAL: DATABASE_URL must point to a PostgreSQL database in production. SQLite is strictly prohibited.")
     sqlite_path = get_sqlite_path() if not db_url else db_url
     engine = create_sqlite_engine(sqlite_path)
 else:
@@ -63,7 +65,9 @@ else:
         print(f"✅ [Database] Connected successfully to remote PostgreSQL ({host_preview})")
         engine = test_engine
     except Exception as e:
-        print(f"[Database Notice] Remote PostgreSQL unreachable: {e}. Gracefully falling back to persistent SQLite at {get_sqlite_path()}.")
+        if settings.ENVIRONMENT == "production":
+            raise RuntimeError(f"FATAL: Production database connection failed: {e}. SQLite fallback is prohibited in production.")
+        print(f"[Database Notice] Remote PostgreSQL unreachable: {e}. Gracefully falling back to persistent SQLite at {get_sqlite_path()} for local development.")
         engine = create_sqlite_engine(get_sqlite_path())
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, ForeignKey, Integer, Float, Text, Boolean, DateTime
+from sqlalchemy import Column, String, ForeignKey, Integer, Float, Text, Boolean, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.models.base import TimeStampedModel
@@ -19,13 +19,14 @@ class Exam(TimeStampedModel):
     passing_marks = Column(Integer, nullable=False)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
+    exam_code = Column(String(50), unique=True, index=True, nullable=False)
     is_published = Column(Boolean, default=False)
     is_result_published = Column(Boolean, default=False)
-    exam_code = Column(String(100), unique=True, index=True, nullable=False) # For isolated portal link
-    
-    blueprint_json = Column(Text, nullable=True) # JSON config for paper builder
-    questions_json = Column(Text, nullable=True) # JSON list of question objects
-    settings_json = Column(Text, nullable=True)  # JSON for fullscreen, shuffle, calculators, etc.
+    access_mode = Column(String(50), default="ENROLLED_ONLY", nullable=False) # "ENROLLED_ONLY", "OPEN_REGISTRATION"
+    blueprint_json = Column(Text, nullable=True)
+    questions_json = Column(Text, nullable=True)
+    settings_json = Column(Text, nullable=True)
+    is_deleted = Column(Boolean, default=False)
     
     subject = relationship("Subject", back_populates="exams")
     workspace = relationship("Workspace", back_populates="exams")
@@ -41,15 +42,20 @@ class Exam(TimeStampedModel):
 
 class ExamCredential(TimeStampedModel):
     __tablename__ = "exam_credentials"
+    __table_args__ = (
+        UniqueConstraint("exam_id", "candidate_id", name="uq_exam_credential_candidate"),
+    )
     
     exam_id = Column(String(36), ForeignKey("exams.id"), nullable=False)
-    student_id = Column(String(36), ForeignKey("students.id"), nullable=True) # Optional association with student record
+    candidate_id = Column(String(36), ForeignKey("exam_candidates.id", ondelete="CASCADE"), nullable=True, index=True)
+    student_id = Column(String(36), ForeignKey("students.id"), nullable=True) # Optional association with legacy student record
     username = Column(String(100), unique=True, index=True, nullable=False)
     password = Column(String(100), nullable=False)
     is_used = Column(Boolean, default=False)
     expires_at = Column(DateTime, nullable=False)
     
     exam = relationship("Exam", back_populates="credentials")
+    candidate = relationship("ExamCandidate", back_populates="credential")
     student = relationship("Student")
     submission = relationship("ExamSubmission", back_populates="credential", uselist=False, cascade="all, delete-orphan")
 
@@ -57,16 +63,23 @@ class ExamSubmission(TimeStampedModel):
     __tablename__ = "exam_submissions"
     
     exam_id = Column(String(36), ForeignKey("exams.id"), nullable=False)
+    candidate_id = Column(String(36), ForeignKey("exam_candidates.id", ondelete="CASCADE"), nullable=True, index=True)
     credential_id = Column(String(36), ForeignKey("exam_credentials.id"), unique=True, nullable=False)
     answers_json = Column(Text, nullable=True) # JSON of student answers
+    questions_snapshot_json = Column(Text, nullable=True) # Immutable snapshot of questions at attempt start
+    answer_version = Column(Integer, default=0, nullable=False) # Server-controlled monotonic autosave version
     score = Column(Float, default=0.0)
     percentage = Column(Float, default=0.0)
-    status = Column(String(50), default="started") # "started", "submitted", "auto_submitted", "terminated"
+    status = Column(String(50), default="started") # "started", "submitting", "submitted", "auto_submitted", "graded", "terminated"
+    grading_status = Column(String(50), default="COMPLETED", nullable=False) # "COMPLETED", "PENDING_MANUAL_REVIEW"
     ai_feedback = Column(Text, nullable=True)
     started_at = Column(DateTime, default=datetime.utcnow)
+    deadline_at = Column(DateTime, nullable=True)
+    last_seen_at = Column(DateTime, default=datetime.utcnow, nullable=True)
     submitted_at = Column(DateTime, nullable=True)
     
     exam = relationship("Exam", back_populates="submissions")
+    candidate = relationship("ExamCandidate", back_populates="submission")
     credential = relationship("ExamCredential", back_populates="submission")
     proctoring_logs = relationship("ProctoringLog", back_populates="submission", cascade="all, delete-orphan")
 

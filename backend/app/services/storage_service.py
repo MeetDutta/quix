@@ -61,14 +61,24 @@ class StorageService:
 
         return safe_name, ext
 
-    def save_kb_document(self, subject_id: Optional[str], filename: str, content: bytes) -> str:
+    def save_kb_document(
+        self, 
+        subject_id: Optional[str], 
+        filename: str, 
+        content: bytes,
+        workspace_id: Optional[str] = None,
+        document_id: Optional[str] = None
+    ) -> str:
         """
-        Saves document content to the isolated storage path and returns the resolved file path.
+        Saves document content to an isolated storage path:
+        base_storage_dir/kb_documents/{workspace_id}/{document_id}/{safe_name}
+        guaranteeing no cross-workspace or same-named file collisions.
         """
         safe_name, _ = self.validate_file(filename, content)
         
-        subject_folder = subject_id.replace(" ", "_").lower() if subject_id else "general"
-        target_dir = os.path.join(self.base_storage_dir, "kb_documents", subject_folder)
+        ws_folder = str(workspace_id or "default")
+        doc_folder = str(document_id or hashlib.sha256(content).hexdigest()[:16])
+        target_dir = os.path.join(self.base_storage_dir, "kb_documents", ws_folder, doc_folder)
         os.makedirs(target_dir, exist_ok=True)
         
         file_path = os.path.join(target_dir, safe_name)

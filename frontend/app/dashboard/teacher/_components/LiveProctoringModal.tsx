@@ -123,6 +123,45 @@ export default function LiveProctoringModal({
     );
   });
 
+  const renderStatusBadge = (c: any) => {
+    if (c.status === "submitted" || c.status === "auto_submitted") {
+      return (
+        <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
+          <CheckCircle2 className="h-3 w-3" />
+          <span>{c.status === "auto_submitted" ? "Auto-Submitted" : "Submitted"}</span>
+        </span>
+      );
+    }
+    if (c.status === "in_progress") {
+      if (c.connection_status === "online") {
+        return (
+          <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span>Answering Now</span>
+          </span>
+        );
+      }
+      if (c.connection_status === "disconnected") {
+        return (
+          <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
+            <Clock className="h-3 w-3 text-amber-600" />
+            <span>Disconnected</span>
+          </span>
+        );
+      }
+      return (
+        <span className="px-2 py-0.5 rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
+          <span>Offline</span>
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 font-medium text-[10px] shrink-0">
+        Not Started
+      </span>
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 animate-fadeIn">
       <div className="bg-white dark:bg-[#171615] border border-[#E5E0D8] dark:border-[#292524] rounded-2xl max-w-4xl w-full p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 max-h-[92dvh] flex flex-col">
@@ -227,7 +266,7 @@ export default function LiveProctoringModal({
 
           <div className="bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 rounded-xl p-3 text-center">
             <div className="text-xl font-black text-blue-600 dark:text-blue-400">
-              {telemetry?.summary?.logged_in || 0}
+              {telemetry?.summary?.active_in_room ?? telemetry?.summary?.logged_in ?? 0}
             </div>
             <div className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider">
               Active In Room
@@ -236,7 +275,7 @@ export default function LiveProctoringModal({
 
           <div className="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-xl p-3 text-center">
             <div className="text-xl font-black text-amber-600 dark:text-amber-400">
-              {telemetry?.summary?.in_progress || 0}
+              {telemetry?.summary?.answering_now ?? telemetry?.summary?.in_progress ?? 0}
             </div>
             <div className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider">
               Answering Now
@@ -328,34 +367,23 @@ export default function LiveProctoringModal({
                 {filteredCandidates.map((c: any) => {
                   const progressPct = c.total_questions > 0 ? (c.answered_count / c.total_questions) * 100 : 0;
                   return (
-                    <div key={c.credential_id} className="p-3.5 space-y-2.5">
+                    <div key={c.candidate_id || c.credential_id} className="p-3.5 space-y-2.5">
                       {/* Candidate Name, Testing Dot & Status Badge */}
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="font-bold text-xs text-[#242321] dark:text-[#F5F5F4] flex items-center gap-1.5 truncate">
                             <span className="truncate">{c.name}</span>
-                            {c.status === "in_progress" && (
-                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                            {c.status === "in_progress" && c.connection_status === "online" && (
+                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" title="Online" />
+                            )}
+                            {c.status === "in_progress" && c.connection_status === "disconnected" && (
+                              <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" title="Disconnected" />
                             )}
                           </div>
                           <div className="text-[10px] text-[#716D67] truncate">{c.email}</div>
                         </div>
 
-                        {c.status === "submitted" ? (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
-                            <CheckCircle2 className="h-3 w-3" />
-                            <span>Submitted</span>
-                          </span>
-                        ) : c.status === "in_progress" ? (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold text-[10px] flex items-center gap-1 shrink-0">
-                            <Radio className="h-3 w-3 animate-pulse" />
-                            <span>Testing Now</span>
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 font-medium text-[10px] shrink-0">
-                            Not Started
-                          </span>
-                        )}
+                        {renderStatusBadge(c)}
                       </div>
 
                       {/* Metadata specs: Username, Roll, Proctor Flags, Score */}
@@ -434,12 +462,15 @@ export default function LiveProctoringModal({
                     {filteredCandidates.map((c: any) => {
                       const progressPct = c.total_questions > 0 ? (c.answered_count / c.total_questions) * 100 : 0;
                       return (
-                        <tr key={c.credential_id} className="hover:bg-[#F7F4EF]/60 dark:hover:bg-[#1D1B19]/50 transition-colors">
+                        <tr key={c.candidate_id || c.credential_id} className="hover:bg-[#F7F4EF]/60 dark:hover:bg-[#1D1B19]/50 transition-colors">
                           <td className="py-3 px-4">
                             <div className="font-bold text-[#242321] dark:text-[#F5F5F4] flex items-center gap-1.5">
                               <span>{c.name}</span>
-                              {c.status === "in_progress" && (
-                                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                              {c.status === "in_progress" && c.connection_status === "online" && (
+                                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" title="Online" />
+                              )}
+                              {c.status === "in_progress" && c.connection_status === "disconnected" && (
+                                <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" title="Disconnected" />
                               )}
                             </div>
                             <div className="text-[11px] text-[#716D67]">{c.email}</div>
@@ -451,21 +482,7 @@ export default function LiveProctoringModal({
                           </td>
 
                           <td className="py-3 px-4">
-                            {c.status === "submitted" ? (
-                              <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1 w-fit">
-                                <CheckCircle2 className="h-3 w-3" />
-                                <span>Submitted</span>
-                              </span>
-                            ) : c.status === "in_progress" ? (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold text-[10px] flex items-center gap-1 w-fit">
-                                <Radio className="h-3 w-3 animate-pulse" />
-                                <span>Testing Now</span>
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 font-medium text-[10px]">
-                                Not Started
-                              </span>
-                            )}
+                            {renderStatusBadge(c)}
                           </td>
 
                           <td className="py-3 px-4">

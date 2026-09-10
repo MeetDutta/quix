@@ -11,6 +11,7 @@ interface ExamState {
   setExamSession: (token: string, name: string, duration: number, questions: any[], savedAnswers?: Record<string, any>, serverTimeRemaining?: number) => void;
   updateAnswer: (questionId: string, answer: any) => void;
   decrementTime: () => void;
+  setTimeRemaining: (seconds: number) => void;
   incrementProctorEvents: () => void;
   clearExamSession: () => void;
 }
@@ -67,6 +68,10 @@ export const useExamStore = create<ExamState>((set) => ({
     set((state) => ({
       timeRemainingSeconds: Math.max(0, state.timeRemainingSeconds - 1)
     }));
+  },
+
+  setTimeRemaining: (seconds: number) => {
+    set({ timeRemainingSeconds: Math.max(0, seconds) });
   },
   
   incrementProctorEvents: () => {

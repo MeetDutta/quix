@@ -70,8 +70,14 @@ _IP_REGEX = re.compile(r"^[0-9a-fA-F:.]+$")
 def extract_client_key(request: Request) -> str:
     """
     Safely extracts client identifier for rate limiting.
-    Prevents key bypass through malformed, empty, or spoofed headers.
+    If a session token is present (e.g. exam submission/progress), uses the token
+    to rate limit per student session rather than choking entire classroom NATs.
     """
+    token = request.query_params.get("token")
+    if token:
+        token_hash = hashlib.sha256(token.encode()).hexdigest()[:16]
+        return f"session_{token_hash}:{request.url.path}"
+
     ip = None
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:

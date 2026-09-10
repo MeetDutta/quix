@@ -4,7 +4,7 @@ import random
 import secrets
 import csv
 import io
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -56,8 +56,9 @@ ai_service = AIService()
 
 def snapshot_candidates_for_exam(exam: Exam, directory_id: str, db: Session):
     """
-    Snapshots all students from the specified StudentDirectory into ExamCandidate records
-    and prepares corresponding ExamCredentials.
+    Idempotently synchronizes candidates from StudentDirectory into ExamCandidate records
+    and ensures each candidate has exactly one deterministic ExamCredential linked via candidate_id.
+    Never creates duplicates or replaces passwords on repeated publishing.
     """
     students = db.query(DirectoryStudent).filter(
         DirectoryStudent.directory_id == directory_id,
@@ -65,42 +66,74 @@ def snapshot_candidates_for_exam(exam: Exam, directory_id: str, db: Session):
         DirectoryStudent.status == "active"
     ).all()
     
-    # Clear previous snapshot if updating
-    db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam.id).delete(synchronize_session=False)
-    
     expires_at = exam.end_time or (datetime.utcnow() + timedelta(days=30))
+    active_dir_student_ids = set()
+
     for s in students:
-        candidate = ExamCandidate(
-            exam_id=exam.id,
-            directory_student_id=s.id,
-            name_snapshot=s.name,
-            email_snapshot=s.email,
-            roll_number_snapshot=s.roll_number,
-            status="PENDING"
-        )
-        db.add(candidate)
-        
-        # Ensure login credential exists for this student
-        existing_cred = db.query(ExamCredential).filter(
-            ExamCredential.exam_id == exam.id,
-            ExamCredential.username.like(f"{exam.exam_code}-%")
+        active_dir_student_ids.add(s.id)
+        # 1. Find or create candidate snapshot
+        candidate = db.query(ExamCandidate).filter(
+            ExamCandidate.exam_id == exam.id,
+            ExamCandidate.directory_student_id == s.id
         ).first()
-        
-        raw_user = s.roll_number or (s.email.split("@")[0] if s.email else s.name.replace(" ", "").lower()[:8])
-        username = f"{exam.exam_code}-{raw_user}"
-        # Make sure username is unique
-        if db.query(ExamCredential).filter(ExamCredential.username == username).first():
-            username = f"{exam.exam_code}-{raw_user}-{random.randint(10, 99)}"
+
+        if not candidate:
+            candidate = ExamCandidate(
+                exam_id=exam.id,
+                directory_student_id=s.id,
+                name_snapshot=s.name,
+                email_snapshot=s.email,
+                roll_number_snapshot=s.roll_number,
+                status="PENDING"
+            )
+            db.add(candidate)
+            db.flush()
+        else:
+            candidate.name_snapshot = s.name
+            candidate.email_snapshot = s.email
+            candidate.roll_number_snapshot = s.roll_number
+
+        # 2. Ensure exactly ONE credential exists for this candidate
+        cred = db.query(ExamCredential).filter(
+            ExamCredential.exam_id == exam.id,
+            ExamCredential.candidate_id == candidate.id
+        ).first()
+
+        if not cred:
+            clean_roll = "".join(c for c in (s.roll_number or (s.email.split("@")[0] if s.email else "") or s.name).lower() if c.isalnum())[:16] or "stud"
+            base_username = f"{exam.exam_code}-{clean_roll}"
             
-        password = str(secrets.randbelow(900000) + 100000)
-        cred = ExamCredential(
-            exam_id=exam.id,
-            username=username,
-            password=password,
-            expires_at=expires_at
-        )
-        db.add(cred)
-        
+            existing_user = db.query(ExamCredential).filter(ExamCredential.username == base_username).first()
+            if existing_user:
+                username = f"{base_username}-{secrets.randbelow(900) + 100}"
+            else:
+                username = base_username
+
+            password = str(secrets.randbelow(900000) + 100000)
+            cred = ExamCredential(
+                exam_id=exam.id,
+                candidate_id=candidate.id,
+                username=username,
+                password=password,
+                expires_at=expires_at
+            )
+            db.add(cred)
+        else:
+            cred.expires_at = expires_at
+
+    # Clean up stale candidates removed from directory only if they have not submitted
+    if active_dir_student_ids:
+        stale_candidates = db.query(ExamCandidate).filter(
+            ExamCandidate.exam_id == exam.id,
+            ExamCandidate.directory_student_id.isnot(None),
+            ExamCandidate.directory_student_id.notin_(active_dir_student_ids)
+        ).all()
+        for sc in stale_candidates:
+            sub = db.query(ExamSubmission).filter(ExamSubmission.candidate_id == sc.id).first()
+            if not sub:
+                db.query(ExamCredential).filter(ExamCredential.candidate_id == sc.id).delete(synchronize_session=False)
+                db.delete(sc)
+
     db.commit()
 
 def generate_unique_exam_code(db: Session, prefix: str = "quiz") -> str:
@@ -497,12 +530,17 @@ def create_exam(
     if c_end <= c_start:
         c_end = c_start + timedelta(days=30)
     
+    access_mode = (exam_in.settings or {}).get("access_mode")
+    if not access_mode:
+        access_mode = "ENROLLED_ONLY" if exam_in.student_directory_id else "OPEN_REGISTRATION"
+
     exam = Exam(
         name=exam_in.name,
         subject_id=exam_in.subject_id,
         workspace_id=current_workspace.id,
         created_by=current_user.id,
         student_directory_id=exam_in.student_directory_id,
+        access_mode=access_mode,
         duration_minutes=exam_in.duration_minutes,
         total_marks=exam_in.total_marks,
         negative_marking=exam_in.negative_marking or 0.0,
@@ -760,52 +798,34 @@ def generate_credentials(
             q = q.filter((User.institution_id == current_user.institution_id) | (User.institution_id == None))
         legacy_students = q.all()
 
-    # 5. If system has 0 candidates and 0 legacy students, seed a demo candidate
-    if not candidates and not legacy_students:
-        demo_cand = ExamCandidate(
-            exam_id=exam.id,
-            name_snapshot="Alex Johnson",
-            email_snapshot="student@aegeus.edu",
-            roll_number_snapshot="CS-2026-001",
-            status="PENDING"
-        )
-        db.add(demo_cand)
-        db.commit()
-        db.refresh(demo_cand)
-        candidates = [demo_cand]
-
-    # Generate credentials for Candidate snapshots
+    # Generate credentials deterministically for Candidate snapshots
     for cand in candidates:
-        # Check if already generated for this exam and candidate
-        existing = db.query(ExamCredential).filter(
+        cand_cred = db.query(ExamCredential).filter(
             ExamCredential.exam_id == exam.id,
-            ExamCredential.username.like(f"{exam.exam_code}-%")
-        ).all()
-        
-        # Check if this candidate already has a credential
-        clean_name = "".join(c for c in cand.name_snapshot.split()[0].lower() if c.isalnum()) or "cand"
-        cand_cred = None
-        for ec in existing:
-            if clean_name in ec.username.lower() or (cand.roll_number_snapshot and cand.roll_number_snapshot.lower() in ec.username.lower()):
-                cand_cred = ec
-                break
-                
+            ExamCredential.candidate_id == cand.id
+        ).first()
+
         if not cand_cred:
-            raw_user = cand.roll_number_snapshot or clean_name
-            clean_raw = "".join(c for c in raw_user.lower() if c.isalnum())
-            username = f"{exam.exam_code}-{clean_raw}"
-            if db.query(ExamCredential).filter(ExamCredential.username == username).first():
-                username = f"{exam.exam_code}-{clean_raw}-{secrets.randbelow(900) + 100}"
-                
+            clean_roll = "".join(c for c in (cand.roll_number_snapshot or (cand.email_snapshot.split("@")[0] if cand.email_snapshot else "") or cand.name_snapshot).lower() if c.isalnum())[:16] or "stud"
+            base_username = f"{exam.exam_code}-{clean_roll}"
+            existing_user = db.query(ExamCredential).filter(ExamCredential.username == base_username).first()
+            if existing_user:
+                username = f"{base_username}-{secrets.randbelow(900) + 100}"
+            else:
+                username = base_username
+
             password = str(secrets.randbelow(900000) + 100000)
             cand_cred = ExamCredential(
                 exam_id=exam.id,
+                candidate_id=cand.id,
                 username=username,
                 password=password,
                 expires_at=expires_at
             )
             db.add(cand_cred)
             db.flush()
+        else:
+            cand_cred.expires_at = expires_at
 
         # Send email if candidate has email
         if cand.email_snapshot:
@@ -861,30 +881,18 @@ def generate_credentials(
     
     resp = []
     for c in all_creds:
-        # Match student info
         s_name = "Candidate"
         s_email = None
         s_roll = ""
         
-        if c.student and c.student.user:
+        if c.candidate:
+            s_name = c.candidate.name_snapshot
+            s_email = c.candidate.email_snapshot
+            s_roll = c.candidate.roll_number_snapshot or ""
+        elif c.student and c.student.user:
             s_name = c.student.user.full_name
             s_email = c.student.user.email
             s_roll = c.student.roll_number or ""
-        else:
-            # Match from candidate snapshots
-            for cand in candidates_by_exam:
-                clean_name = "".join(c_char for c_char in cand.name_snapshot.split()[0].lower() if c_char.isalnum())
-                if clean_name in c.username.lower() or (cand.roll_number_snapshot and cand.roll_number_snapshot.lower() in c.username.lower()):
-                    s_name = cand.name_snapshot
-                    s_email = cand.email_snapshot
-                    s_roll = cand.roll_number_snapshot or ""
-                    break
-            if s_name == "Candidate" and candidates_by_exam:
-                # Fallback to first available snapshot if 1:1
-                cand = candidates_by_exam[0]
-                s_name = cand.name_snapshot
-                s_email = cand.email_snapshot
-                s_roll = cand.roll_number_snapshot or ""
 
         resp.append(CredentialResponse(
             username=c.username,
@@ -929,16 +937,12 @@ def resend_credentials_email(
         s_email = None
         s_name = "Candidate"
         
-        if cred.student and cred.student.user and cred.student.user.email:
+        if cred.candidate:
+            s_name = cred.candidate.name_snapshot
+            s_email = cred.candidate.email_snapshot
+        elif cred.student and cred.student.user and cred.student.user.email:
             s_email = cred.student.user.email
             s_name = cred.student.user.full_name
-        else:
-            for cand in candidates:
-                clean_name = "".join(c for c in cand.name_snapshot.split()[0].lower() if c.isalnum())
-                if clean_name in cred.username.lower() or (cand.roll_number_snapshot and cand.roll_number_snapshot.lower() in cred.username.lower()):
-                    s_email = cand.email_snapshot
-                    s_name = cand.name_snapshot
-                    break
 
         if s_email:
             background_tasks.add_task(
@@ -1010,18 +1014,14 @@ def export_credentials_csv(
         s_email = ""
         s_roll = ""
         
-        if c.student and c.student.user:
+        if c.candidate:
+            s_name = c.candidate.name_snapshot
+            s_email = c.candidate.email_snapshot or ""
+            s_roll = c.candidate.roll_number_snapshot or ""
+        elif c.student and c.student.user:
             s_name = c.student.user.full_name
             s_email = c.student.user.email or ""
             s_roll = c.student.roll_number or ""
-        else:
-            for cand in candidates:
-                clean_name = "".join(c_char for c_char in cand.name_snapshot.split()[0].lower() if c_char.isalnum())
-                if clean_name in c.username.lower() or (cand.roll_number_snapshot and cand.roll_number_snapshot.lower() in c.username.lower()):
-                    s_name = cand.name_snapshot
-                    s_email = cand.email_snapshot or ""
-                    s_roll = cand.roll_number_snapshot or ""
-                    break
 
         writer.writerow([
             s_name,
@@ -1273,11 +1273,35 @@ from fastapi.responses import HTMLResponse
 @router.get("/{exam_id}/pdf/question-paper", response_class=HTMLResponse)
 def export_printable_question_paper(
     exam_id: str,
+    token: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
+    auth_token = token
+    if not auth_token and authorization and authorization.startswith("Bearer "):
+        auth_token = authorization.split(" ")[1]
+        
+    user = None
+    if auth_token:
+        try:
+            payload = jwt.decode(auth_token, settings.SECRET_KEY, algorithms=["HS256"])
+            user_id = payload.get("sub")
+            if user_id:
+                user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
+        except Exception:
+            pass
+
     exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
+
+    if not user or user.role not in ["teacher", "inst_admin", "super_admin"]:
+        raise HTTPException(status_code=401, detail="Authentication required to view question paper")
+
+    if user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()]
+        if not (exam.created_by == user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied to this exam paper")
         
     paper = json.loads(exam.questions_json) if exam.questions_json else []
     questions_html = ""
@@ -1337,11 +1361,35 @@ def export_printable_question_paper(
 @router.get("/{exam_id}/pdf/answer-key", response_class=HTMLResponse)
 def export_printable_answer_key(
     exam_id: str,
+    token: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
+    auth_token = token
+    if not auth_token and authorization and authorization.startswith("Bearer "):
+        auth_token = authorization.split(" ")[1]
+        
+    user = None
+    if auth_token:
+        try:
+            payload = jwt.decode(auth_token, settings.SECRET_KEY, algorithms=["HS256"])
+            user_id = payload.get("sub")
+            if user_id:
+                user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
+        except Exception:
+            pass
+
     exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
+
+    if not user or user.role not in ["teacher", "inst_admin", "super_admin"]:
+        raise HTTPException(status_code=401, detail="Authentication required to view answer key")
+
+    if user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()]
+        if not (exam.created_by == user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied to this answer key")
         
     paper = json.loads(exam.questions_json) if exam.questions_json else []
     answers_html = ""
@@ -1397,6 +1445,15 @@ def get_exam_eligible_students(
     db: Session = Depends(get_db)
 ):
     """Resolves and returns the unique set of eligible students for an exam."""
+    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied: exam belongs to another workspace")
+
     students = ExamEligibilityService.resolve_students(db, exam_id)
     return {
         "exam_id": exam_id,
@@ -1424,6 +1481,11 @@ def add_exam_target(
     exam = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
+
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied: exam belongs to another workspace")
 
     target = ExamTarget(
         exam_id=exam_id,
@@ -1454,6 +1516,11 @@ def set_exam_student_override(
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
 
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied: exam belongs to another workspace")
+
     action = payload.action.upper()
     if action not in ["INCLUDE", "EXCLUDE"]:
         raise HTTPException(status_code=400, detail="Action must be INCLUDE or EXCLUDE")
@@ -1480,7 +1547,7 @@ def set_exam_student_override(
     }
 
 class TimeExtensionPayload(BaseModel):
-    extra_minutes: int = 10
+    extra_minutes: int = Field(default=10, ge=1, le=180, description="Duration to extend between 1 and 180 minutes")
 
 @router.get("/{exam_id}/live-monitor")
 def get_exam_live_monitor(
@@ -1508,61 +1575,45 @@ def get_exam_live_monitor(
         except Exception:
             total_questions = 0
 
-    creds = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).all()
     candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam_id).all()
+    now = datetime.utcnow()
     
+    # 1. Batch query proctoring log counts to avoid N+1 queries
+    proctor_counts = dict(
+        db.query(ProctoringLog.submission_id, func.count(ProctoringLog.id))
+        .join(ExamSubmission, ProctoringLog.submission_id == ExamSubmission.id)
+        .filter(ExamSubmission.exam_id == exam_id)
+        .group_by(ProctoringLog.submission_id)
+        .all()
+    )
+
     candidates_list = []
-    logged_in_count = 0
-    in_progress_count = 0
+    active_in_room_count = 0
+    answering_now_count = 0
     submitted_count = 0
+    disconnected_count = 0
+    not_started_count = 0
 
-    for c in creds:
-        sub = db.query(ExamSubmission).filter(
-            ExamSubmission.exam_id == exam_id,
-            ExamSubmission.credential_id == c.id
-        ).first()
+    for cand in candidates:
+        cred = cand.credential
+        sub = cand.submission
 
-        std = c.student
-        std_name = None
-        std_email = None
-        std_roll = None
-
-        if std and std.user:
-            std_name = std.user.full_name
-            std_email = std.user.email
-            std_roll = std.roll_number
-        else:
-            for cand in candidates:
-                clean_name = "".join(ch for ch in cand.name_snapshot.split()[0].lower() if ch.isalnum())
-                if (clean_name and clean_name in c.username.lower()) or (cand.roll_number_snapshot and cand.roll_number_snapshot.lower() in c.username.lower()):
-                    std_name = cand.name_snapshot
-                    std_email = cand.email_snapshot
-                    std_roll = cand.roll_number_snapshot
-                    break
-            if not std_name and len(candidates) == 1:
-                std_name = candidates[0].name_snapshot
-                std_email = candidates[0].email_snapshot
-                std_roll = candidates[0].roll_number_snapshot
-
-        # Explicitly remove Anonymous Candidate from live monitor
-        if not std_name or "anonymous" in std_name.lower():
+        # Explicitly ignore any corrupted or dummy candidate records
+        if not cand.name_snapshot or "anonymous" in cand.name_snapshot.lower():
             continue
 
-        std_email = std_email or "N/A"
-        std_roll = std_roll or "N/A"
-
+        username = cred.username if cred else "N/A"
         answered_count = 0
-        status_label = "not_started"
+        submission_status = "not_started"
+        connection_status = "offline"
         score = None
         started_at = None
         submitted_at = None
 
         if sub:
-            logged_in_count += 1
             started_at = sub.started_at.isoformat() if sub.started_at else None
-            submitted_at = sub.submitted_at.isoformat() if sub.submitted_at else None
             score = sub.score
-            
+
             if sub.answers_json:
                 try:
                     ans_dict = json.loads(sub.answers_json)
@@ -1570,29 +1621,52 @@ def get_exam_live_monitor(
                 except Exception:
                     answered_count = 0
 
-            if sub.status in ["submitted", "auto_submitted"]:
-                status_label = "submitted"
+            # Auto-submit expired sessions on live sweep
+            effective_deadline = to_naive_utc(sub.deadline_at) or ((to_naive_utc(sub.started_at) or now) + timedelta(minutes=exam.duration_minutes))
+            exam_end_dt = to_naive_utc(exam.end_time)
+            if exam_end_dt and exam_end_dt < effective_deadline:
+                effective_deadline = exam_end_dt
+
+            if sub.status in ["started", "in_progress", "submitting"] and now >= effective_deadline:
+                sub.status = "auto_submitted"
+                sub.submitted_at = effective_deadline
+                db.commit()
+
+            if sub.status in ["submitted", "auto_submitted", "graded"]:
+                submission_status = "submitted"
+                connection_status = "completed"
+                submitted_at = sub.submitted_at.isoformat() if sub.submitted_at else None
                 submitted_count += 1
             else:
-                status_label = "in_progress"
-                in_progress_count += 1
-        elif c.is_used:
-            logged_in_count += 1
-            status_label = "in_progress"
-            in_progress_count += 1
+                submission_status = "in_progress"
+                last_seen = sub.last_seen_at or sub.started_at
+                diff_sec = (now - last_seen).total_seconds() if last_seen else 999.0
 
-        proctor_flags_count = 0
-        if sub:
-            proctor_flags_count = db.query(ProctoringLog).filter(ProctoringLog.submission_id == sub.id).count()
+                if diff_sec < 30:
+                    connection_status = "online"
+                    active_in_room_count += 1
+                    answering_now_count += 1
+                elif diff_sec <= 90:
+                    connection_status = "disconnected"
+                    disconnected_count += 1
+                else:
+                    connection_status = "offline"
+                    disconnected_count += 1
+        else:
+            not_started_count += 1
+
+        proctor_flags_count = proctor_counts.get(sub.id, 0) if sub else 0
 
         candidates_list.append({
-            "credential_id": c.id,
-            "student_id": std.id if std else None,
-            "name": std_name,
-            "email": std_email,
-            "roll_number": std_roll,
-            "username": c.username,
-            "status": status_label,
+            "candidate_id": cand.id,
+            "credential_id": cred.id if cred else None,
+            "student_id": cand.directory_student_id,
+            "name": cand.name_snapshot,
+            "email": cand.email_snapshot or "N/A",
+            "roll_number": cand.roll_number_snapshot or "N/A",
+            "username": username,
+            "status": submission_status,
+            "connection_status": connection_status,
             "answered_count": answered_count,
             "total_questions": total_questions,
             "proctor_flags_count": proctor_flags_count,
@@ -1614,9 +1688,13 @@ def get_exam_live_monitor(
         },
         "summary": {
             "total_assigned": len(candidates_list),
-            "logged_in": logged_in_count,
-            "in_progress": in_progress_count,
-            "submitted": submitted_count
+            "logged_in": active_in_room_count,
+            "active_in_room": active_in_room_count,
+            "in_progress": answering_now_count,
+            "answering_now": answering_now_count,
+            "submitted": submitted_count,
+            "disconnected": disconnected_count,
+            "not_started": not_started_count
         },
         "candidates": candidates_list
     }
@@ -1635,31 +1713,53 @@ def extend_exam_time(
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
 
-    exam.end_time = exam.end_time + timedelta(minutes=payload.extra_minutes)
+    # Enforce multi-tenant workspace isolation
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied: exam belongs to another workspace")
+
+    if payload.extra_minutes < 1 or payload.extra_minutes > 180:
+        raise HTTPException(status_code=400, detail="Extra minutes must be between 1 and 180")
+
+    exam_end = to_naive_utc(exam.end_time) or datetime.utcnow()
+    exam.end_time = exam_end + timedelta(minutes=payload.extra_minutes)
+    exam.duration_minutes = (exam.duration_minutes or 30) + payload.extra_minutes
     
-    # Also extend expiration on all issued credentials
+    # Extend expiration on all issued credentials
     creds = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).all()
     for c in creds:
-        if c.expires_at and isinstance(c.expires_at, datetime):
-            c.expires_at = c.expires_at + timedelta(minutes=payload.extra_minutes)
+        if c.expires_at:
+            c.expires_at = to_naive_utc(c.expires_at) + timedelta(minutes=payload.extra_minutes)
+    
+    # Extend deadline_at for all active/in-progress student submissions
+    active_subs = db.query(ExamSubmission).filter(
+        ExamSubmission.exam_id == exam_id,
+        ExamSubmission.status.in_(["started", "in_progress", "submitting"])
+    ).all()
+    for sub in active_subs:
+        if sub.deadline_at:
+            sub.deadline_at = to_naive_utc(sub.deadline_at) + timedelta(minutes=payload.extra_minutes)
     
     db.commit()
     db.refresh(exam)
     return {
         "message": f"Successfully extended exam by {payload.extra_minutes} minutes.",
-        "new_end_time": to_iso_utc(exam.end_time)
+        "new_end_time": to_iso_utc(exam.end_time),
+        "duration_minutes": exam.duration_minutes
     }
 
 @router.post("/{exam_id}/clone")
 def clone_exam(
     exam_id: str,
+    current_workspace: Workspace = Depends(get_current_workspace),
     current_user: User = Depends(teacher_required),
     db: Session = Depends(get_db)
 ):
     """
     1-Click Assessment Cloner: Duplicates exam blueprint & questions for a new retake or batch.
     """
-    original = db.query(Exam).filter(Exam.id == exam_id, Exam.is_deleted == False).first()
+    original = db.query(Exam).filter(Exam.id == exam_id, Exam.workspace_id == current_workspace.id, Exam.is_deleted == False).first()
     if not original:
         raise HTTPException(status_code=404, detail="Exam not found")
 

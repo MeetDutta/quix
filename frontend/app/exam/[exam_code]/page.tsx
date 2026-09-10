@@ -355,6 +355,36 @@ export default function ExamPortal() {
     return () => clearInterval(interval);
   }, [isLogged, submittedResult, examStore.sessionToken, examStore.timeRemainingSeconds]);
 
+  // Periodic Student Heartbeat & Server Authority Sync (Every 12s)
+  useEffect(() => {
+    if (!isLogged || submittedResult || !examStore.sessionToken || isSimulation) return;
+
+    const sendHeartbeat = async () => {
+      if (isSubmittingRef.current) return;
+      try {
+        const res = await apiFetch(`/attempts/heartbeat?token=${examStore.sessionToken}`, {
+          method: "POST",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.action === "time_expired" || data.action === "submitted" || data.status === "auto_submitted" || data.status === "submitted") {
+            showToast("Exam deadline reached on server. Finalizing submission...", "warning");
+            handleSubmitExam();
+          } else if (typeof data.time_remaining_seconds === "number" && Math.abs(examStore.timeRemainingSeconds - data.time_remaining_seconds) > 5) {
+            // Reconcile client timer drift with server clock
+            examStore.setTimeRemaining(data.time_remaining_seconds);
+          }
+        }
+      } catch {
+        // Network temporary drop; client will retry next tick
+      }
+    };
+
+    sendHeartbeat();
+    const hbInterval = setInterval(sendHeartbeat, 12000);
+    return () => clearInterval(hbInterval);
+  }, [isLogged, submittedResult, examStore.sessionToken, isSimulation]);
+
   // Auto-submit on timeout
   useEffect(() => {
     if (
@@ -440,6 +470,11 @@ export default function ExamPortal() {
       if (res.ok) {
         setSyncStatus("Synced");
       } else {
+        const errData = await res.json().catch(() => ({}));
+        if (res.status === 400 && (errData.detail?.includes("expired") || errData.detail?.includes("submitted"))) {
+          showToast("Exam deadline reached. Finalizing submission...", "warning");
+          handleSubmitExam();
+        }
         setSyncStatus("Unsynced (Local)");
       }
     } catch {

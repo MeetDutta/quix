@@ -62,7 +62,15 @@ def upload_document(
             db.delete(existing)
             db.flush()
         
-    file_path = storage_service.save_kb_document(subject_id, file.filename, file_bytes)
+    import uuid
+    doc_id = str(uuid.uuid4())
+    file_path = storage_service.save_kb_document(
+        subject_id=subject_id, 
+        filename=file.filename, 
+        content=file_bytes,
+        workspace_id=current_workspace.id,
+        document_id=doc_id
+    )
     safe_filename = os.path.basename(file_path)
         
     try:
@@ -75,6 +83,7 @@ def upload_document(
         clean_title = rag_service._sanitize_unicode(os.path.splitext(safe_filename)[0])
         clean_filename = rag_service._sanitize_unicode(safe_filename)
         doc = Document(
+            id=doc_id,
             title=clean_title or "Uploaded Document",
             filename=clean_filename,
             file_path=file_path,
@@ -84,7 +93,7 @@ def upload_document(
             subject_id=subject_id
         )
         db.add(doc)
-        db.flush() # get doc id
+        db.flush() # persist doc id
         
         # 4. Save chunks to db & vector index
         db_chunks = []

@@ -93,7 +93,7 @@ class EmailService:
                 return True
 
         # 3. Direct SMTP Server (SSL 465 then STARTTLS 587)
-        if settings.SMTP_HOST and settings.SMTP_USER:
+        if settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD and not to_email.endswith("@aegeus.edu"):
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>"
@@ -135,11 +135,11 @@ class EmailService:
                     )
                     return False
         else:
-            logger.warning(
-                f"⚠️ SMTP credentials not configured. Missing SMTP_HOST ('{settings.SMTP_HOST}') or SMTP_USER ('{settings.SMTP_USER}'). "
-                f"Set RESEND_API_KEY or SMTP credentials in your Render Environment Variables."
-            )
-            print(f"⚠️ SMTP credentials not set on server. Missing SMTP_HOST or SMTP_USER.")
+            if not to_email.endswith("@aegeus.edu"):
+                logger.warning(
+                    f"⚠️ SMTP credentials not configured. Missing SMTP_HOST ('{settings.SMTP_HOST}') or SMTP_USER ('{settings.SMTP_USER}'). "
+                    f"Set RESEND_API_KEY or SMTP credentials in your Render Environment Variables."
+                )
             return False
 
     def send_student_authorization_email(self, student_name: str, email: str, verification_token: str, roll_number: Optional[str] = None):
@@ -186,8 +186,7 @@ class EmailService:
         </html>
         """
         
-        logger.info(f"📧 [AUTHORIZATION EMAIL] Sent authorization link to {student_name} ({email})")
-        print(f"📧 [AUTHORIZATION EMAIL] Sent authorization link to {student_name} ({email}) -> {verify_url}")
+        logger.info(f"📧 [AUTHORIZATION EMAIL] Sent authorization email to {student_name} (email={email})")
         self._send_smtp_email(email, subject, html_content)
 
     def send_student_credentials_email(self, student_name: str, email: str, password: str):
@@ -227,9 +226,9 @@ class EmailService:
         </html>
         """
         
-        logger.info(f"📧 [CREDENTIALS EMAIL] Dispatched generated password to {student_name} ({email}) | Pass: {password}")
-        print(f"📧 [CREDENTIALS EMAIL] Dispatched generated password to {student_name} ({email}) | Pass: {password}")
+        logger.info(f"📧 [CREDENTIALS EMAIL] Dispatched generated credentials to {student_name} (email={email})")
         self._send_smtp_email(email, subject, html_content)
+
     def send_password_reset_email(self, user_name: str, email: str, reset_token: str):
         """Dispatches a password reset recovery email containing a secure tokenized reset link."""
         reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
@@ -263,8 +262,7 @@ class EmailService:
         </html>
         """
         
-        logger.info(f"📧 [PASSWORD RESET EMAIL] Dispatched reset link token to {user_name} ({email})")
-        print(f"📧 [PASSWORD RESET EMAIL] Dispatched reset link token to {user_name} ({email}) | Link: {reset_url}")
+        logger.info(f"📧 [PASSWORD RESET EMAIL] Dispatched reset link email to {user_name} (email={email})")
         self._send_smtp_email(email, subject, html_content)
 
     def send_student_welcome_email(self, student_name: str, email: str, password: str, roll_number: Optional[str] = None):
@@ -309,11 +307,10 @@ class EmailService:
         </html>
         """
         
-        logger.info(f"📧 [EMAIL DISPATCHED] Exam Credentials queued for {student_name} ({email}) | Code: {exam_code} | PIN: {password}")
-        print(f"📧 [EMAIL DISPATCHED] Exam Credentials queued for {student_name} ({email}) | Code: {exam_code} | PIN: {password}")
+        logger.info(f"📧 [EMAIL DISPATCHED] Exam credentials email dispatched for candidate {student_name} (email={email}, exam_code={exam_code}, username={username})")
         self._send_smtp_email(email, subject, html_content)
 
-    def send_exam_reminder_email(
+    def send_exam_reminder_15min_email(
         self, 
         student_name: str, 
         email: str, 
@@ -352,8 +349,7 @@ class EmailService:
         </html>
         """
         
-        logger.info(f"⏰ [REMINDER SENT] 15-min reminder sent to {student_name} ({email}) for exam {exam_code}")
-        print(f"⏰ [REMINDER SENT] 15-min reminder sent to {student_name} ({email}) for exam {exam_code}")
+        logger.info(f"⏰ [REMINDER SENT] 15-min reminder sent to {student_name} (email={email}) for exam {exam_code}")
         self._send_smtp_email(email, subject, html_content)
 
 email_service = EmailService()

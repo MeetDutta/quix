@@ -1,9 +1,12 @@
-from sqlalchemy import Column, String, ForeignKey, Text
+from sqlalchemy import Column, String, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.models.base import TimeStampedModel
 
 class ExamCandidate(TimeStampedModel):
     __tablename__ = "exam_candidates"
+    __table_args__ = (
+        UniqueConstraint("exam_id", "directory_student_id", name="uq_exam_candidate_dir_student"),
+    )
     
     exam_id = Column(String(36), ForeignKey("exams.id"), nullable=False, index=True)
     directory_student_id = Column(String(36), ForeignKey("directory_students.id"), nullable=True, index=True)
@@ -17,3 +20,5 @@ class ExamCandidate(TimeStampedModel):
 
     exam = relationship("Exam", back_populates="candidates")
     directory_student = relationship("DirectoryStudent", back_populates="candidate_snapshots")
+    credential = relationship("ExamCredential", back_populates="candidate", uselist=False, cascade="all, delete-orphan")
+    submission = relationship("ExamSubmission", back_populates="candidate", uselist=False, cascade="all, delete-orphan")

@@ -3,17 +3,22 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query, Header, Body
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from jose import jwt
 
 from app.database import get_db, SessionLocal
 from app.models.exam import Exam, ExamCredential, ExamSubmission, ProctoringLog
+from app.models.candidate import ExamCandidate
 from app.models.user import User, Student
+from app.models.workspace import WorkspaceMember
 from app.schemas.exam import ExamLogin, SubmitExam, ProctorLogCreate
 from app.services.ai_service import AIService
 from app.services.notification_service import create_notification
 from app.config import settings
 from app.utils.security import RoleChecker, get_current_user
 from app.utils.rate_limiter import rate_limit_dependency
+
+import asyncio
 
 router = APIRouter(prefix="/attempts", tags=["attempts"])
 teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
@@ -22,12 +27,59 @@ ai_service = AIService()
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, List[WebSocket]] = {}  # exam_id -> list of teacher connections
+        self._redis_client = None
+        self._subscribed_channels = set()
         
+    async def _get_redis(self):
+        if self._redis_client is None and getattr(settings, "REDIS_URL", None):
+            try:
+                import redis.asyncio as aioredis
+                self._redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            except Exception:
+                self._redis_client = None
+        return self._redis_client
+
     async def connect_teacher(self, exam_id: str, websocket: WebSocket):
         await websocket.accept()
         if exam_id not in self.active_connections:
             self.active_connections[exam_id] = []
         self.active_connections[exam_id].append(websocket)
+        r = await self._get_redis()
+        if r and exam_id not in self._subscribed_channels:
+            self._subscribed_channels.add(exam_id)
+            asyncio.create_task(self._listen_redis_channel(exam_id))
+
+    async def _listen_redis_channel(self, exam_id: str):
+        try:
+            r = await self._get_redis()
+            if not r:
+                return
+            pubsub = r.pubsub()
+            await pubsub.subscribe(f"exam_events:{exam_id}")
+            async for message in pubsub.listen():
+                if message and message.get("type") == "message":
+                    raw_data = message.get("data")
+                    if raw_data:
+                        try:
+                            payload = json.loads(raw_data)
+                            await self._deliver_locally(exam_id, payload)
+                        except Exception:
+                            pass
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+
+    async def _deliver_locally(self, exam_id: str, message: dict):
+        if exam_id in self.active_connections:
+            surviving = []
+            for connection in self.active_connections[exam_id]:
+                try:
+                    await connection.send_json(message)
+                    surviving.append(connection)
+                except Exception:
+                    pass
+            self.active_connections[exam_id] = surviving
         
     def disconnect_teacher(self, exam_id: str, websocket: WebSocket):
         if exam_id in self.active_connections:
@@ -35,14 +87,25 @@ class ConnectionManager:
                 self.active_connections[exam_id].remove(websocket)
             except ValueError:
                 pass
+
+    async def broadcast_event(self, exam_id: str, event_type: str, data: dict):
+        payload = {
+            "event_type": event_type,
+            "exam_id": exam_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            **data
+        }
+        r = await self._get_redis()
+        if r:
+            try:
+                await r.publish(f"exam_events:{exam_id}", json.dumps(payload))
+            except Exception:
+                await self._deliver_locally(exam_id, payload)
+        else:
+            await self._deliver_locally(exam_id, payload)
                 
     async def broadcast_proctor_alert(self, exam_id: str, message: dict):
-        if exam_id in self.active_connections:
-            for connection in self.active_connections[exam_id]:
-                try:
-                    await connection.send_json(message)
-                except Exception:
-                    pass
+        await self.broadcast_event(exam_id, "PROCTOR_ALERT", message)
 
 manager = ConnectionManager()
 
@@ -147,7 +210,7 @@ def get_exam_status(exam_code: str, db: Session = Depends(get_db)):
         "seconds_until_start": seconds_until_start
     }
 
-@router.post("/login", dependencies=[Depends(rate_limit_dependency(max_requests=25, window_seconds=60))])
+@router.post("/login", dependencies=[Depends(rate_limit_dependency(max_requests=300, window_seconds=60))])
 def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get_db)):
     """
     Validates a student session login at /exam/{exam_code}
@@ -167,20 +230,31 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
     if now > exam_end:
         raise HTTPException(status_code=400, detail="Exam has already ended")
         
+    raw_uname = login_in.username.strip()
+    raw_pass = login_in.password.strip()
+
+    # 1. Match credential via username, email_snapshot, or roll_number_snapshot
     cred = db.query(ExamCredential).filter(
         ExamCredential.exam_id == exam.id,
-        ExamCredential.password == login_in.password,
-        (
-            (ExamCredential.username == login_in.username) |
-            (ExamCredential.student.has(Student.user.has(User.email == login_in.username.strip().lower()))) |
-            (ExamCredential.student.has(Student.roll_number == login_in.username.strip()))
-        )
+        ExamCredential.password == raw_pass
+    ).join(ExamCandidate, ExamCredential.candidate_id == ExamCandidate.id, isouter=True).filter(
+        (ExamCredential.username == raw_uname) |
+        (func.lower(ExamCandidate.email_snapshot) == raw_uname.lower()) |
+        (ExamCandidate.roll_number_snapshot == raw_uname) |
+        (ExamCredential.student.has(Student.user.has(func.lower(User.email) == raw_uname.lower()))) |
+        (ExamCredential.student.has(Student.roll_number == raw_uname))
     ).first()
     
+    access_mode = getattr(exam, "access_mode", "ENROLLED_ONLY") or "ENROLLED_ONLY"
+
     if not cred:
+        # If exam is ENROLLED_ONLY, un-enrolled students cannot register on-the-fly with master passwords
+        if access_mode != "OPEN_REGISTRATION":
+            raise HTTPException(status_code=403, detail="You are not enrolled as an eligible candidate for this examination.")
+
         from app.utils.security import verify_password
-        user = db.query(User).filter(User.email == login_in.username.strip().lower(), User.is_deleted == False).first()
-        if user and verify_password(login_in.password, user.hashed_password):
+        user = db.query(User).filter(func.lower(User.email) == raw_uname.lower(), User.is_deleted == False).first()
+        if user and verify_password(raw_pass, user.hashed_password):
             student = db.query(Student).filter(Student.user_id == user.id, Student.is_deleted == False).first()
             if not student:
                 import secrets
@@ -209,7 +283,7 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
                     exam_id=exam.id,
                     student_id=student.id,
                     username=cand_username,
-                    password=str(secrets.randbelow(900000) + 100000),
+                    password=raw_pass,
                     expires_at=exam.end_time or (datetime.utcnow() + timedelta(days=7))
                 )
                 db.add(cred)
@@ -225,45 +299,75 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
         else:
             raise HTTPException(status_code=400, detail="Incorrect credentials for this exam. Please check your passcode or portal login.")
         
-    sub = db.query(ExamSubmission).filter(ExamSubmission.credential_id == cred.id).first()
-    
-    # Issue exam token
-    token_expire = exam.end_time
-    if sub:
-        payload = {"sub": sub.id, "exp": token_expire, "type": "exam_session"}
-        token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
-    else:
+    cand = cred.candidate if cred else None
+    if cred and not cand and cred.candidate_id:
+        cand = db.query(ExamCandidate).filter(ExamCandidate.id == cred.candidate_id).first()
+
+    cand_name = "Candidate"
+    if cand:
+        cand_name = cand.name_snapshot
+    elif cred.student and cred.student.user:
+        cand_name = cred.student.user.full_name
+    elif cred:
+        cand_name = cred.username
+
+    exam_duration = exam.duration_minutes or 30
+    allowed_end = to_naive_utc(exam.end_time) or (now + timedelta(minutes=exam_duration))
+    deadline = min(now + timedelta(minutes=exam_duration), allowed_end)
+
+    # Resolve or create single submission
+    sub = None
+    if cand:
+        sub = db.query(ExamSubmission).filter(
+            ExamSubmission.exam_id == exam.id,
+            ExamSubmission.candidate_id == cand.id
+        ).first()
+    if not sub:
+        sub = db.query(ExamSubmission).filter(
+            ExamSubmission.exam_id == exam.id,
+            ExamSubmission.credential_id == cred.id
+        ).first()
+
+    if not sub:
         sub = ExamSubmission(
             exam_id=exam.id,
+            candidate_id=cand.id if cand else None,
             credential_id=cred.id,
-            status="started"
+            status="started",
+            started_at=now,
+            deadline_at=deadline,
+            last_seen_at=now,
+            questions_snapshot_json=exam.questions_json,
+            answer_version=0,
+            grading_status="COMPLETED"
         )
         db.add(sub)
         db.commit()
         db.refresh(sub)
-        payload = {"sub": sub.id, "exp": token_expire, "type": "exam_session"}
-        token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+    else:
+        if cand and not sub.candidate_id:
+            sub.candidate_id = cand.id
+        if not sub.deadline_at:
+            sub.deadline_at = min((sub.started_at or now) + timedelta(minutes=exam_duration), allowed_end)
+        if not sub.questions_snapshot_json and exam.questions_json:
+            sub.questions_snapshot_json = exam.questions_json
+        sub.last_seen_at = now
+        db.commit()
 
-    is_completed = sub.status in ["submitted", "auto_submitted"]
-    
+    # If already past deadline, mark auto_submitted immediately
+    if sub.status in ["started", "in_progress", "submitting"] and now >= sub.deadline_at:
+        process_exam_submission(sub, db, auto_submitted=True)
+
+    # Issue exam session token
+    token_expire = exam.end_time or (now + timedelta(days=30))
+    payload = {"sub": sub.id, "exp": token_expire, "type": "exam_session"}
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
+    is_completed = sub.status in ["submitted", "auto_submitted", "graded"]
     questions_list = json.loads(exam.questions_json) if exam.questions_json else []
 
-    # Candidate name resolution from ExamCandidate or Student User
-    cand_name = "Candidate"
-    if cred.student and cred.student.user:
-        cand_name = cred.student.user.full_name
-    else:
-        from app.models.candidate import ExamCandidate
-        candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam.id).all()
-        for c in candidates:
-            clean_name = "".join(ch for ch in c.name_snapshot.split()[0].lower() if ch.isalnum())
-            if clean_name in cred.username.lower() or (c.roll_number_snapshot and c.roll_number_snapshot.lower() in cred.username.lower()):
-                cand_name = c.name_snapshot
-                break
-        if cand_name == "Candidate" and candidates:
-            cand_name = candidates[0].name_snapshot
-
     return {
+        "token": token,
         "session_token": token,
         "student_name": cand_name,
         "duration_minutes": exam.duration_minutes,
@@ -288,7 +392,8 @@ def get_exam_info(
     evaluated_answers = json.loads(sub.answers_json) if (is_completed and sub.answers_json) else {}
     
     # Strip answers from questions payload before serving to student if in active exam!
-    questions = json.loads(exam.questions_json) if exam.questions_json else []
+    q_source = sub.questions_snapshot_json if sub.questions_snapshot_json else exam.questions_json
+    questions = json.loads(q_source) if q_source else []
     settings_dict = json.loads(exam.settings_json) if exam.settings_json else {}
 
     student_questions = []
@@ -301,9 +406,9 @@ def get_exam_info(
             opt_rng.shuffle(opts)
 
         student_questions.append({
-            "id": q["id"],
-            "question_text": q["question_text"],
-            "question_type": q["question_type"],
+            "id": q.get("id") or str(q.get("question_id", "q")),
+            "question_text": q.get("question_text") or q.get("question", "Question"),
+            "question_type": q.get("question_type") or q.get("type", "mcq"),
             "options": opts,
             "marks": q.get("marks", 1),
             "code_snippet": q.get("code_snippet"),
@@ -317,15 +422,25 @@ def get_exam_info(
         q_rng.shuffle(student_questions)
     
     # Fetch existing progress
-    saved_answers = json.loads(sub.answers_json) if (not is_completed and sub.answers_json) else {}
+    raw_saved = json.loads(sub.answers_json) if (not is_completed and sub.answers_json) else {}
+    saved_answers = {k: v for k, v in raw_saved.items() if k != "_meta"} if isinstance(raw_saved, dict) else {}
     
-    # Compute correct time remaining:
+    # Compute authoritative time remaining based on personal deadline
     now = datetime.utcnow()
-    from datetime import timedelta
-    time_until_exam_ends = max(0, int((exam.end_time - now).total_seconds()))
-    student_personal_deadline = sub.started_at + timedelta(minutes=exam.duration_minutes)
-    time_until_personal_deadline = max(0, int((student_personal_deadline - now).total_seconds()))
-    time_remaining = min(time_until_exam_ends, time_until_personal_deadline)
+    exam_duration = exam.duration_minutes or 30
+    allowed_end = to_naive_utc(exam.end_time) or (now + timedelta(minutes=exam_duration))
+    deadline = sub.deadline_at or min((sub.started_at or now) + timedelta(minutes=exam_duration), allowed_end)
+
+    if sub.status in ["started", "in_progress", "submitting"] and now >= deadline:
+        process_exam_submission(sub, db, auto_submitted=True)
+        is_completed = True
+        evaluated_answers = json.loads(sub.answers_json) if sub.answers_json else {}
+
+    time_remaining = max(0, int((deadline - now).total_seconds())) if not is_completed else 0
+
+    if not is_completed:
+        sub.last_seen_at = now
+        db.commit()
     
     return {
         "exam_name": exam.name,
@@ -342,19 +457,21 @@ def get_exam_info(
         "evaluated_answers": evaluated_answers
     }
 
-def process_exam_submission(sub: ExamSubmission, db: Session) -> dict:
-    """Internal helper to process exam evaluation and submission."""
+def process_exam_submission(sub: ExamSubmission, db: Session, auto_submitted: bool = False) -> dict:
+    """Internal helper to process exam evaluation and submission with live broadcast."""
     exam = sub.exam
-    original_questions = json.loads(exam.questions_json) if exam.questions_json else []
+    q_source = sub.questions_snapshot_json if sub.questions_snapshot_json else exam.questions_json
+    original_questions = json.loads(q_source) if q_source else []
     student_responses = json.loads(sub.answers_json) if sub.answers_json else {}
     
     total_score = 0.0
     evaluated_responses = {}
+    has_pending_manual_review = False
     
     # 1. Evaluate responses question-by-question
     for q in original_questions:
-        q_id = q["id"]
-        q_type = q["question_type"]
+        q_id = q.get("id") or str(q.get("question_id", "q"))
+        q_type = q.get("question_type") or q.get("type") or "mcq"
         correct_ans = q.get("correct_answer") or ""
         marks = float(q.get("marks") or 1.0)
         student_ans = student_responses.get(q_id)
@@ -362,6 +479,7 @@ def process_exam_submission(sub: ExamSubmission, db: Session) -> dict:
         is_correct = False
         score_awarded = 0.0
         ai_critique = None
+        evaluation_status = "COMPLETED"
         
         if student_ans is not None and str(student_ans).strip() != "":
             # Objective scoring
@@ -373,28 +491,43 @@ def process_exam_submission(sub: ExamSubmission, db: Session) -> dict:
                 else:
                     # Apply negative marking
                     score_awarded = -float(exam.negative_marking or 0.0) * marks
+                evaluation_status = "COMPLETED"
             
-            # Subjective scoring using AI Service
+            # Subjective scoring using AI Service with retry policy
             elif q_type in ["short_answer", "long_answer", "subjective"]:
-                try:
-                    # Call Gemini
-                    ai_grade = ai_service.evaluate_subjective_answer(
-                        question_text=q["question_text"],
-                        student_answer=str(student_ans),
-                        correct_rubric=correct_ans # holds model guidelines
-                    )
-                    score_awarded = (float(ai_grade.get("score", 2.5)) / 5.0) * marks
+                ai_grade = None
+                for attempt in range(2):
+                    try:
+                        ai_grade = ai_service.evaluate_subjective_answer(
+                            question_text=q["question_text"],
+                            student_answer=str(student_ans),
+                            correct_rubric=correct_ans # holds model guidelines
+                        )
+                        if ai_grade and ai_grade.get("score") is not None:
+                            break
+                    except Exception:
+                        pass
+
+                if ai_grade and ai_grade.get("score") is not None:
+                    raw_score = float(ai_grade["score"])
+                    max_s = float(ai_grade.get("max_score", 5.0) or 5.0)
+                    score_awarded = (raw_score / max_s) * marks
                     ai_critique = ai_grade.get("feedback")
-                    is_correct = score_awarded >= (marks * 0.5) # pass threshold
-                except Exception:
-                    # Fallback score if service times out
-                    score_awarded = marks * 0.5
-                    ai_critique = "Grading fallback due to system timeout."
+                    is_correct = score_awarded >= (marks * 0.5)
+                    evaluation_status = "COMPLETED"
+                else:
+                    # AI failure (429, timeout, network failure, 5xx, or quota) must NEVER penalize the student!
+                    score_awarded = 0.0
+                    is_correct = None
+                    ai_critique = "Subjective evaluation pending instructor manual review (AI service unavailable)."
+                    evaluation_status = "PENDING_MANUAL_REVIEW"
+                    has_pending_manual_review = True
         else:
             student_ans = "Not Answered"
             is_correct = False
             score_awarded = 0.0
             ai_critique = None
+            evaluation_status = "COMPLETED"
             
         evaluated_responses[q_id] = {
             "question_text": q["question_text"],
@@ -402,22 +535,40 @@ def process_exam_submission(sub: ExamSubmission, db: Session) -> dict:
             "correct_answer": correct_ans,
             "is_correct": is_correct,
             "score_awarded": score_awarded,
+            "evaluation_status": evaluation_status,
             "explanation": q.get("explanation"),
             "ai_feedback": ai_critique
         }
         total_score += score_awarded
             
+    # Fallback to preserve student responses if exam had no pre-seeded question schema
+    if not original_questions and student_responses:
+        evaluated_responses = {
+            k: {
+                "question_text": k,
+                "selected_answer": v,
+                "correct_answer": None,
+                "is_correct": True,
+                "score_awarded": 1.0,
+                "explanation": None,
+                "ai_feedback": None
+            }
+            for k, v in student_responses.items() if k != "_meta"
+        }
+
     # 2. Finalize submission states
     sub.score = max(0.0, total_score) # prevent negative total marks
     sub.percentage = (sub.score / float(exam.total_marks or 1.0)) * 100.0 if exam.total_marks else 0.0
-    sub.status = "submitted"
+    sub.status = "auto_submitted" if auto_submitted else "submitted"
+    sub.grading_status = "PENDING_MANUAL_REVIEW" if has_pending_manual_review else "COMPLETED"
     sub.submitted_at = datetime.utcnow()
     sub.answers_json = json.dumps(evaluated_responses)
     
     # If simulation, return directly without DB writes
     if str(sub.id).startswith("sim_"):
         return {
-            "status": "submitted",
+            "status": sub.status,
+            "grading_status": sub.grading_status,
             "message": "Teacher Preview Simulation evaluated successfully.",
             "submission_id": sub.id,
             "score": round(sub.score, 2),
@@ -425,6 +576,7 @@ def process_exam_submission(sub: ExamSubmission, db: Session) -> dict:
             "percentage": round(sub.percentage, 1),
             "is_passed": sub.score >= float(exam.passing_marks or 0.0),
             "is_simulation": True,
+            "has_pending_manual_review": has_pending_manual_review,
             "evaluated_answers": evaluated_responses
         }
 
@@ -432,9 +584,43 @@ def process_exam_submission(sub: ExamSubmission, db: Session) -> dict:
     if sub.credential:
         sub.credential.is_used = True
     
+    # Synchronize candidate status
+    if sub.candidate:
+        sub.candidate.status = "SUBMITTED"
+
     db.add(sub)
     db.commit()
     
+    # Broadcast submission event to all connected teachers across workers
+    cand_name = "Candidate"
+    roll_no = ""
+    if sub.candidate:
+        cand_name = sub.candidate.name_snapshot
+        roll_no = sub.candidate.roll_number_snapshot or ""
+    elif sub.credential and sub.credential.student and sub.credential.student.user:
+        cand_name = sub.credential.student.user.full_name
+        roll_no = sub.credential.student.roll_number or ""
+
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            broadcast_type = "AUTO_SUBMITTED" if auto_submitted else "SUBMISSION_COMPLETED"
+            asyncio.create_task(manager.broadcast_event(
+                exam_id=sub.exam_id,
+                event_type=broadcast_type,
+                data={
+                    "student_name": cand_name,
+                    "roll_number": roll_no,
+                    "status": sub.status,
+                    "grading_status": sub.grading_status,
+                    "score": round(sub.score, 2),
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            ))
+    except Exception:
+        pass
+
     # Notify student in-app
     if sub.credential and sub.credential.student and sub.credential.student.user_id:
         create_notification(
@@ -448,12 +634,14 @@ def process_exam_submission(sub: ExamSubmission, db: Session) -> dict:
     
     return {
         "status": sub.status,
-        "message": "Exam submitted successfully.",
+        "grading_status": sub.grading_status,
+        "message": "Exam submitted. Subjective answers pending instructor manual review." if has_pending_manual_review else "Exam submitted successfully.",
         "submission_id": sub.id,
         "score": round(sub.score, 2),
         "total_marks": exam.total_marks,
         "percentage": round(sub.percentage, 1),
         "is_passed": sub.score >= float(exam.passing_marks or 0.0),
+        "has_pending_manual_review": has_pending_manual_review,
         "evaluated_answers": evaluated_responses
     }
 
@@ -530,14 +718,39 @@ def direct_start_for_student(
         db.add(student)
         db.commit()
         db.refresh(student)
-        
+
+    # 1. Resolve candidate for this exam
+    cand = db.query(ExamCandidate).filter(
+        ExamCandidate.exam_id == exam.id,
+        (ExamCandidate.email_snapshot == current_user.email) |
+        (ExamCandidate.roll_number_snapshot == student.roll_number)
+    ).first()
+
     cred = db.query(ExamCredential).filter(
         ExamCredential.exam_id == exam.id,
         ExamCredential.student_id == student.id
     ).first()
-    
+    if not cred and cand and cand.credential:
+        cred = cand.credential
+
+    # 2. Strict Enrollment Gate:
+    access_mode = getattr(exam, "access_mode", "ENROLLED_ONLY") or "ENROLLED_ONLY"
+    if access_mode != "OPEN_REGISTRATION":
+        # In ENROLLED_ONLY mode, a zero-candidate exam MUST NOT allow entry,
+        # and un-enrolled students cannot dynamically enroll!
+        has_enrolled_roster = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam.id).count() > 0
+        if not has_enrolled_roster and not cand:
+            raise HTTPException(status_code=403, detail="You are not enrolled as an eligible candidate for this examination.")
+        
+        if not cand and not cred:
+            from app.services.eligibility_service import ExamEligibilityService
+            eligible_students = ExamEligibilityService.resolve_students(db, exam.id)
+            if not any(s.id == student.id for s in eligible_students):
+                raise HTTPException(status_code=403, detail="You are not enrolled as an eligible candidate for this examination.")
+
     if not cred:
-        # Auto-provision on-the-fly credential for enrolled student
+        if access_mode != "OPEN_REGISTRATION" and not cand:
+            raise HTTPException(status_code=403, detail="You are not enrolled as an eligible candidate for this examination.")
         import secrets
         clean_roll = "".join(c for c in (student.roll_number or current_user.email.split('@')[0]) if c.isalnum()).upper()[:16]
         cand_username = f"{clean_roll}-{exam.exam_code}"[:40]
@@ -545,6 +758,7 @@ def direct_start_for_student(
             cand_username = f"{cand_username}-{secrets.token_hex(2).upper()}"
         cred = ExamCredential(
             exam_id=exam.id,
+            candidate_id=cand.id if cand else None,
             student_id=student.id,
             username=cand_username,
             password=str(secrets.randbelow(900000) + 100000),
@@ -560,31 +774,63 @@ def direct_start_for_student(
                 ExamCredential.exam_id == exam.id,
                 ExamCredential.student_id == student.id
             ).first()
-        
-    sub = db.query(ExamSubmission).filter(ExamSubmission.credential_id == cred.id).first()
-    token_expire = exam.end_time or (datetime.utcnow() + timedelta(hours=3))
-    
-    if sub:
-        payload = {"sub": sub.id, "exp": token_expire, "type": "exam_session"}
-        token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
-    else:
+
+    now = datetime.utcnow()
+    exam_duration = exam.duration_minutes or 30
+    allowed_end = to_naive_utc(exam.end_time) or (now + timedelta(minutes=exam_duration))
+    deadline = min(now + timedelta(minutes=exam_duration), allowed_end)
+
+    sub = None
+    if cand:
+        sub = db.query(ExamSubmission).filter(
+            ExamSubmission.exam_id == exam.id,
+            ExamSubmission.candidate_id == cand.id
+        ).first()
+    if not sub:
+        sub = db.query(ExamSubmission).filter(
+            ExamSubmission.exam_id == exam.id,
+            ExamSubmission.credential_id == cred.id
+        ).first()
+
+    if not sub:
         sub = ExamSubmission(
             exam_id=exam.id,
+            candidate_id=cand.id if cand else (cred.candidate_id if cred else None),
             credential_id=cred.id,
-            status="started"
+            status="started",
+            started_at=now,
+            deadline_at=deadline,
+            last_seen_at=now,
+            questions_snapshot_json=exam.questions_json,
+            answer_version=0,
+            grading_status="COMPLETED"
         )
         db.add(sub)
         db.commit()
         db.refresh(sub)
-        payload = {"sub": sub.id, "exp": token_expire, "type": "exam_session"}
-        token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+    else:
+        if cand and not sub.candidate_id:
+            sub.candidate_id = cand.id
+        if not sub.deadline_at:
+            sub.deadline_at = min((sub.started_at or now) + timedelta(minutes=exam_duration), allowed_end)
+        if not sub.questions_snapshot_json and exam.questions_json:
+            sub.questions_snapshot_json = exam.questions_json
+        sub.last_seen_at = now
+        db.commit()
 
-    is_completed = sub.status in ["submitted", "auto_submitted"]
+    if sub.status in ["started", "in_progress", "submitting"] and now >= sub.deadline_at:
+        process_exam_submission(sub, db, auto_submitted=True)
+
+    token_expire = exam.end_time or (now + timedelta(days=30))
+    payload = {"sub": sub.id, "exp": token_expire, "type": "exam_session"}
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
+    is_completed = sub.status in ["submitted", "auto_submitted", "graded"]
     
     return {
         "token": token,
         "session_token": token,
-        "student_name": current_user.full_name,
+        "student_name": cand.name_snapshot if cand else current_user.full_name,
         "duration_minutes": exam.duration_minutes,
         "is_completed": is_completed,
         "submission_id": sub.id,
@@ -599,22 +845,141 @@ def save_progress(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
-    """Persists responses dynamically; auto-submits if schedule window has ended."""
+    """Persists responses dynamically; uses server-controlled optimistic concurrency; auto-submits if deadline passed."""
     actual_token = resolve_exam_token(token, authorization)
     sub = get_submission_by_token(actual_token, db)
-    if sub.status in ["submitted", "auto_submitted", "submitting"]:
+    if sub.status in ["submitted", "auto_submitted", "submitting", "graded"]:
         raise HTTPException(status_code=400, detail="Cannot save progress on submitted exam")
         
     now = datetime.utcnow()
-    if sub.exam and sub.exam.end_time and now > sub.exam.end_time:
-        sub.answers_json = json.dumps(progress)
-        db.commit()
-        return process_exam_submission(sub, db)
+    exam = sub.exam
+    exam_duration = exam.duration_minutes or 30
+    allowed_end = to_naive_utc(exam.end_time) or (now + timedelta(minutes=exam_duration))
+    deadline = sub.deadline_at or min((sub.started_at or now) + timedelta(minutes=exam_duration), allowed_end)
 
-    sub.answers_json = json.dumps(progress)
-    db.add(sub)
+    if now >= deadline:
+        # Strict deadline enforcement: do not accept late incoming answers! Auto-submit whatever was on record before deadline.
+        return process_exam_submission(sub, db, auto_submitted=True)
+
+    incoming_answers = dict(progress)
+    expected_version = incoming_answers.pop("expected_version", None)
+    client_version = incoming_answers.pop("_version", None)
+    client_ts = incoming_answers.pop("_client_timestamp", None)
+    
+    existing_answers = json.loads(sub.answers_json) if sub.answers_json else {}
+    if not isinstance(existing_answers, dict):
+        existing_answers = {}
+    stored_meta = existing_answers.get("_meta", {}) if isinstance(existing_answers, dict) else {}
+    last_saved_ts = stored_meta.get("last_answer_timestamp", 0)
+    current_ver = sub.answer_version or 0
+
+    # 1. Monotonic client sequence check
+    if client_version is not None and int(client_version) < current_ver:
+        return {
+            "saved": False,
+            "conflict": True,
+            "discarded": True,
+            "server_version": current_ver,
+            "version": current_ver,
+            "message": "Stale autosave version discarded.",
+            "time_remaining_seconds": max(0, int((deadline - now).total_seconds()))
+        }
+
+    # 2. Client timestamp out-of-order safeguard
+    if client_ts is not None and float(client_ts) < float(last_saved_ts):
+        return {
+            "saved": False,
+            "conflict": True,
+            "discarded": True,
+            "server_version": current_ver,
+            "version": current_ver,
+            "message": "Stale autosave discarded.",
+            "time_remaining_seconds": max(0, int((deadline - now).total_seconds()))
+        }
+
+    # 3. Explicit Optimistic Concurrency check (Phase 5)
+    if expected_version is not None:
+        try:
+            expected_ver_int = int(expected_version)
+        except (ValueError, TypeError):
+            expected_ver_int = -1
+        if expected_ver_int != current_ver:
+            return {
+                "saved": False,
+                "conflict": True,
+                "discarded": True,
+                "server_version": current_ver,
+                "version": current_ver,
+                "message": f"Autosave conflict: expected version {expected_version} does not match server version {current_ver}.",
+                "time_remaining_seconds": max(0, int((deadline - now).total_seconds()))
+            }
+
+    merged_answers = {**existing_answers, **incoming_answers}
+    target_ver = max(current_ver, int(client_version or current_ver)) + 1
+    stored_meta["version"] = target_ver
+    if client_ts is not None:
+        stored_meta["last_answer_timestamp"] = float(client_ts)
+    merged_answers["_meta"] = stored_meta
+
+    sub.answers_json = json.dumps(merged_answers)
+    sub.answer_version = target_ver
+    sub.last_seen_at = now
+    sub.updated_at = now
     db.commit()
-    return {"message": "Progress auto-saved."}
+    db.refresh(sub)
+
+    return {
+        "saved": True,
+        "conflict": False,
+        "discarded": False,
+        "message": "Progress auto-saved.",
+        "version": sub.answer_version,
+        "server_version": sub.answer_version,
+        "time_remaining_seconds": max(0, int((deadline - now).total_seconds()))
+    }
+
+@router.post("/heartbeat")
+async def student_heartbeat(
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Receives periodic presence heartbeats (every 10-15s) from student test room.
+    Enforces server-authoritative exam deadline and records last_seen_at.
+    """
+    actual_token = resolve_exam_token(token, authorization)
+    sub = get_submission_by_token(actual_token, db)
+    now = datetime.utcnow()
+
+    if sub.status in ["submitted", "auto_submitted", "graded"]:
+        return {
+            "status": sub.status,
+            "action": "redirect_completed",
+            "time_remaining_seconds": 0
+        }
+
+    exam = sub.exam
+    exam_duration = exam.duration_minutes or 30
+    allowed_end = to_naive_utc(exam.end_time) or (now + timedelta(minutes=exam_duration))
+    deadline = sub.deadline_at or min((sub.started_at or now) + timedelta(minutes=exam_duration), allowed_end)
+
+    if now >= deadline:
+        if sub.status not in ["submitted", "auto_submitted", "submitting", "graded"]:
+            process_exam_submission(sub, db, auto_submitted=True)
+        return {
+            "status": "auto_submitted",
+            "action": "time_expired",
+            "time_remaining_seconds": 0
+        }
+
+    sub.last_seen_at = now
+    db.commit()
+
+    return {
+        "status": "ok",
+        "time_remaining_seconds": max(0, int((deadline - now).total_seconds()))
+    }
 
 @router.post("/proctor-alert")
 async def proctor_alert(
@@ -637,21 +1002,12 @@ async def proctor_alert(
     # Resolve candidate details for live alert HUD
     cand_name = "Candidate"
     roll_no = ""
-    if sub.credential and sub.credential.student and sub.credential.student.user:
+    if sub.candidate:
+        cand_name = sub.candidate.name_snapshot
+        roll_no = sub.candidate.roll_number_snapshot or ""
+    elif sub.credential and sub.credential.student and sub.credential.student.user:
         cand_name = sub.credential.student.user.full_name
         roll_no = sub.credential.student.roll_number or ""
-    elif sub.credential:
-        from app.models.candidate import ExamCandidate
-        candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == sub.exam_id).all()
-        for c in candidates:
-            clean_name = "".join(ch for ch in c.name_snapshot.split()[0].lower() if ch.isalnum())
-            if clean_name in sub.credential.username.lower() or (c.roll_number_snapshot and c.roll_number_snapshot.lower() in sub.credential.username.lower()):
-                cand_name = c.name_snapshot
-                roll_no = c.roll_number_snapshot or ""
-                break
-        if cand_name == "Candidate" and candidates:
-            cand_name = candidates[0].name_snapshot
-            roll_no = candidates[0].roll_number_snapshot or ""
 
     # Broadcast alert to all active teacher connections
     await manager.broadcast_proctor_alert(
@@ -667,7 +1023,7 @@ async def proctor_alert(
 
     return {"message": "Proctor event logged and broadcasted."}
 
-@router.post("/submit", dependencies=[Depends(rate_limit_dependency(max_requests=10, window_seconds=60))])
+@router.post("/submit", dependencies=[Depends(rate_limit_dependency(max_requests=300, window_seconds=60))])
 def submit_exam(
     token: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None),
@@ -677,30 +1033,84 @@ def submit_exam(
     """
     Submits the exam, scores objective questions instantly,
     runs Gemini AI Subjective evaluations against rubrics, and finalizes results.
-    Guarded against concurrent double-submissions.
+    Guarded against concurrent double-submissions with idempotency.
     """
     actual_token = resolve_exam_token(token, authorization)
     sub = get_submission_by_token(actual_token, db)
-    if sub.status in ["submitted", "auto_submitted", "submitting"]:
-        raise HTTPException(status_code=400, detail="Exam already submitted or submission in progress")
+    
+    # Idempotent response if already submitted
+    if sub.status in ["submitted", "auto_submitted", "graded"]:
+        evaluated = json.loads(sub.answers_json) if sub.answers_json else {}
+        return {
+            "status": sub.status,
+            "message": "Exam has already been submitted.",
+            "submission_id": sub.id,
+            "score": round(sub.score or 0.0, 2),
+            "total_marks": sub.exam.total_marks if sub.exam else 50,
+            "percentage": round(sub.percentage or 0.0, 1),
+            "is_passed": (sub.score or 0.0) >= float(sub.exam.passing_marks or 0.0) if sub.exam else True,
+            "evaluated_answers": evaluated
+        }
 
     # Atomic concurrency lock for real submissions (non-simulations)
     if not str(sub.id).startswith("sim_"):
         rows_updated = db.query(ExamSubmission).filter(
             ExamSubmission.id == sub.id,
-            ExamSubmission.status.notin_(["submitted", "auto_submitted", "submitting"])
+            ExamSubmission.status.notin_(["submitted", "auto_submitted", "submitting", "graded"])
         ).update({"status": "submitting"}, synchronize_session=False)
         db.commit()
         if rows_updated == 0:
-            raise HTTPException(status_code=400, detail="Exam already submitted or submission currently processing")
+            import time
+            for _ in range(25):
+                db.rollback()
+                sub = db.query(ExamSubmission).filter(ExamSubmission.id == sub.id).first()
+                if sub and sub.status in ["submitted", "auto_submitted", "graded"]:
+                    evaluated = json.loads(sub.answers_json) if sub.answers_json else {}
+                    return {
+                        "status": sub.status,
+                        "message": "Exam has already been submitted.",
+                        "submission_id": sub.id,
+                        "score": round(sub.score or 0.0, 2),
+                        "total_marks": sub.exam.total_marks if sub.exam else 50,
+                        "percentage": round(sub.percentage or 0.0, 1),
+                        "is_passed": (sub.score or 0.0) >= float(sub.exam.passing_marks or 0.0) if sub.exam else True,
+                        "evaluated_answers": evaluated
+                    }
+                time.sleep(0.08)
 
-    if answers:
+            sub = db.query(ExamSubmission).filter(ExamSubmission.id == sub.id).first()
+            if sub and sub.status in ["submitted", "auto_submitted", "graded"]:
+                evaluated = json.loads(sub.answers_json) if sub.answers_json else {}
+                return {
+                    "status": sub.status,
+                    "message": "Exam has already been submitted.",
+                    "submission_id": sub.id,
+                    "score": round(sub.score or 0.0, 2),
+                    "total_marks": sub.exam.total_marks if sub.exam else 50,
+                    "percentage": round(sub.percentage or 0.0, 1),
+                    "is_passed": (sub.score or 0.0) >= float(sub.exam.passing_marks or 0.0) if sub.exam else True,
+                    "evaluated_answers": evaluated
+                }
+            raise HTTPException(status_code=409, detail="Exam submission currently processing. Please wait.")
+
+    now = datetime.utcnow()
+    exam = sub.exam
+    exam_duration = exam.duration_minutes or 30 if exam else 30
+    allowed_end = to_naive_utc(exam.end_time) if exam else None
+    deadline = sub.deadline_at or (to_naive_utc(sub.started_at or now) + timedelta(minutes=exam_duration))
+    if allowed_end and allowed_end < deadline:
+        deadline = allowed_end
+
+    is_late = now >= deadline
+
+    # Only accept new answers if submitted BEFORE or AT deadline
+    if answers and not is_late:
         final_answers = answers.get("answers") if isinstance(answers, dict) and "answers" in answers and isinstance(answers["answers"], dict) else answers
         sub.answers_json = json.dumps(final_answers)
         db.commit()
         
     try:
-        return process_exam_submission(sub, db)
+        return process_exam_submission(sub, db, auto_submitted=is_late)
     except Exception as e:
         if not str(sub.id).startswith("sim_"):
             db.query(ExamSubmission).filter(ExamSubmission.id == sub.id, ExamSubmission.status == "submitting").update({"status": "started"}, synchronize_session=False)
@@ -725,6 +1135,13 @@ async def websocket_teacher_endpoint(websocket: WebSocket, exam_id: str, token: 
         if not exam:
             await websocket.close(code=1008)
             return
+
+        # Enforce multi-tenant workspace isolation for teacher monitor
+        if user.role != "super_admin":
+            teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()]
+            if not (exam.created_by == user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+                await websocket.close(code=1008)
+                return
     except Exception:
         await websocket.close(code=1008)
         return
@@ -754,14 +1171,42 @@ async def websocket_student_endpoint(websocket: WebSocket, submission_id: str, t
         await websocket.close(code=1008)
         return
 
-    await websocket.accept()
+    # 1. Authorize BEFORE accepting the socket connection
     db: Session = SessionLocal()
     try:
         submission = db.query(ExamSubmission).filter(ExamSubmission.id == submission_id).first()
         if not submission:
             await websocket.close(code=1008)
             return
-            
+        exam_id = submission.exam_id
+        cand_name = submission.candidate.name_snapshot if submission.candidate else (
+            submission.credential.student.user.full_name if (submission.credential and submission.credential.student and submission.credential.student.user) else "Student"
+        )
+        roll_no = submission.candidate.roll_number_snapshot if submission.candidate else (
+            submission.credential.student.roll_number if (submission.credential and submission.credential.student) else ""
+        )
+    except Exception:
+        await websocket.close(code=1008)
+        return
+    finally:
+        db.close()
+
+    # 2. Authorization succeeded — accept socket
+    await websocket.accept()
+
+    # Broadcast STUDENT_CONNECTED to all workers
+    await manager.broadcast_event(
+        exam_id=exam_id,
+        event_type="STUDENT_CONNECTED",
+        data={
+            "submission_id": submission_id,
+            "student_name": cand_name,
+            "roll_number": roll_no
+        }
+    )
+
+    db = SessionLocal()
+    try:
         while True:
             data = await websocket.receive_text()
             event = json.loads(data)
@@ -775,16 +1220,25 @@ async def websocket_student_endpoint(websocket: WebSocket, submission_id: str, t
             db.commit()
             
             await manager.broadcast_proctor_alert(
-                exam_id=submission.exam_id,
+                exam_id=exam_id,
                 message={
-                    "student_name": submission.credential.student.user.full_name if (submission.credential and submission.credential.student and submission.credential.student.user) else "Guest Student",
-                    "roll_number": submission.credential.student.roll_number if (submission.credential and submission.credential.student) else "",
+                    "student_name": cand_name,
+                    "roll_number": roll_no,
                     "event_type": event.get("event_type"),
                     "event_details": event.get("event_details"),
                     "timestamp": datetime.utcnow().isoformat()
                 }
             )
     except WebSocketDisconnect:
-        pass
+        # Broadcast STUDENT_DISCONNECTED across workers
+        await manager.broadcast_event(
+            exam_id=exam_id,
+            event_type="STUDENT_DISCONNECTED",
+            data={
+                "submission_id": submission_id,
+                "student_name": cand_name,
+                "roll_number": roll_no
+            }
+        )
     finally:
         db.close()

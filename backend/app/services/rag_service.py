@@ -210,9 +210,12 @@ class RAGService:
     def compute_embedding(self, text: str) -> List[float]:
         """
         Computes text embedding vector using Google Gemini model models/text-embedding-004.
-        Falls back to a hashed float array if AI is not enabled.
+        In production, raises an error if embedding fails rather than silently generating fake vectors.
+        In non-production testing with no API key, returns a deterministic vector.
         """
         sanitized_text = self._sanitize_unicode(text)
+        if not sanitized_text.strip():
+            return []
         if self.enabled:
             try:
                 result = genai.embed_content(
@@ -221,10 +224,14 @@ class RAGService:
                     task_type="retrieval_document"
                 )
                 return result["embedding"]
-            except Exception:
-                pass
+            except Exception as e:
+                if getattr(settings, "ENVIRONMENT", "development") == "production":
+                    raise RuntimeError(f"RAG embedding generation failed in production: {str(e)}")
                 
-        # Simple deterministic fallback vector of dimension 768
+        if getattr(settings, "ENVIRONMENT", "development") == "production":
+            raise RuntimeError("Gemini AI API key is not configured in production. Cannot generate RAG embeddings.")
+
+        # Non-production test fallback only
         h = hashlib.sha256(sanitized_text.encode("utf-8")).digest()
         vector = []
         for index in range(768):

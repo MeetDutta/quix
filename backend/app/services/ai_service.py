@@ -92,6 +92,8 @@ class AIService:
         Generates structured questions from vector context chunks using RAG.
         """
         if not self.enabled:
+            if getattr(settings, "ENVIRONMENT", "development") == "production":
+                raise RuntimeError("Gemini AI API key is not configured in production.")
             return self._mock_questions(question_type, difficulty, count, topic, context_chunks)
 
         # Build context prompt
@@ -200,13 +202,18 @@ class AIService:
                 valid_questions.append(q)
             
             if not valid_questions:
+                if getattr(settings, "ENVIRONMENT", "development") == "production":
+                    raise RuntimeError("AI question generation returned no valid questions from the provided context.")
                 return self._mock_questions(question_type, difficulty, count, topic, context_chunks)
                 
             # If Gemini returned fewer valid questions than requested count, backfill up to count
             if len(valid_questions) < count:
                 needed = count - len(valid_questions)
-                supplement = self._mock_questions(question_type, difficulty, needed, topic, context_chunks)
-                valid_questions.extend(supplement)
+                if getattr(settings, "ENVIRONMENT", "development") == "production":
+                    logger.warning(f"Gemini returned {len(valid_questions)} of {count} requested questions; partial return provided.")
+                else:
+                    supplement = self._mock_questions(question_type, difficulty, needed, topic, context_chunks)
+                    valid_questions.extend(supplement)
 
             # Run answer diversification and position shuffling safeguard
             valid_questions = self._shuffle_and_balance_options(valid_questions)
@@ -215,6 +222,8 @@ class AIService:
             return valid_questions[:count]
         except Exception as e:
             logger.error(f"Error generating questions via Gemini: {str(e)}")
+            if getattr(settings, "ENVIRONMENT", "development") == "production":
+                raise RuntimeError(f"AI question generation failed in production: {str(e)}")
             return self._mock_questions(question_type, difficulty, count, topic, context_chunks)
 
     def _shuffle_and_balance_options(self, questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -285,10 +294,13 @@ class AIService:
         
         try:
             raw_response = self._call_gemini(prompt, system_instruction=system_instruction, json_mode=True)
-            return json.loads(raw_response)
+            res_json = json.loads(raw_response)
+            if "score" in res_json and res_json["score"] is not None:
+                res_json["score"] = float(res_json["score"])
+            return res_json
         except Exception as e:
             logger.error(f"Error grading answer: {str(e)}")
-            return {"score": 2.5, "max_score": 5.0, "feedback": "Evaluation failed due to system error.", "hallucination_detected": False}
+            return {"score": None, "max_score": 5.0, "feedback": "AI evaluation unavailable; pending manual instructor grading.", "hallucination_detected": False}
 
     def generate_learning_analytics(self, topics_scores: Dict[str, List[float]]) -> Dict[str, Any]:
         """

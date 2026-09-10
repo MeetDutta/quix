@@ -68,11 +68,6 @@ def seed_initial_data():
             db.add(teacher)
             db.commit()
             db.refresh(teacher)
-        else:
-            teacher.hashed_password = get_password_hash("securepassword")
-            teacher.is_active = True
-            db.commit()
-
         # Bootstrap Personal Workspace for Teacher
         teacher_ws = bootstrap_personal_workspace(teacher, db)
 
@@ -180,12 +175,6 @@ def seed_initial_data():
                 cohort_id=cohort.id,
                 is_current=True
             )
-            db.add(membership)
-            db.commit()
-        else:
-            student_user.hashed_password = get_password_hash("securepassword")
-            student_user.is_active = True
-            db.commit()
     except Exception as e:
         print(f"Initial seed notice: {e}")
     finally:
@@ -208,6 +197,8 @@ def run_db_migrations():
             print("✅ [Migrations] Alembic schema verified at head revision.")
         except Exception as e:
             print(f"⚠️ [Migrations] Alembic upgrade notice: {e}")
+            if settings.ENVIRONMENT == "production":
+                raise RuntimeError(f"FATAL: Database migration failed in production: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -215,6 +206,8 @@ async def lifespan(app: FastAPI):
     try:
         run_db_migrations()
     except Exception as e:
+        if settings.ENVIRONMENT == "production":
+            raise RuntimeError(f"FATAL: Migration failed during production startup: {e}")
         print(f"Migration notice: {e}")
 
     try:
@@ -222,10 +215,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Schema sync notice: {e}")
 
-    try:
-        seed_initial_data()
-    except Exception as e:
-        print(f"Seed notice: {e}")
+    if settings.ENVIRONMENT != "production":
+        try:
+            seed_initial_data()
+        except Exception as e:
+            print(f"Seed notice: {e}")
     yield
 
 app = FastAPI(
@@ -306,19 +300,37 @@ def read_root():
 def health_check():
     ai_status = bool(settings.GEMINI_API_KEY)
     db_status = "ok"
+    redis_status = "disabled"
     try:
         from app.database import engine
         from sqlalchemy import text
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+        if settings.ENVIRONMENT == "production" and "sqlite" in str(engine.url):
+            db_status = "unhealthy_sqlite_in_production"
     except Exception as e:
         import logging
         logging.getLogger("uvicorn.error").error(f"Health check DB error: {e}")
         db_status = "unreachable"
 
+    if settings.REDIS_URL:
+        try:
+            import redis
+            r = redis.from_url(settings.REDIS_URL, socket_timeout=2)
+            r.ping()
+            redis_status = "ok"
+        except Exception as e:
+            redis_status = f"unreachable: {e}"
+
+    is_healthy = (
+        db_status == "ok" and 
+        (not redis_status.startswith("unreachable") if settings.REDIS_URL else True)
+    )
+
     return {
-        "status": "healthy" if db_status == "ok" else "unhealthy",
+        "status": "healthy" if is_healthy else "unhealthy",
         "database": db_status,
+        "redis": redis_status,
         "ai_engine": "enabled" if ai_status else "disabled"
     }
 

@@ -1,6 +1,8 @@
 import json
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Dict, Any, Optional
 from app.database import get_db
 from app.models.user import User, Student
@@ -45,6 +47,19 @@ def get_exam_analytics(
         if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
             raise HTTPException(status_code=403, detail="Access denied to this exam's analytics")
         
+    # Auto-submit any active submissions whose deadline has passed (e.g. from network drops at deadline)
+    now = datetime.utcnow()
+    expired_subs = db.query(ExamSubmission).filter(
+        ExamSubmission.exam_id == exam_id,
+        ExamSubmission.status.in_(["started", "in_progress", "submitting"]),
+        ExamSubmission.deadline_at != None,
+        ExamSubmission.deadline_at <= now
+    ).all()
+    if expired_subs:
+        from app.api.attempts import process_exam_submission
+        for exp_sub in expired_subs:
+            process_exam_submission(exp_sub, db, auto_submitted=True)
+
     total_credentials = db.query(ExamCredential).filter(ExamCredential.exam_id == exam_id).count()
     submissions = db.query(ExamSubmission).filter(
         ExamSubmission.exam_id == exam_id, 
@@ -115,11 +130,22 @@ def get_exam_analytics(
             dist["80_100"] += 1
 
     exam_candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam_id).all()
+    candidates_by_id = {c.id: c for c in exam_candidates}
+
+    submission_ids = [s.id for s in submissions]
+    alerts_by_sub = {}
+    if submission_ids:
+        alert_counts = db.query(
+            ProctoringLog.submission_id, func.count(ProctoringLog.id)
+        ).filter(
+            ProctoringLog.submission_id.in_(submission_ids)
+        ).group_by(ProctoringLog.submission_id).all()
+        alerts_by_sub = {sub_id: count for sub_id, count in alert_counts}
 
     # Aggregate topic scores across all student submissions
     submissions_list = []
     for rank_idx, s in enumerate(submissions, 1):
-        proctor_alerts_count = db.query(ProctoringLog).filter(ProctoringLog.submission_id == s.id).count()
+        proctor_alerts_count = alerts_by_sub.get(s.id, 0)
         student_obj = s.credential.student if s.credential else None
         
         # Parse answers for topic accuracy
@@ -145,33 +171,32 @@ def get_exam_analytics(
         pct_val = round(float(s.percentage), 2) if s.percentage is not None else 0.0
         pass_marks = float(exam.passing_marks) if exam.passing_marks is not None else 0.0
 
-        # Resolve candidate name & email
+        # Resolve candidate name & email deterministically
         cand_name = "Candidate"
         cand_email = ""
         cand_roll = "N/A"
         cand_div = ""
         cand_batch = ""
 
-        if student_obj and student_obj.user:
+        cand = None
+        if getattr(s, 'candidate_id', None) and s.candidate_id in candidates_by_id:
+            cand = candidates_by_id[s.candidate_id]
+        elif s.credential and getattr(s.credential, 'candidate_id', None) and s.credential.candidate_id in candidates_by_id:
+            cand = candidates_by_id[s.credential.candidate_id]
+
+        if cand:
+            cand_name = cand.name_snapshot
+            cand_email = cand.email_snapshot or ""
+            cand_div = getattr(cand, 'division_snapshot', "") or ""
+            cand_batch = getattr(cand, 'batch_snapshot', "") or ""
+        elif student_obj and student_obj.user:
             cand_name = student_obj.user.full_name
             cand_email = student_obj.user.email or ""
             cand_roll = student_obj.roll_number or "N/A"
             cand_div = student_obj.division or ""
             cand_batch = student_obj.batch or ""
         elif s.credential:
-            # Match from exam_candidates snapshots
-            cand = None
-            for c in exam_candidates:
-                clean_name = "".join(ch for ch in c.name_snapshot.split()[0].lower() if ch.isalnum())
-                if clean_name in s.credential.username.lower() or (c.roll_number_snapshot and c.roll_number_snapshot.lower() in s.credential.username.lower()):
-                    cand = c
-                    break
-            if not cand and exam_candidates:
-                cand = exam_candidates[0]
-            if cand:
-                cand_name = cand.name_snapshot
-                cand_email = cand.email_snapshot or ""
-                cand_roll = cand.roll_number_snapshot or "N/A"
+            cand_name = s.credential.username
 
         submissions_list.append({
             "rank": rank_idx,
@@ -278,36 +303,46 @@ def export_exam_csv(
     ).order_by(ExamSubmission.score.desc()).all()
     
     exam_candidates = db.query(ExamCandidate).filter(ExamCandidate.exam_id == exam_id).all()
-    
+    candidates_by_id = {c.id: c for c in exam_candidates}
+
+    submission_ids = [s.id for s in submissions]
+    alerts_by_sub = {}
+    if submission_ids:
+        alert_counts = db.query(
+            ProctoringLog.submission_id, func.count(ProctoringLog.id)
+        ).filter(
+            ProctoringLog.submission_id.in_(submission_ids)
+        ).group_by(ProctoringLog.submission_id).all()
+        alerts_by_sub = {sub_id: count for sub_id, count in alert_counts}
+
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Rank", "Student Name", "Email", "Roll Number", "Score", "Max Marks", "Percentage", "Result", "Proctor Flags", "Submitted At"])
     
     for rank_idx, s in enumerate(submissions, 1):
         st = s.credential.student if s.credential else None
-        alerts = db.query(ProctoringLog).filter(ProctoringLog.submission_id == s.id).count()
+        alerts = alerts_by_sub.get(s.id, 0)
         
         cand_name = "Candidate"
         cand_email = ""
         cand_roll = "N/A"
-        
-        if st and st.user:
+
+        cand = None
+        if getattr(s, 'candidate_id', None) and s.candidate_id in candidates_by_id:
+            cand = candidates_by_id[s.candidate_id]
+        elif s.credential and getattr(s.credential, 'candidate_id', None) and s.credential.candidate_id in candidates_by_id:
+            cand = candidates_by_id[s.credential.candidate_id]
+
+        if cand:
+            cand_name = cand.name_snapshot
+            cand_email = cand.email_snapshot or ""
+            cand_roll = cand.roll_number_snapshot or "N/A"
+        elif st and st.user:
             cand_name = st.user.full_name
             cand_email = st.user.email or ""
             cand_roll = st.roll_number or "N/A"
         elif s.credential:
-            cand = None
-            for c in exam_candidates:
-                clean_name = "".join(ch for ch in c.name_snapshot.split()[0].lower() if ch.isalnum())
-                if clean_name in s.credential.username.lower() or (c.roll_number_snapshot and c.roll_number_snapshot.lower() in s.credential.username.lower()):
-                    cand = c
-                    break
-            if not cand and exam_candidates:
-                cand = exam_candidates[0]
-            if cand:
-                cand_name = cand.name_snapshot
-                cand_email = cand.email_snapshot or ""
-                cand_roll = cand.roll_number_snapshot or "N/A"
+            cand_name = s.credential.username
                 
         score_val = round(float(s.score), 2) if s.score is not None else 0.0
         pct_val = round(float(s.percentage), 2) if s.percentage is not None else 0.0
@@ -917,6 +952,9 @@ def get_exam_analytics_alias(
     return get_exam_analytics(exam_id=exam_id, current_user=current_user, db=db)
 
 @router.put("/submission-detail/{submission_id}/override-grade")
+@router.post("/submission-detail/{submission_id}/override-grade")
+@router.put("/submissions/{submission_id}/override-grade")
+@router.post("/submissions/{submission_id}/override-grade")
 def override_question_grade(
     submission_id: str,
     override_data: Dict[str, Any], # { "q_id": "...", "new_score": float, "teacher_feedback": str }
@@ -927,13 +965,30 @@ def override_question_grade(
     sub = db.query(ExamSubmission).filter(ExamSubmission.id == submission_id).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
+
+    # Enforce multi-tenant workspace isolation for grade overrides
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (sub.exam and (sub.exam.created_by == current_user.id or (sub.exam.workspace_id and sub.exam.workspace_id in teacher_ws_ids))):
+            raise HTTPException(status_code=403, detail="Access denied to override grades for this exam")
         
     q_id = override_data.get("q_id")
-    new_score = float(override_data.get("new_score", 0.0))
+    try:
+        new_score = float(override_data.get("new_score", 0.0))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid score format")
+        
     teacher_feedback = override_data.get("teacher_feedback", "")
     
     if not q_id or not sub.answers_json:
         raise HTTPException(status_code=400, detail="Invalid request parameters")
+
+    # Guard against manipulating scores beyond question limits or below 0
+    exam_questions = json.loads(sub.exam.questions_json) if (sub.exam and sub.exam.questions_json) else []
+    q_meta = next((q for q in exam_questions if str(q.get("id")) == str(q_id)), None)
+    max_marks = float(q_meta.get("marks", 10.0)) if q_meta else float(sub.exam.total_marks or 10.0)
+    if new_score < 0.0 or new_score > max_marks:
+        raise HTTPException(status_code=400, detail=f"Score must be between 0.0 and {max_marks}")
         
     try:
         evaluated_responses = json.loads(sub.answers_json)
@@ -943,6 +998,9 @@ def override_question_grade(
         evaluated_responses[q_id]["score_awarded"] = new_score
         evaluated_responses[q_id]["teacher_feedback"] = teacher_feedback
         evaluated_responses[q_id]["is_manual_override"] = True
+        evaluated_responses[q_id]["evaluation_status"] = "COMPLETED"
+        if evaluated_responses[q_id].get("is_correct") is None:
+            evaluated_responses[q_id]["is_correct"] = new_score >= (max_marks * 0.5)
         
         # Recalculate total score
         total_score = sum(float(item.get("score_awarded", 0.0)) for item in evaluated_responses.values())
@@ -951,28 +1009,112 @@ def override_question_grade(
         sub.percentage = (sub.score / max(1.0, total_possible)) * 100.0
         sub.answers_json = json.dumps(evaluated_responses)
         
+        # Check if all questions are now reviewed
+        has_pending = any(item.get("evaluation_status") == "PENDING_MANUAL_REVIEW" for item in evaluated_responses.values())
+        sub.grading_status = "PENDING_MANUAL_REVIEW" if has_pending else "COMPLETED"
+        
         db.commit()
         db.refresh(sub)
         return {
             "message": "Grade override saved successfully",
             "submission_id": sub.id,
+            "grading_status": sub.grading_status,
             "new_score": sub.score,
             "new_percentage": sub.percentage
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to override grade: {str(e)}")
 
+@router.get("/exams/{exam_id}/pending-review")
+def get_submissions_pending_manual_review(
+    exam_id: str,
+    current_user: User = Depends(teacher_required),
+    db: Session = Depends(get_db)
+):
+    """Returns all submissions requiring teacher manual review for an exam."""
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+        
+    if current_user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()]
+        if not (exam.created_by == current_user.id or (exam.workspace_id and exam.workspace_id in teacher_ws_ids)):
+            raise HTTPException(status_code=403, detail="Access denied to this exam")
+
+    pending_subs = db.query(ExamSubmission).filter(
+        ExamSubmission.exam_id == exam_id,
+        ExamSubmission.grading_status == "PENDING_MANUAL_REVIEW"
+    ).all()
+
+    results = []
+    for s in pending_subs:
+        cand_name = s.candidate.name_snapshot if s.candidate else (
+            s.credential.student.user.full_name if (s.credential and s.credential.student and s.credential.student.user) else "Student"
+        )
+        roll_no = s.candidate.roll_number_snapshot if s.candidate else (
+            s.credential.student.roll_number if (s.credential and s.credential.student) else ""
+        )
+        answers = json.loads(s.answers_json) if s.answers_json else {}
+        pending_questions = [
+            {"q_id": k, **v} for k, v in answers.items() if v.get("evaluation_status") == "PENDING_MANUAL_REVIEW"
+        ]
+        results.append({
+            "submission_id": s.id,
+            "candidate_name": cand_name,
+            "roll_number": roll_no,
+            "status": s.status,
+            "grading_status": s.grading_status,
+            "score": s.score,
+            "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
+            "pending_questions": pending_questions
+        })
+    return results
+
 from fastapi.responses import HTMLResponse
 
 @router.get("/submissions/{submission_id}/certificate-html")
 def get_submission_certificate_html(
     submission_id: str,
+    token: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Generates an official downloadable/printable Certificate of Completion."""
+    auth_token = token
+    if not auth_token and authorization and authorization.startswith("Bearer "):
+        auth_token = authorization.split(" ")[1]
+        
+    user = None
+    if auth_token:
+        try:
+            payload = jwt.decode(auth_token, settings.SECRET_KEY, algorithms=["HS256"])
+            user_id = payload.get("sub")
+            if user_id:
+                user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
+        except Exception:
+            pass
+
     sub = db.query(ExamSubmission).filter(ExamSubmission.id == submission_id).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required to view certificate")
+
+    # Check permissions
+    if user.role == "student":
+        student_owns = (
+            sub.credential and sub.credential.student and (
+                sub.credential.student.user_id == user.id or 
+                (sub.credential.student.user and sub.credential.student.user.email == user.email)
+            )
+        )
+        if not student_owns:
+            raise HTTPException(status_code=403, detail="Access denied to this certificate")
+    elif user.role != "super_admin":
+        teacher_ws_ids = [m.workspace_id for m in db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()]
+        if not (sub.exam and (sub.exam.created_by == user.id or (sub.exam.workspace_id and sub.exam.workspace_id in teacher_ws_ids))):
+            raise HTTPException(status_code=403, detail="Access denied to this certificate")
         
     exam = sub.exam
     student = sub.credential.student if sub.credential else None
