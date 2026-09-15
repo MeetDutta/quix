@@ -111,13 +111,26 @@ export default function ExamPortal() {
         } else {
           setExamStatus("ended");
         }
+
+        // 3. Direct URL Guard: If student has a stored session token, verify start state
+        const storedToken = examStore.sessionToken || (typeof window !== "undefined" ? sessionStorage.getItem(`exam_token_${examCode}`) : null);
+        if (storedToken) {
+          const verifyRes = await apiFetch(`/attempts/exam-info?token=${storedToken}`);
+          if (verifyRes.ok) {
+            const verifyData = await verifyRes.json();
+            if (verifyData.status === "not_started" || !verifyData.is_started) {
+              router.replace(`/exam/${examCode}/instructions`);
+              return;
+            }
+          }
+        }
       } catch {
         setExamStatus("active");
       }
     };
 
     initExamPortal();
-  }, [examCode, isTeacherPreviewMode, authToken, authRole]);
+  }, [examCode, isTeacherPreviewMode, authToken, authRole, examStore.sessionToken, router]);
 
   // Pre-exam countdown timer
   useEffect(() => {
@@ -180,7 +193,26 @@ export default function ExamPortal() {
 
       setCandidateName(data.student_name || "Student");
 
-      // Fetch exam details
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(`exam_token_${examCode}`, data.session_token);
+      }
+
+      // If attempt is NOT started, navigate to instructions portal immediately
+      if (!data.is_started || data.status === "not_started") {
+        examStore.setExamSession(
+          data.session_token,
+          data.exam_name || "Assessment",
+          data.duration_minutes || 30,
+          [],
+          {},
+          (data.duration_minutes || 30) * 60
+        );
+        showToast("Authenticated. Please review the examination instructions before beginning.", "info");
+        router.push(`/exam/${examCode}/instructions`);
+        return;
+      }
+
+      // Fetch exam details for started/resuming attempt
       const infoRes = await apiFetch(`/attempts/exam-info?token=${data.session_token}`);
       const info = await infoRes.json();
 
@@ -199,7 +231,7 @@ export default function ExamPortal() {
           setDeadlineIST(formatISTTime(info.deadline_at));
         }
         setIsLogged(true);
-        showToast("Logged into exam portal securely.", "success");
+        showToast("Resumed active exam session.", "success");
       }
     } catch (err: any) {
       setLoginError(err.message);
@@ -226,6 +258,25 @@ export default function ExamPortal() {
 
       setCandidateName(data.student_name || authFullName || "Student");
 
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(`exam_token_${examCode}`, data.session_token);
+      }
+
+      // If attempt is NOT started, route to instructions
+      if (!data.is_started || data.status === "not_started") {
+        examStore.setExamSession(
+          data.session_token,
+          "Assessment",
+          data.duration_minutes || 30,
+          [],
+          {},
+          (data.duration_minutes || 30) * 60
+        );
+        showToast("Authenticated. Please review the examination instructions before beginning.", "info");
+        router.push(`/exam/${examCode}/instructions`);
+        return;
+      }
+
       // Fetch exam details
       const infoRes = await apiFetch(`/attempts/exam-info?token=${data.session_token}`);
       const info = await infoRes.json();
@@ -245,7 +296,7 @@ export default function ExamPortal() {
           setDeadlineIST(formatISTTime(info.deadline_at));
         }
         setIsLogged(true);
-        showToast("Logged into exam portal securely.", "success");
+        showToast("Resumed active exam session.", "success");
       }
     } catch (err: any) {
       setLoginError(err.message);

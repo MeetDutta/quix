@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query, Header, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -24,6 +25,16 @@ from app.utils.timezone import (
 to_naive_utc = to_utc_instant
 
 import asyncio
+import threading
+
+_start_exam_locks: Dict[str, threading.Lock] = {}
+_start_exam_locks_guard = threading.Lock()
+
+def get_start_exam_lock(sub_id: str) -> threading.Lock:
+    with _start_exam_locks_guard:
+        if sub_id not in _start_exam_locks:
+            _start_exam_locks[sub_id] = threading.Lock()
+        return _start_exam_locks[sub_id]
 
 
 router = APIRouter(prefix="/attempts", tags=["attempts"])
@@ -310,13 +321,13 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
     # Resolve or create single submission (respecting reattempt history)
     sub = None
     if cand:
-        # First look for an active in-progress attempt
+        # First look for an active in-progress or unstarted attempt
         sub = db.query(ExamSubmission).filter(
             ExamSubmission.exam_id == exam.id,
             ExamSubmission.candidate_id == cand.id,
-            ExamSubmission.status.in_(["started", "in_progress", "submitting"])
+            ExamSubmission.status.in_(["not_started", "started", "in_progress", "submitting"])
         ).order_by(ExamSubmission.attempt_number.desc()).first()
-        # If no active attempt, select latest attempt overall
+        # If no active/unstarted attempt, select latest attempt overall
         if not sub:
             sub = db.query(ExamSubmission).filter(
                 ExamSubmission.exam_id == exam.id,
@@ -326,7 +337,7 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
         sub = db.query(ExamSubmission).filter(
             ExamSubmission.exam_id == exam.id,
             ExamSubmission.credential_id == cred.id,
-            ExamSubmission.status.in_(["started", "in_progress", "submitting"])
+            ExamSubmission.status.in_(["not_started", "started", "in_progress", "submitting"])
         ).order_by(ExamSubmission.attempt_number.desc()).first()
         if not sub:
             sub = db.query(ExamSubmission).filter(
@@ -335,16 +346,17 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
             ).order_by(ExamSubmission.attempt_number.desc()).first()
 
     if not sub:
+        # FIRST LOGIN: Create attempt in not_started state without starting timer
         sub = ExamSubmission(
             exam_id=exam.id,
             candidate_id=cand.id if cand else None,
             credential_id=cred.id if cred else None,
             attempt_number=1,
             is_counted_for_result=True,
-            status="started",
-            started_at=now,
-            deadline_at=deadline,
-            last_seen_at=now,
+            status="not_started",
+            started_at=None,
+            deadline_at=None,
+            last_seen_at=None,
             questions_snapshot_json=exam.questions_json,
             answer_version=0,
             grading_status="COMPLETED"
@@ -355,17 +367,20 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
     else:
         if cand and not sub.candidate_id:
             sub.candidate_id = cand.id
-        if not sub.deadline_at:
-            sub.deadline_at = min((to_utc_instant(sub.started_at) or now) + timedelta(minutes=exam_duration), allowed_end)
         if not sub.questions_snapshot_json and exam.questions_json:
             sub.questions_snapshot_json = exam.questions_json
-        sub.last_seen_at = now
+        # Only update heartbeat and deadline if attempt has legitimately started
+        if sub.status in ["started", "in_progress", "submitting"] and sub.started_at:
+            if not sub.deadline_at:
+                sub.deadline_at = min((to_utc_instant(sub.started_at) or now) + timedelta(minutes=exam_duration), allowed_end)
+            sub.last_seen_at = now
         db.commit()
 
-    # If already past deadline, mark auto_submitted immediately
-    sub_deadline = to_utc_instant(sub.deadline_at)
-    if sub.status in ["started", "in_progress", "submitting"] and sub_deadline and now >= sub_deadline:
-        process_exam_submission(sub, db, auto_submitted=True)
+    # If already past deadline for a started attempt, mark auto_submitted immediately
+    if sub.status in ["started", "in_progress", "submitting"] and sub.started_at and sub.deadline_at:
+        sub_deadline = to_utc_instant(sub.deadline_at)
+        if sub_deadline and now >= sub_deadline:
+            process_exam_submission(sub, db, auto_submitted=True)
 
     # Issue exam session token
     end_instant = to_utc_instant(exam.end_time) or (now + timedelta(days=30))
@@ -373,21 +388,198 @@ def login_student(login_in: ExamLogin, exam_code: str, db: Session = Depends(get
     payload = {"sub": sub.id, "exp": token_expire, "type": "exam_session"}
     token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
-    is_completed = sub.status in ["submitted", "auto_submitted", "graded"]
+    is_started = bool(sub.status in ["started", "in_progress", "submitting"] and sub.started_at is not None)
+    is_completed = bool(sub.status in ["submitted", "auto_submitted", "graded"])
     questions_list = json.loads(exam.questions_json) if exam.questions_json else []
 
     return {
         "token": token,
         "session_token": token,
         "student_name": cand_name,
+        "exam_name": exam.name,
+        "exam_code": exam.exam_code,
         "duration_minutes": exam.duration_minutes,
         "total_marks": exam.total_marks,
         "passing_marks": exam.passing_marks,
         "questions_count": len(questions_list),
+        "status": sub.status,
+        "is_started": is_started,
         "is_completed": is_completed,
         "attempt_number": sub.attempt_number or 1,
         "is_reattempt": (sub.attempt_number or 1) > 1
     }
+
+class StartExamRequest(BaseModel):
+    acknowledged: bool = Field(..., description="Confirmation that student acknowledged examination instructions")
+
+@router.get("/instructions-info")
+def get_instructions_info(
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns candidate & assessment metadata for the pre-exam instruction screen.
+    Strictly isolated: does NOT leak questions, options, correct answers, or private keys.
+    """
+    actual_token = resolve_exam_token(token, authorization)
+    sub = get_submission_by_token(actual_token, db)
+    exam = sub.exam
+    cand = sub.candidate
+    cred = sub.credential
+
+    cand_name = "Candidate"
+    roll_number = "N/A"
+    email = "N/A"
+
+    if cand:
+        cand_name = cand.name_snapshot or "Candidate"
+        roll_number = cand.roll_number_snapshot or "N/A"
+        email = cand.email_snapshot or "N/A"
+    elif cred and cred.student and cred.student.user:
+        cand_name = cred.student.user.full_name or "Candidate"
+        roll_number = cred.student.roll_number or "N/A"
+        email = cred.student.user.email or "N/A"
+    elif cred:
+        cand_name = cred.username
+        roll_number = cred.username
+
+    total_q = 0
+    if exam.questions_json:
+        try:
+            total_q = len(json.loads(exam.questions_json))
+        except Exception:
+            total_q = 0
+
+    settings_dict = json.loads(exam.settings_json) if exam.settings_json else {}
+    calculator_enabled = settings_dict.get("calculator_enabled", True)
+
+    is_started = bool(sub.status in ["started", "in_progress", "submitting"] and sub.started_at is not None)
+    is_completed = bool(sub.status in ["submitted", "auto_submitted", "graded"])
+
+    return {
+        "candidate_name": cand_name,
+        "roll_number": roll_number,
+        "email": email,
+        "exam_name": exam.name,
+        "exam_code": exam.exam_code,
+        "duration_minutes": exam.duration_minutes,
+        "total_questions": total_q,
+        "total_marks": exam.total_marks,
+        "passing_marks": exam.passing_marks,
+        "calculator_enabled": calculator_enabled,
+        "access_mode": getattr(exam, "access_mode", "ENROLLED_ONLY") or "ENROLLED_ONLY",
+        "start_time_ist": format_ist_datetime(exam.start_time),
+        "end_time_ist": format_ist_datetime(exam.end_time),
+        "status": sub.status,
+        "attempt_number": sub.attempt_number or 1,
+        "is_reattempt": (sub.attempt_number or 1) > 1,
+        "is_started": is_started,
+        "is_completed": is_completed
+    }
+
+@router.post("/start-exam", dependencies=[Depends(rate_limit_dependency(max_requests=300, window_seconds=60))])
+def start_exam(
+    req: StartExamRequest,
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Authoritative server-side start of the examination attempt.
+    Transactionally locks the submission row (with_for_update) to guarantee
+    strict concurrency safety and idempotency against double-clicks and concurrent requests.
+    """
+    if not req.acknowledged:
+        raise HTTPException(
+            status_code=400,
+            detail="You must read and acknowledge the examination instructions before starting."
+        )
+
+    actual_token = resolve_exam_token(token, authorization)
+
+    try:
+        payload = jwt.decode(actual_token, settings.SECRET_KEY, algorithms=["HS256"])
+        sub_id = payload.get("sub")
+        token_type = payload.get("type")
+        if not sub_id or token_type not in ["exam_session", "teacher_simulation"]:
+            raise HTTPException(status_code=401, detail="Invalid exam session")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid exam session")
+
+    if token_type == "teacher_simulation":
+        now = now_utc()
+        return {
+            "status": "started",
+            "started_at": to_iso_utc(now),
+            "deadline_at": to_iso_utc(now + timedelta(minutes=60)),
+            "deadline_at_ist": format_ist_time(now + timedelta(minutes=60)),
+            "time_remaining_seconds": 3600,
+            "attempt_number": 1
+        }
+
+    lock = get_start_exam_lock(sub_id)
+    with lock:
+        db.expire_all()
+        # Acquire row lock on the submission row (SELECT ... FOR UPDATE)
+        try:
+            sub = db.query(ExamSubmission).filter(ExamSubmission.id == sub_id).with_for_update().first()
+        except Exception:
+            sub = db.query(ExamSubmission).filter(ExamSubmission.id == sub_id).first()
+
+        if not sub:
+            raise HTTPException(status_code=404, detail="Exam session not found")
+
+        exam = sub.exam
+        if not exam or not exam.is_published:
+            raise HTTPException(status_code=400, detail="Assessment is not published or active")
+
+        now = now_utc()
+        exam_start = to_utc_instant(exam.start_time) or (now - timedelta(seconds=10))
+        exam_end = to_utc_instant(exam.end_time) or (exam_start + timedelta(days=30))
+
+        if now < exam_start:
+            raise HTTPException(status_code=400, detail=f"Exam has not opened yet. Opens at {format_ist_time(exam_start)}")
+        if now > exam_end:
+            raise HTTPException(status_code=400, detail="Exam has already ended")
+
+        # Already completed?
+        if sub.status in ["submitted", "auto_submitted", "graded"]:
+            raise HTTPException(status_code=400, detail="This examination attempt has already been submitted.")
+
+        # Idempotent return if already started:
+        if sub.status in ["started", "in_progress", "submitting"] and sub.started_at is not None:
+            sub_deadline = to_utc_instant(sub.deadline_at) or min(to_utc_instant(sub.started_at) + timedelta(minutes=exam.duration_minutes or 30), exam_end)
+            remaining = max(0, int((sub_deadline - now).total_seconds()))
+            return {
+                "status": "started",
+                "started_at": to_iso_utc(sub.started_at),
+                "deadline_at": to_iso_utc(sub_deadline),
+                "deadline_at_ist": format_ist_time(sub_deadline),
+                "time_remaining_seconds": remaining,
+                "attempt_number": sub.attempt_number or 1
+            }
+
+        # Authoritative server start
+        exam_duration = exam.duration_minutes or 30
+        deadline = min(now + timedelta(minutes=exam_duration), exam_end)
+
+        sub.status = "started"
+        sub.started_at = now
+        sub.deadline_at = deadline
+        sub.last_seen_at = now
+        db.commit()
+        db.refresh(sub)
+
+        remaining = max(0, int((deadline - now).total_seconds()))
+        return {
+            "status": "started",
+            "started_at": to_iso_utc(sub.started_at),
+            "deadline_at": to_iso_utc(sub.deadline_at),
+            "deadline_at_ist": format_ist_time(sub.deadline_at),
+            "time_remaining_seconds": remaining,
+            "attempt_number": sub.attempt_number or 1
+        }
 
 @router.get("/exam-info")
 def get_exam_info(
@@ -441,17 +633,20 @@ def get_exam_info(
     now = now_utc()
     exam_duration = exam.duration_minutes or 30
     allowed_end = to_utc_instant(exam.end_time) or (now + timedelta(minutes=exam_duration))
-    sub_deadline = to_utc_instant(sub.deadline_at)
-    deadline = sub_deadline or min((to_utc_instant(sub.started_at) or now) + timedelta(minutes=exam_duration), allowed_end)
 
-    if sub.status in ["started", "in_progress", "submitting"] and now >= deadline:
-        process_exam_submission(sub, db, auto_submitted=True)
-        is_completed = True
-        evaluated_answers = json.loads(sub.answers_json) if sub.answers_json else {}
+    if sub.status == "not_started" or sub.started_at is None:
+        deadline = None
+        time_remaining = exam_duration * 60
+    else:
+        sub_deadline = to_utc_instant(sub.deadline_at)
+        deadline = sub_deadline or min((to_utc_instant(sub.started_at) or now) + timedelta(minutes=exam_duration), allowed_end)
+        if sub.status in ["started", "in_progress", "submitting"] and now >= deadline:
+            process_exam_submission(sub, db, auto_submitted=True)
+            is_completed = True
+            evaluated_answers = json.loads(sub.answers_json) if sub.answers_json else {}
+        time_remaining = max(0, int((deadline - now).total_seconds())) if not is_completed else 0
 
-    time_remaining = max(0, int((deadline - now).total_seconds())) if not is_completed else 0
-
-    if not is_completed:
+    if not is_completed and sub.status != "not_started":
         sub.last_seen_at = now
         db.commit()
     
@@ -464,13 +659,15 @@ def get_exam_info(
         "saved_answers": saved_answers,
         "time_remaining_seconds": time_remaining,
         "server_time": to_iso_utc(now),
-        "deadline_at": to_iso_utc(deadline),
-        "deadline_at_ist": format_ist_time(deadline),
+        "deadline_at": to_iso_utc(deadline) if deadline else None,
+        "deadline_at_ist": format_ist_time(deadline) if deadline else None,
         "start_time": to_iso_utc(exam.start_time),
         "end_time": to_iso_utc(exam.end_time),
         "start_time_ist": format_ist_datetime(exam.start_time),
         "end_time_ist": format_ist_datetime(exam.end_time),
         "is_completed": is_completed,
+        "is_started": bool(sub.status in ["started", "in_progress", "submitting"] and sub.started_at is not None),
+        "status": sub.status,
         "submission_id": sub.id,
         "score": sub.score,
         "percentage": sub.percentage,
@@ -827,10 +1024,10 @@ def direct_start_for_student(
             exam_id=exam.id,
             candidate_id=cand.id if cand else (cred.candidate_id if cred else None),
             credential_id=cred.id,
-            status="started",
-            started_at=now,
-            deadline_at=deadline,
-            last_seen_at=now,
+            status="not_started",
+            started_at=None,
+            deadline_at=None,
+            last_seen_at=None,
             questions_snapshot_json=exam.questions_json,
             answer_version=0,
             grading_status="COMPLETED"
@@ -841,16 +1038,18 @@ def direct_start_for_student(
     else:
         if cand and not sub.candidate_id:
             sub.candidate_id = cand.id
-        if not sub.deadline_at:
-            sub.deadline_at = min((to_utc_instant(sub.started_at) or now) + timedelta(minutes=exam_duration), allowed_end)
         if not sub.questions_snapshot_json and exam.questions_json:
             sub.questions_snapshot_json = exam.questions_json
-        sub.last_seen_at = now
+        if sub.status in ["started", "in_progress", "submitting"] and sub.started_at:
+            if not sub.deadline_at:
+                sub.deadline_at = min((to_utc_instant(sub.started_at) or now) + timedelta(minutes=exam_duration), allowed_end)
+            sub.last_seen_at = now
         db.commit()
 
-    sub_deadline = to_utc_instant(sub.deadline_at)
-    if sub.status in ["started", "in_progress", "submitting"] and sub_deadline and now >= sub_deadline:
-        process_exam_submission(sub, db, auto_submitted=True)
+    if sub.status in ["started", "in_progress", "submitting"] and sub.started_at and sub.deadline_at:
+        sub_deadline = to_utc_instant(sub.deadline_at)
+        if sub_deadline and now >= sub_deadline:
+            process_exam_submission(sub, db, auto_submitted=True)
 
     end_instant = to_utc_instant(exam.end_time) or (now + timedelta(days=30))
     token_expire = max(end_instant, now + timedelta(hours=6))
@@ -858,6 +1057,7 @@ def direct_start_for_student(
     token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
     is_completed = sub.status in ["submitted", "auto_submitted", "graded"]
+    is_started = bool(sub.status in ["started", "in_progress", "submitting"] and sub.started_at is not None)
     
     return {
         "token": token,
@@ -865,6 +1065,8 @@ def direct_start_for_student(
         "student_name": cand.name_snapshot if cand else current_user.full_name,
         "duration_minutes": exam.duration_minutes,
         "is_completed": is_completed,
+        "is_started": is_started,
+        "status": sub.status,
         "submission_id": sub.id,
         "score": sub.score,
         "percentage": sub.percentage

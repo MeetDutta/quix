@@ -185,9 +185,11 @@ async def test_attempt_1_immutability_and_attempt_2_freshness(client, teacher_au
     assert att1.submitted_at == sub1_submitted_at
     assert att1.is_counted_for_result is True  # Attempt 1 remains official result initially
 
-    # Verify Attempt 2 is fresh
+    # Verify Attempt 2 is fresh and in not_started state
     assert att2.attempt_number == 2
-    assert att2.status == "started"
+    assert att2.status == "not_started"
+    assert att2.started_at is None
+    assert att2.deadline_at is None
     assert att2.tab_switch_count == 0
     assert att2.answers_json == "{}"
     assert att2.score in [None, 0.0]

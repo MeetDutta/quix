@@ -78,12 +78,12 @@ class ExamSubmission(TimeStampedModel):
     answer_version = Column(Integer, default=0, nullable=False) # Server-controlled monotonic autosave version
     score = Column(Float, default=0.0)
     percentage = Column(Float, default=0.0)
-    status = Column(String(50), default="started") # "started", "submitting", "submitted", "auto_submitted", "graded", "terminated"
+    status = Column(String(50), default="not_started") # "not_started", "started", "submitting", "submitted", "auto_submitted", "graded", "terminated"
     grading_status = Column(String(50), default="COMPLETED", nullable=False) # "COMPLETED", "PENDING_MANUAL_REVIEW"
     ai_feedback = Column(Text, nullable=True)
-    started_at = Column(DateTime(timezone=True), default=now_utc)
+    started_at = Column(DateTime(timezone=True), nullable=True)
     deadline_at = Column(DateTime(timezone=True), nullable=True)
-    last_seen_at = Column(DateTime(timezone=True), default=now_utc, nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     
     tab_switch_count = Column(Integer, default=0, nullable=False)

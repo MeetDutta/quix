@@ -113,6 +113,7 @@ async def test_01_single_tab_switch_violation_persisted(client, setup_test_datab
     })
     assert login_res.status_code == 200
     token = login_res.json()["token"]
+    await client.post(f"/api/v1/attempts/start-exam?token={token}", json={"acknowledged": True})
 
     # Student triggers first tab switch
     event_id_1 = str(uuid.uuid4())
@@ -151,6 +152,7 @@ async def test_02_and_03_tab_switch_automatic_submission_and_db_status(client, s
         "password": cred.password
     })
     token = login_res.json()["token"]
+    await client.post(f"/api/v1/attempts/start-exam?token={token}", json={"acknowledged": True})
 
     # First switch -> Warn
     await client.post(f"/api/v1/attempts/violation?token={token}", json={
@@ -194,6 +196,7 @@ async def test_04_subsequent_save_progress_rejected(client, setup_test_database)
         "password": cred.password
     })
     token = login_res.json()["token"]
+    await client.post(f"/api/v1/attempts/start-exam?token={token}", json={"acknowledged": True})
 
     # Auto submit via 2 tab switches
     await client.post(f"/api/v1/attempts/violation?token={token}", json={"type": "TAB_SWITCH", "client_event_id": str(uuid.uuid4())})
@@ -216,6 +219,7 @@ async def test_05_subsequent_submit_rejected_or_idempotent(client, setup_test_da
         "password": cred.password
     })
     token = login_res.json()["token"]
+    await client.post(f"/api/v1/attempts/start-exam?token={token}", json={"acknowledged": True})
 
     # Auto submit via 2 tab switches
     await client.post(f"/api/v1/attempts/violation?token={token}", json={"type": "TAB_SWITCH", "client_event_id": str(uuid.uuid4())})
@@ -240,6 +244,7 @@ async def test_06_and_07_duplicate_event_and_request_idempotency(client, setup_t
         "password": cred.password
     })
     token = login_res.json()["token"]
+    await client.post(f"/api/v1/attempts/start-exam?token={token}", json={"acknowledged": True})
 
     event_id = str(uuid.uuid4())
     # Request 1
@@ -280,6 +285,7 @@ async def test_08_violation_and_heartbeat_race(client, setup_test_database):
         "password": cred.password
     })
     token = login_res.json()["token"]
+    await client.post(f"/api/v1/attempts/start-exam?token={token}", json={"acknowledged": True})
 
     # First switch
     await client.post(f"/api/v1/attempts/violation?token={token}", json={"type": "TAB_SWITCH", "client_event_id": str(uuid.uuid4())})
@@ -309,6 +315,7 @@ async def test_09_violation_and_manual_submit_race(client, setup_test_database):
         "password": cred.password
     })
     token = login_res.json()["token"]
+    await client.post(f"/api/v1/attempts/start-exam?token={token}", json={"acknowledged": True})
 
     # First switch
     await client.post(f"/api/v1/attempts/violation?token={token}", json={"type": "TAB_SWITCH", "client_event_id": str(uuid.uuid4())})
@@ -338,6 +345,7 @@ async def test_10_multiple_tabs_one_submission(client, setup_test_database):
         "password": cred.password
     })
     token = login_res.json()["token"]
+    await client.post(f"/api/v1/attempts/start-exam?token={token}", json={"acknowledged": True})
 
     # Tab A switches to Tab B (Tab A hides)
     res_tab_a = await client.post(f"/api/v1/attempts/violation?token={token}", json={
@@ -370,6 +378,7 @@ async def test_11_return_to_tab_exam_remains_locked(client, setup_test_database)
         "password": cred.password
     })
     token = login_res.json()["token"]
+    await client.post(f"/api/v1/attempts/start-exam?token={token}", json={"acknowledged": True})
 
     # 2 switches trigger auto submit
     await client.post(f"/api/v1/attempts/violation?token={token}", json={"type": "TAB_SWITCH", "client_event_id": str(uuid.uuid4())})
@@ -395,6 +404,7 @@ async def test_12_network_interruption_reconciliation(client, setup_test_databas
         "password": cred.password
     })
     token = login_res.json()["token"]
+    await client.post(f"/api/v1/attempts/start-exam?token={token}", json={"acknowledged": True})
 
     # First switch
     await client.post(f"/api/v1/attempts/violation?token={token}", json={"type": "TAB_SWITCH", "client_event_id": str(uuid.uuid4())})
@@ -438,6 +448,7 @@ async def test_13_teacher_live_monitor_receives_auto_submitted_state(client, tea
         "password": cred.password
     })
     token = login_res.json()["token"]
+    await client.post(f"/api/v1/attempts/start-exam?token={token}", json={"acknowledged": True})
 
     # 2 tab switches -> auto submit
     await client.post(f"/api/v1/attempts/violation?token={token}", json={"type": "TAB_SWITCH", "client_event_id": str(uuid.uuid4())})
@@ -530,7 +541,9 @@ async def test_14_twenty_seven_students_concurrent_tab_switches(client, teacher_
             "password": cred.password
         })
         assert login_res.status_code == 200
-        tokens.append(login_res.json()["token"])
+        tok = login_res.json()["token"]
+        await client.post(f"/api/v1/attempts/start-exam?token={tok}", json={"acknowledged": True})
+        tokens.append(tok)
 
     assert len(tokens) == 27
 
