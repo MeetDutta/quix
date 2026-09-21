@@ -127,6 +127,7 @@ class ExamGenerateKBRequest(BaseModel):
     marks_distribution: Optional[Dict[str, Any]] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
+    is_published: Optional[bool] = None
 
     @field_validator("start_time", "end_time", mode="after")
     @classmethod

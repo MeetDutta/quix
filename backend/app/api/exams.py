@@ -4,7 +4,10 @@ import random
 import secrets
 import csv
 import io
+import logging
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -49,14 +52,26 @@ teacher_required = RoleChecker(["teacher", "inst_admin", "super_admin"])
 rag_service = RAGService()
 ai_service = AIService()
 
-def snapshot_candidates_for_exam(exam: Exam, directory_id: str, db: Session):
+def snapshot_candidates_for_exam(exam: Exam, directory_id: str, db: Session, commit: bool = True):
     """
     Idempotently synchronizes candidates from StudentDirectory into ExamCandidate records
     and ensures each candidate has exactly one deterministic ExamCredential linked via candidate_id.
     Never creates duplicates or replaces passwords on repeated publishing.
+    Supports directory lookup by UUID or name, and commit=False for atomic outer transactions.
     """
+    # 0. Resolve actual directory UUID if name or code provided
+    actual_dir_id = directory_id
+    if directory_id:
+        clean_dir_str = str(directory_id).strip()
+        dir_record = db.query(StudentDirectory).filter(
+            (StudentDirectory.id == clean_dir_str) | (func.lower(StudentDirectory.name) == func.lower(clean_dir_str)),
+            StudentDirectory.is_deleted == False
+        ).first()
+        if dir_record:
+            actual_dir_id = dir_record.id
+
     students = db.query(DirectoryStudent).filter(
-        DirectoryStudent.directory_id == directory_id,
+        DirectoryStudent.directory_id == actual_dir_id,
         DirectoryStudent.is_deleted == False,
         DirectoryStudent.status == "active"
     ).all()
@@ -110,11 +125,9 @@ def snapshot_candidates_for_exam(exam: Exam, directory_id: str, db: Session):
                 existing_unlinked.expires_at = expires_at
                 cred = existing_unlinked
             else:
-                existing_user = db.query(ExamCredential).filter(ExamCredential.username == base_username).first()
-                if existing_user:
-                    username = f"{base_username}-{secrets.randbelow(900) + 100}"
-                else:
-                    username = base_username
+                username = base_username
+                while db.query(ExamCredential).filter(ExamCredential.username == username).first():
+                    username = f"{base_username}-{secrets.randbelow(9000) + 1000}"
 
                 password = str(secrets.randbelow(900000) + 100000)
                 cred = ExamCredential(
@@ -141,7 +154,10 @@ def snapshot_candidates_for_exam(exam: Exam, directory_id: str, db: Session):
                 db.query(ExamCredential).filter(ExamCredential.candidate_id == sc.id).delete(synchronize_session=False)
                 db.delete(sc)
 
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
 def generate_unique_exam_code(db: Session, prefix: str = "quiz") -> str:
     clean_prefix = "".join(c for c in prefix if c.isalnum()).lower()[:5] or "quiz"
@@ -162,6 +178,11 @@ def generate_exam_from_kb(
     Dynamically generates an AI Exam paper directly from Knowledge Base context,
     strictly restricted to the specified document or subject's Knowledge Base files.
     """
+    logger.info(
+        f"[ASSESSMENT_REQUEST_RECEIVED] User {current_user.id} in workspace {current_workspace.id} "
+        f"requested assessment '{req.name}', subject='{req.subject_id}', directory='{req.student_directory_id}'"
+    )
+
     # 1. Resolve target document IDs strictly
     subject_doc_ids = []
     
@@ -184,22 +205,26 @@ def generate_exam_from_kb(
     chunks = []
     
     # 2. Search vector store with document/subject scoping
-    if subject_doc_ids:
-        chunks = rag_service.search_similarity(
-            query=req.topic or "General Concept", 
-            limit=15, 
-            document_ids=subject_doc_ids,
-            workspace_id=current_workspace.id
-        )
-    elif req.subject_id:
-        chunks = rag_service.search_similarity(
-            query=req.topic or "General Concept", 
-            limit=15, 
-            subject_id=req.subject_id,
-            workspace_id=current_workspace.id
-        )
+    try:
+        if subject_doc_ids:
+            chunks = rag_service.search_similarity(
+                query=req.topic or "General Concept", 
+                limit=15, 
+                document_ids=subject_doc_ids,
+                workspace_id=current_workspace.id
+            )
+        elif req.subject_id:
+            chunks = rag_service.search_similarity(
+                query=req.topic or "General Concept", 
+                limit=15, 
+                subject_id=req.subject_id,
+                workspace_id=current_workspace.id
+            )
+    except Exception as search_err:
+        logger.warning(f"[RAG_SEARCH_NOTICE] Similarity search encountered error: {search_err}. Proceeding to database chunk fallback.")
+        chunks = []
 
-    # 3. Direct DB fallback: If vector store is sparse, pull actual chunks from database table
+    # 3. Direct DB fallback: If vector store is sparse or unavailable, pull actual chunks from database table
     if (not chunks or len(chunks) == 0) and subject_doc_ids:
         db_chunks = db.query(DocumentChunk).filter(
             DocumentChunk.document_id.in_(subject_doc_ids)
@@ -221,7 +246,9 @@ def generate_exam_from_kb(
             "content": f"Fundamental concepts, core definitions, practical applications, algorithms, principles, and problem solving regarding {req.topic or req.name or 'Subject Knowledge'}."
         }]
     
-    # 2. Determine questions count & types strictly based on blueprint and request fields
+    logger.info(f"[KNOWLEDGE_BASE_RETRIEVED] Assembled {len(chunks)} context chunks for AI paper generation")
+
+    # 4. Determine questions count & types strictly based on blueprint and request fields
     bp = req.blueprint or {}
     q_type_req = str(req.question_type or bp.get("question_type") or "mcq").lower()
     
@@ -254,6 +281,11 @@ def generate_exam_from_kb(
     target_topic = req.topic or bp.get("topic") or req.name or "General"
     custom_instr = req.custom_instructions or bp.get("custom_instructions") or None
 
+    logger.info(
+        f"[AI_GENERATION_STARTED] Generating {total_count} '{q_type_req}' questions "
+        f"at difficulty '{target_difficulty}' on topic '{target_topic}'"
+    )
+
     raw_questions = ai_service.generate_questions(
         context_chunks=chunks,
         question_type=q_type_req,
@@ -280,6 +312,7 @@ def generate_exam_from_kb(
 
     # Strictly limit to exact requested count
     raw_questions = raw_questions[:total_count]
+    logger.info(f"[AI_GENERATION_COMPLETED] Generated {len(raw_questions)} questions successfully")
 
     # Format questions list with custom marks distribution support
     dist = req.marks_distribution or (req.blueprint.get("marks_distribution") if isinstance(req.blueprint, dict) else None) or {}
@@ -339,48 +372,84 @@ def generate_exam_from_kb(
     # Auto-calculate exact total marks from compiled questions
     calc_total = sum(float(q.get("marks", 1.0)) for q in compiled)
     computed_total_marks = round(calc_total, 2) if calc_total > 0 else (req.total_marks or 50.0)
+    logger.info(f"[QUESTIONS_VALIDATED] Compiled {len(compiled)} questions, computed total marks: {computed_total_marks}")
 
-    # Auto-provision subject matching req.subject_id
-    subj_id = req.subject_id or "general_101"
-    from app.models.institution import get_or_create_subject
-    get_or_create_subject(db, subj_id)
-
-    exam_code = generate_unique_exam_code(db, req.name or "quiz")
-    now = now_utc()
-    dur = req.duration_minutes or 30
-
-    # Schedule bounds validation
-    exam_start = to_utc_instant(req.start_time) if req.start_time else (now - timedelta(seconds=10))
-    exam_end = to_utc_instant(req.end_time) if req.end_time else (exam_start + timedelta(days=30))
-    if exam_end <= exam_start:
-        exam_end = exam_start + timedelta(days=30)
-
-    exam = Exam(
-        name=req.name,
-        subject_id=subj_id,
-        workspace_id=current_workspace.id,
-        created_by=current_user.id,
-        student_directory_id=req.student_directory_id,
-        duration_minutes=req.duration_minutes or 30,
-        total_marks=int(round(computed_total_marks)),
-        negative_marking=req.negative_marking or 0.0,
-        passing_marks=min(req.passing_marks or 20.0, computed_total_marks),
-        start_time=exam_start,
-        end_time=exam_end,
-        exam_code=exam_code,
-        is_published=False,
-        blueprint_json=json.dumps(req.blueprint) if req.blueprint else None,
-        questions_json=json.dumps(compiled)
-    )
-    db.add(exam)
-    db.commit()
-    db.refresh(exam)
-
-    # If student directory is provided, snapshot candidate roster
+    # 5. Resolve student directory safely within current workspace (by UUID or name)
+    resolved_directory_id = None
     if req.student_directory_id:
-        snapshot_candidates_for_exam(exam, req.student_directory_id, db)
+        clean_dir_input = str(req.student_directory_id).strip()
+        target_dir = db.query(StudentDirectory).filter(
+            (StudentDirectory.id == clean_dir_input) | (func.lower(StudentDirectory.name) == func.lower(clean_dir_input)),
+            StudentDirectory.workspace_id == current_workspace.id,
+            StudentDirectory.is_deleted == False
+        ).first()
+        if target_dir:
+            resolved_directory_id = target_dir.id
+            logger.info(f"[DIRECTORY_RESOLVED] Successfully mapped directory '{req.student_directory_id}' to UUID {target_dir.id} ({target_dir.name})")
+        else:
+            logger.warning(
+                f"[DIRECTORY_RESOLUTION_NOTICE] Directory '{req.student_directory_id}' not found in workspace {current_workspace.id}. "
+                "Exam created with open access mode."
+            )
 
-    return exam
+    # 6. Atomic Transaction for Exam Creation, Candidate Snapshotting, and Publication
+    try:
+        subj_id = req.subject_id or "general_101"
+        from app.models.institution import get_or_create_subject
+        get_or_create_subject(db, subj_id)
+
+        exam_code = generate_unique_exam_code(db, req.name or "quiz")
+        now = now_utc()
+        dur = req.duration_minutes or 30
+
+        # Schedule bounds validation
+        exam_start = to_utc_instant(req.start_time) if req.start_time else (now - timedelta(seconds=10))
+        exam_end = to_utc_instant(req.end_time) if req.end_time else (exam_start + timedelta(days=30))
+        if exam_end <= exam_start:
+            exam_end = exam_start + timedelta(days=30)
+
+        # Honor explicit publish flag if requested, otherwise default to False (preserving standard creation behavior)
+        publish_exam_now = bool(req.is_published) if req.is_published is not None else False
+
+        exam = Exam(
+            name=req.name,
+            subject_id=subj_id,
+            workspace_id=current_workspace.id,
+            created_by=current_user.id,
+            student_directory_id=resolved_directory_id,
+            duration_minutes=req.duration_minutes or 30,
+            total_marks=int(round(computed_total_marks)),
+            negative_marking=req.negative_marking or 0.0,
+            passing_marks=int(round(min(float(req.passing_marks or 20.0), float(computed_total_marks)))),
+            start_time=exam_start,
+            end_time=exam_end,
+            exam_code=exam_code,
+            is_published=publish_exam_now,
+            blueprint_json=json.dumps(req.blueprint) if req.blueprint else None,
+            questions_json=json.dumps(compiled)
+        )
+        db.add(exam)
+        db.flush()
+        logger.info(f"[ASSESSMENT_CREATED] Exam record created: id={exam.id}, code={exam.exam_code}, published={exam.is_published}")
+
+        # If student directory is resolved, snapshot candidate roster atomically
+        if resolved_directory_id:
+            snapshot_candidates_for_exam(exam, resolved_directory_id, db, commit=False)
+            logger.info(f"[CANDIDATES_SNAPSHOTTED] Roster candidates snapshotted for exam {exam.id} from directory {resolved_directory_id}")
+
+        if publish_exam_now:
+            logger.info(f"[ASSESSMENT_PUBLISHED] Exam {exam.id} published live")
+
+        db.commit()
+        db.refresh(exam)
+        return exam
+    except Exception as tx_err:
+        db.rollback()
+        logger.error(f"[ASSESSMENT_CREATION_FAILED] Atomic transaction failed: {tx_err}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create assessment: {str(tx_err)}" if settings.ENVIRONMENT != "production" else "An unexpected database error occurred while creating the assessment. Please try again."
+        )
 
 @router.post("/audit-paper")
 def audit_exam_paper(

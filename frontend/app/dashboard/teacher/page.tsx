@@ -501,6 +501,7 @@ export default function TeacherDashboard() {
         custom_instructions: customPromptInstructions,
         blueprint: blueprint,
         enable_ai_paper: true,
+        is_published: true,
       };
 
       const res = await apiFetch("/exams/generate-from-kb", {
@@ -511,7 +512,7 @@ export default function TeacherDashboard() {
 
       if (res.ok) {
         const newExam = await res.json();
-        showToast(`Assessment "${newExam.name}" successfully created!`, "success");
+        showToast(`Assessment "${newExam.name}" successfully created and published!`, "success");
         setCreateStep(1);
         setExpandedStep(1);
         setExamName("");
@@ -521,11 +522,22 @@ export default function TeacherDashboard() {
         }
         fetchData();
       } else {
+        const requestId = res.headers.get("X-Request-ID") || "";
         const errData = await res.json().catch(() => ({}));
-        showToast(errData.detail || "Assessment generation failed. Please try again.", "error");
+        const reqTag = requestId || errData.request_id ? ` [Req: ${requestId || errData.request_id}]` : "";
+        
+        if (res.status === 422) {
+          showToast(`Validation error: Please verify question count, passing marks, and dates.${reqTag}`, "error");
+        } else if (res.status === 401 || res.status === 403) {
+          showToast(`Authorization error: You do not have permission to publish in this workspace.${reqTag}`, "error");
+        } else if (res.status === 404) {
+          showToast(`Resource not found: The selected Knowledge Source or Directory is unavailable.${reqTag}`, "error");
+        } else {
+          showToast(errData.detail ? `${errData.detail}${reqTag}` : `Server error generating assessment. Please try again.${reqTag}`, "error");
+        }
       }
     } catch (err: any) {
-      showToast(err?.message || "Network error while generating assessment", "error");
+      showToast(err?.message ? `Network error: ${err.message}` : "Unable to reach server. Please check your internet connection.", "error");
     } finally {
       setIsGenerating(false);
     }

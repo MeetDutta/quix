@@ -257,15 +257,30 @@ else:
         expose_headers=["*"]
     )
 
+@app.middleware("http")
+async def add_correlation_id_middleware(request: Request, call_next):
+    import uuid
+    request_id = request.headers.get("x-request-id") or f"req-{uuid.uuid4().hex[:12]}"
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     import logging
-    logging.getLogger("uvicorn.error").error(f"Unhandled Exception on {request.url.path}: {exc}", exc_info=True)
+    import uuid
+    request_id = getattr(request.state, "request_id", None) or request.headers.get("x-request-id") or f"req-{uuid.uuid4().hex[:12]}"
+    logging.getLogger("uvicorn.error").error(f"[{request_id}] Unhandled Exception on {request.url.path}: {exc}", exc_info=True)
     origin = request.headers.get("origin", "*")
     return JSONResponse(
         status_code=500,
-        content={"detail": "An unexpected server error occurred. Please try again later."},
+        content={
+            "detail": "An unexpected server error occurred. Please try again later.",
+            "request_id": request_id
+        },
         headers={
+            "X-Request-ID": request_id,
             "Access-Control-Allow-Origin": origin if origin else "*",
             "Access-Control-Allow-Credentials": "true",
             "Access-Control-Allow-Headers": "*",

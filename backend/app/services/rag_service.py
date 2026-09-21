@@ -2,12 +2,15 @@ import os
 import json
 import math
 import hashlib
+import logging
 from typing import List, Dict, Any, Optional
 import pypdf
 import docx
 import pptx
 import google.generativeai as genai
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 class RAGService:
     def __init__(self):
@@ -207,26 +210,80 @@ class RAGService:
                 
         return chunks
 
-    def compute_embedding(self, text: str) -> List[float]:
+    def _discover_embedding_models(self) -> List[str]:
+        """Dynamically discovers verified embedding models from Gemini API."""
+        if hasattr(self, "_verified_embedding_models") and self._verified_embedding_models:
+            return self._verified_embedding_models
+
+        discovered = []
+        if self.enabled:
+            try:
+                for m in genai.list_models():
+                    if "embedContent" in getattr(m, "supported_generation_methods", []):
+                        discovered.append(m.name)
+            except Exception as e:
+                logger.warning(f"[RAG] Dynamic model discovery notice: {e}")
+
+        preferred = [
+            "models/gemini-embedding-001",
+            "models/gemini-embedding-2",
+            "models/gemini-embedding-2-preview"
+        ]
+        candidates = [m for m in preferred if m in discovered]
+        for m in discovered:
+            if m not in candidates:
+                candidates.append(m)
+        if not candidates:
+            candidates = preferred
+
+        self._verified_embedding_models = candidates
+        return candidates
+
+    def compute_embedding(self, text: str, output_dim: int = 768) -> List[float]:
         """
-        Computes text embedding vector using Google Gemini model models/text-embedding-004.
-        In production, raises an error if embedding fails rather than silently generating fake vectors.
-        In non-production testing with no API key, returns a deterministic vector.
+        Computes text embedding vector using dynamically discovered and verified Gemini models.
+        Attempts output_dimensionality=768 first to match vector store indices.
         """
         sanitized_text = self._sanitize_unicode(text)
         if not sanitized_text.strip():
             return []
         if self.enabled:
-            try:
-                result = genai.embed_content(
-                    model="models/text-embedding-004",
-                    content=sanitized_text,
-                    task_type="retrieval_document"
-                )
-                return result["embedding"]
-            except Exception as e:
-                if getattr(settings, "ENVIRONMENT", "development") == "production":
-                    raise RuntimeError(f"RAG embedding generation failed in production: {str(e)}")
+            candidates = self._discover_embedding_models()
+            last_err = None
+            for candidate in candidates:
+                # 1. Try with output_dimensionality
+                try:
+                    res = genai.embed_content(
+                        model=candidate,
+                        content=sanitized_text,
+                        task_type="retrieval_document",
+                        output_dimensionality=output_dim
+                    )
+                    if res and "embedding" in res:
+                        return res["embedding"]
+                except Exception as err:
+                    last_err = err
+
+                # 2. Try standard without output_dimensionality
+                try:
+                    res = genai.embed_content(
+                        model=candidate,
+                        content=sanitized_text,
+                        task_type="retrieval_document"
+                    )
+                    if res and "embedding" in res:
+                        emb = res["embedding"]
+                        if output_dim and len(emb) > output_dim:
+                            return emb[:output_dim]
+                        return emb
+                except Exception as err:
+                    last_err = err
+                    logger.debug(f"[RAG] Embedding candidate {candidate} failed: {err}")
+                    continue
+
+            logger.error(f"[RAG_EMBEDDING_FAILED] All {len(candidates)} embedding candidates failed. Last error: {last_err}")
+            if getattr(settings, "ENVIRONMENT", "development") == "production":
+                raise RuntimeError(f"RAG embedding generation failed across all candidates: {last_err}")
                 
         if getattr(settings, "ENVIRONMENT", "development") == "production":
             raise RuntimeError("Gemini AI API key is not configured in production. Cannot generate RAG embeddings.")
@@ -234,7 +291,7 @@ class RAGService:
         # Non-production test fallback only
         h = hashlib.sha256(sanitized_text.encode("utf-8")).digest()
         vector = []
-        for index in range(768):
+        for index in range(output_dim):
             val = h[index % len(h)] / 255.0
             vector.append(val)
         return vector
@@ -307,7 +364,22 @@ class RAGService:
         Finds the top similarity matches using Cosine Similarity.
         Filterable by dynamic list of document IDs, specific subject_id, and multi-tenant workspace_id.
         """
-        query_vector = self.compute_embedding(query)
+        try:
+            query_vector = self.compute_embedding(query)
+        except Exception as embed_err:
+            logger.warning(
+                f"[RAG_SEMANTIC_SEARCH_UNAVAILABLE] Semantic vector search unavailable for query '{query}': {embed_err}. "
+                "Falling back to database chunk retrieval."
+            )
+            return []
+
+        if not query_vector:
+            logger.warning(
+                f"[RAG_SEMANTIC_SEARCH_EMPTY] Empty embedding generated for query '{query}'. "
+                "Falling back to database chunk retrieval."
+            )
+            return []
+
         scored_chunks = []
         
         # Filter vectors if workspace_id, document_ids or subject_id are provided
@@ -337,10 +409,13 @@ class RAGService:
         return scored_chunks[:limit]
 
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
-        """Helper to calculate cosine similarity between two float vectors."""
-        dot_product = sum(a * b for a, b in zip(vec1, vec2))
-        norm_a = math.sqrt(sum(a * a for a in vec1))
-        norm_b = math.sqrt(sum(b * b for b in vec2))
+        """Helper to calculate cosine similarity between two float vectors safely."""
+        if not vec1 or not vec2:
+            return 0.0
+        min_len = min(len(vec1), len(vec2))
+        dot_product = sum(vec1[i] * vec2[i] for i in range(min_len))
+        norm_a = math.sqrt(sum(a * a for a in vec1[:min_len]))
+        norm_b = math.sqrt(sum(b * b for b in vec2[:min_len]))
         if norm_a == 0 or norm_b == 0:
             return 0.0
         return dot_product / (norm_a * norm_b)
